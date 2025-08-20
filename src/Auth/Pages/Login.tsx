@@ -19,8 +19,8 @@ const Login = () => {
   const { login } = useAuth();
   const [visible, { toggle }] = useDisclosure(false);
   const [email, setEmail] = useState("");
-  const navigate = useNavigate();
   const [password, setPassword] = useState("");
+  const navigate = useNavigate();
 
   const handleLogin = async () => {
     try {
@@ -54,72 +54,88 @@ const Login = () => {
   };
 
   return (
-    <Card
-      withBorder
-      shadow="md"
-      w={400}
-      h={400}
-      style={{
-        display: "flex",
-        justifyContent: "center",
-        backgroundColor: "#2A2A2A", // card background
-        borderColor: "#b68d40", // gold border
-      }}
-    >
-      <Stack align="center" justify="center">
-        <form onSubmit={form.onSubmit(console.log, handleError)}>
-          <Stack justify="center" gap={10}>
-            <Stack justify="center" align="center" gap={10}>
-              <Title order={3} c="#f4ebd0">
-                Point of Sale
-              </Title>
-              <Text c="#d6ad60">Sign in to your account</Text>
+    <Stack>
+      <Card
+        withBorder
+        shadow="md"
+        w={420}
+        p="lg"
+        style={{
+          backgroundColor: "#1f232c",
+          borderColor: "#83746e",
+        }}
+      >
+        <Stack align="center" justify="center" gap="md">
+          <Title order={3} c="#dfd6d1">
+            Point of Sale
+          </Title>
+          <Text c="#a9a9a9">Sign in to your account</Text>
+
+          <form
+            onSubmit={form.onSubmit(console.log, handleError)}
+            style={{ width: "100%" }}
+          >
+            <Stack gap="md">
+              <TextInput
+                value={email}
+                onChange={(event) => setEmail(event.currentTarget.value)}
+                label="Email"
+                placeholder="Enter your email"
+                styles={{
+                  label: { color: "#dfd6d1", fontWeight: 600 },
+                  input: {
+                    backgroundColor: "#2a2f38",
+                    color: "#ffffff",
+                    borderColor: "#83746e",
+                    "&:focus": {
+                      borderColor: "#dfd6d1",
+                      boxShadow: "0 0 4px #83746e",
+                    },
+                  },
+                }}
+              />
+
+              <PasswordInput
+                value={password}
+                onChange={(event) => setPassword(event.currentTarget.value)}
+                label="Password"
+                placeholder="Enter your password"
+                visible={visible}
+                onVisibilityChange={toggle}
+                styles={{
+                  label: { color: "#dfd6d1", fontWeight: 600 },
+                  input: {
+                    backgroundColor: "#2a2f38",
+                    color: "#ffffff",
+                    borderColor: "#83746e",
+                    "&:focus": {
+                      borderColor: "#dfd6d1",
+                      boxShadow: "0 0 4px #83746e",
+                    },
+                  },
+                }}
+              />
+
+              <Button
+                fullWidth
+                mt="sm"
+                color="#83746e"
+                styles={{
+                  root: {
+                    color: "#ffffff",
+                    fontWeight: 600,
+                    "&:hover": { backgroundColor: "#dfd6d1", color: "#1f232c" },
+                  },
+                }}
+                onClick={handleLogin}
+              >
+                Login
+              </Button>
             </Stack>
-
-            <TextInput
-              value={email}
-              onChange={(event) => setEmail(event.currentTarget.value)}
-              w={350}
-              label="Email"
-              placeholder="Email"
-              styles={{
-                label: { color: "#f4ebd0" },
-                input: { backgroundColor: "#1E1E1E", color: "#f4ebd0" },
-              }}
-            />
-
-            <PasswordInput
-              value={password}
-              onChange={(event) => setPassword(event.currentTarget.value)}
-              label="Password"
-              placeholder="Enter your password"
-              visible={visible}
-              onVisibilityChange={toggle}
-              styles={{
-                label: { color: "#f4ebd0" },
-                input: { backgroundColor: "#1E1E1E", color: "#f4ebd0" },
-              }}
-            />
-
-            <Button
-              fullWidth
-              mt="sm"
-              color="#b68d40"
-              onClick={handleLogin}
-              // styles={{
-              //   root: {
-              //     backgroundColor: "#b68d40",
-              //     "&:hover": { backgroundColor: "#d6ad60" },
-              //     color: "#1E1E1E",
-              //   },
-              // }}
-            >
-              Login
-            </Button>
-          </Stack>
-        </form>
-      </Stack>
-    </Card>
+          </form>
+        </Stack>
+      </Card>
+    </Stack>
   );
 };
 
