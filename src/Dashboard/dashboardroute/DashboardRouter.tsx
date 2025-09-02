@@ -1,203 +1,122 @@
 import type { RouteObject } from "react-router";
 import DashboardLayout from "../dashboardlayout/DashboardLayout";
-import PurchaseInvoice from "../Pages/Invoices/PurchaseInvoice";
-import PurchaseInvoiceGST from "../Pages/Invoices/PurchaseInvoiceGST";
-import PurchaseInvoiceReturn from "../Pages/Invoices/PurchaseInvoiceReturn";
-import CashSaleInvoice from "../Pages/Invoices/CashSaleInvoice";
-import CreditSaleInvoice from "../Pages/Invoices/CreditSaleInvoice";
-import SaleReturn from "../Pages/Invoices/SaleReturn";
-import SaleReturnWithInvoice from "../Pages/Invoices/SaleReturnWithInvoice";
-import CashPaymentDebitVoucher from "../Pages/Accounts/CashPaymentDebitvoucher";
-import CashReceiptCreditVoucher from "../Pages/Accounts/CashReceiptCreditVoucher";
-import CashWholeSaleInvoice from "../Pages/Invoices/CashWholeSaleInvoice";
-import CreditWholeSaleInvoice from "../Pages/Invoices/CreditWholeSaleInvoice";
-import WholeSaleReturn from "../Pages/Invoices/WholeSaleReturn";
-import WholeSaleReturnWithInvoice from "../Pages/Invoices/WholeSaleReturnWithinvoice";
-import JournalVoucher from "../Pages/Accounts/JournalVoucher";
-import BankCreditVoucher from "../Pages/Accounts/BankCreditVoucher";
-import BankDebitVoucher from "../Pages/Accounts/BankDebitVoucher";
-import SalesCommission from "../Pages/Accounts/SalesCommission";
-import AccountsLedger from "../Pages/Accounts Report/AccountLedger";
-import CashBook from "../Pages/Accounts Report/CashBook";
-import DayBook from "../Pages/Accounts Report/DayBook";
-import JournalBook from "../Pages/Accounts Report/JournalBook";
-import BalanceSheet from "../Pages/Accounts Report/BalanceSheet";
-import RecieveablePayableAmount from "../Pages/Accounts Report/RecieveablePayableAmount";
-import ProfitLoss from "../Pages/Accounts Report/ProfitLoss";
-import ShortTrialBalance from "../Pages/Trial Balance/ShortTrialBalance";
-import TrialBalanceBetweenDates from "../Pages/Trial Balance/TrialBalanceBetweenDates";
-import GroupTrial from "../Pages/Trial Balance/GroupTrial";
-import DetailTrial from "../Pages/Trial Balance/DetailTrail";
-import SixColumnTrial from "../Pages/Trial Balance/SixColumnTrial";
-import DailyGrossProfit from "../Pages/Inventory Report/DailyGrossProfit";
-import StockLedger from "../Pages/Inventory Report/StockLedger";
-import StockInHand from "../Pages/Inventory Report/StockInHand";
-import ProductPurchase from "../Pages/Product Reports/ProductPurchase";
-import ProductSale from "../Pages/Product Reports/ProductSale";
-import PartyWiseProductSale from "../Pages/Product Reports/PartyWiseProductSale";
-import CreateUser from "../Pages/System/CreateUser";
-import UserRights from "../Pages/System/UserRights";
-import AccountsCoding from "../Pages/Coding/AccountsCoding";
+import ManageCompanies from "../Pages/Company & Users/ManageCompanies";
+import ManageUsers from "../Pages/Company & Users/ManageUsers";
+import Permissions from "../Pages/Company & Users/Permissions";
+import ChartOfAccounts from "../Pages/Chart of Accounts/ChartOfAccounts";
+import SalesInvoice from "../Pages/Invoicing/SalesInvoice";
+import PurchaseInvoice from "../Pages/Invoicing/PurchaseInvoice";
+import PurchaseReturns from "../Pages/Invoicing/PurchaseReturns";
+import CreditSaleInvoice from "../Pages/Invoicing/CreditSaleInvoice";
+import DeliveryChallans from "../Pages/Invoicing/DeliveryChallans";
+import SaleReturns from "../Pages/Invoicing/SaleReturns";
+import Products from "../Pages/Inventory/Products";
+import StockLedger from "../Pages/Inventory/StockLedger";
+import StockReports from "../Pages/Inventory/StockReports";
+import GeneralLedger from "../Pages/Ledger&Reports/GeneralLedger";
+import SalesLedger from "../Pages/Ledger&Reports/SalesLedger";
+import PurchaseLedger from "../Pages/Ledger&Reports/PurchaseLedger";
+import AccountsReceivable from "../Pages/Ledger&Reports/AccountsReceivable";
+import CashBook from "../Pages/Accounts/CashBook";
+import AccountsPayable from "../Pages/Ledger&Reports/AccountsPayable";
+import TrialBalance from "../Pages/Ledger&Reports/TrialBalance";
+import JournalVouchers from "../Pages/Accounts/JournalVouchers";
+import GSTInvoices from "../Pages/Tax & Invoices/GstInvoices";
 const routes: RouteObject[] = [
   {
     path: "/dashboard",
     element: <DashboardLayout />,
     children: [
       {
+        path: "manage-companies",
+        element: <ManageCompanies />,
+      },
+      {
+        path: "manage-users",
+        element: <ManageUsers />,
+      },
+      {
+        path: "permissions",
+        element: <Permissions />,
+      },
+      {
+        path: "chart-of-accounts",
+        element: <ChartOfAccounts />,
+      },
+      {
+        path: "sales-invoice",
+        element: <SalesInvoice />,
+      },
+      {
         path: "purchase-invoice",
         element: <PurchaseInvoice />,
       },
       {
-        path: "purchase-invoice-GST",
-        element: <PurchaseInvoiceGST />,
-      },
-      {
-        path: "purchase-invoice-return",
-        element: <PurchaseInvoiceReturn />,
-      },
-      {
-        path: "cash-sale-invoice",
-        element: <CashSaleInvoice />,
+        path: "purchase-returns",
+        element: <PurchaseReturns />,
       },
       {
         path: "credit-sale-invoice",
         element: <CreditSaleInvoice />,
       },
       {
-        path: "sale-return",
-        element: <SaleReturn />,
+        path: "sale-returns",
+        element: <SaleReturns />,
       },
       {
-        path: "sale-return-with-invoice",
-        element: <SaleReturnWithInvoice />,
+        path: "delivery-challans",
+        element: <DeliveryChallans />,
       },
+      // -------------Inventory------------------
       {
-        path: "cash-payment-debit-voucher",
-        element: <CashPaymentDebitVoucher />,
-      },
-      {
-        path: "cash-receipt-credit-voucher",
-        element: <CashReceiptCreditVoucher />,
-      },
-      {
-        path: "cash-wholesale-invoice",
-        element: <CashWholeSaleInvoice />,
-      },
-      {
-        path: "credit-wholesale-invoice",
-        element: <CreditWholeSaleInvoice />,
-      },
-      {
-        path: "whole-sale-return",
-        element: <WholeSaleReturn />,
-      },
-      {
-        path: "whole-sale-return-with-invoice",
-        element: <WholeSaleReturnWithInvoice />,
-      },
-      {
-        path: "journal-voucher",
-        element: <JournalVoucher />,
-      },
-      {
-        path: "bank-credit-voucher",
-        element: <BankCreditVoucher />,
-      },
-      {
-        path: "bank-debit-voucher",
-        element: <BankDebitVoucher />,
-      },
-      {
-        path: "sales-commission",
-        element: <SalesCommission />,
-      },
-      // Account ledger
-      {
-        path: "account-ledger",
-        element: <AccountsLedger />,
-      },
-      {
-        path: "cash-book",
-        element: <CashBook />,
-      },
-      {
-        path: "day-book",
-        element: <DayBook />,
-      },
-      {
-        path: "journal-book",
-        element: <JournalBook />,
-      },
-      {
-        path: "balance-sheet",
-        element: <BalanceSheet />,
-      },
-      {
-        path: "receivable-payable-amount",
-        element: <RecieveablePayableAmount />,
-      },
-      {
-        path: "profit-loss",
-        element: <ProfitLoss />,
-      },
-      // --Trial Balance--
-      {
-        path: "short-trial-balance",
-        element: <ShortTrialBalance />,
-      },
-      {
-        path: "trial-balance-between-dates",
-        element: <TrialBalanceBetweenDates />,
-      },
-      {
-        path: "group-trial",
-        element: <GroupTrial />,
-      },
-      {
-        path: "detail-trial",
-        element: <DetailTrial />,
-      },
-      {
-        path: "six-column-trial",
-        element: <SixColumnTrial />,
-      },
-      {
-        path: "daily-gross-profit",
-        element: <DailyGrossProfit />,
+        path: "products",
+        element: <Products />,
       },
       {
         path: "stock-ledger",
         element: <StockLedger />,
       },
       {
-        path: "stock-in-hand",
-        element: <StockInHand />,
+        path: "stock-reports",
+        element: <StockReports />,
       },
       {
-        path: "product-purchase",
-        element: <ProductPurchase />,
+        path: "general-ledger",
+        element: <GeneralLedger />,
       },
       {
-        path: "product-sale",
-        element: <ProductSale />,
+        path: "sales-ledger",
+        element: <SalesLedger />,
       },
       {
-        path: "party-wise-product-sale",
-        element: <PartyWiseProductSale />,
-      },
-      // --System--
-      {
-        path: "create-user",
-        element: <CreateUser />,
+        path: "purchase-ledger",
+        element: <PurchaseLedger />,
       },
       {
-        path: "user-rights",
-        element: <UserRights />,
+        path: "accounts-receivable",
+        element: <AccountsReceivable />,
       },
-      // --Coding--
       {
-        path: "accounts-coding",
-        element: <AccountsCoding />,
+        path: "accounts-payable",
+        element: <AccountsPayable />,
+      },
+      {
+        path: "trial-balance",
+        element: <TrialBalance />,
+      },
+      // -------------Account--------------------
+      {
+        path: "cash-book",
+        element: <CashBook />,
+      },
+      {
+        path: "journal-vouchers",
+        element: <JournalVouchers />,
+      },
+      // --------------Tax & Invoices--------------
+      {
+        path: "gst-invoices",
+        element: <GSTInvoices />,
       },
     ],
   },

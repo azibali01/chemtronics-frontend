@@ -10,19 +10,22 @@ import {
   Button,
 } from "@mantine/core";
 import {
-  IconFileText,
   IconChevronDown,
   IconChevronRight,
   IconSearch,
-  IconReport,
-  IconSettings,
-  IconUsers,
-  IconDashboard,
   IconArrowRight,
   IconLogout,
-  IconBuilding,
+  IconBuildingSkyscraper,
+  IconBook,
+  IconFileInvoice,
+  IconPackage,
+  IconReportAnalytics,
+  IconCash,
+  IconReceipt2,
+  IconChartBar,
+  IconHome,
 } from "@tabler/icons-react";
-import { Link, Outlet } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 
 type MenuChild = {
   label: string;
@@ -34,60 +37,62 @@ type MenuItem = {
   label: string;
   icon: ReactNode;
   children?: MenuChild[];
+  path?: string;
 };
 
 const menuItems: MenuItem[] = [
-  { label: "Dashboard", icon: <IconDashboard size={18} /> },
+  { label: "Dashboard", icon: <IconHome size={18} /> },
   {
-    label: "Coding",
-    icon: <IconFileText size={18} />,
+    label: "Company & Users",
+    icon: <IconBuildingSkyscraper size={18} />,
     children: [
       {
-        label: "Accounts Coding",
+        label: "Manage Companies",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/accounts-coding",
+        path: "/dashboard/manage-companies",
       },
       {
-        label: "Account Registration",
+        label: "Manage Users",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/account-registration",
+        path: "/dashboard/manage-users",
       },
       {
-        label: "Simple Account Coding",
+        label: "Permissions",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/simple-account-coding",
-      },
-      {
-        label: "Accounts Opening Balances",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/accounts-opening-balances",
+        path: "/dashboard/permissions",
       },
     ],
   },
   {
-    label: "Invoice",
-    icon: <IconFileText size={18} />,
+    label: "Chart of Accounts",
+    icon: <IconBook size={18} />,
+
     children: [
+      {
+        label: "Chart of Accounts",
+        icon: <IconBook size={18} />,
+        path: "/dashboard/chart-of-accounts",
+      },
+    ],
+  },
+  {
+    label: "Invoicing",
+    icon: <IconFileInvoice size={18} />,
+    children: [
+      {
+        label: "Sales Invoice",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/sales-invoice",
+      },
       {
         label: "Purchase Invoice",
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/purchase-invoice",
       },
       {
-        label: "Purchase Invoice GST",
+        label: "Purchase Returns",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/purchase-invoice-GST",
-      },
-      {
-        label: "Purchase Return",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/purchase-invoice-return",
-      },
-
-      {
-        label: "Cash Sale Invoice",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/cash-sale-invoice",
+        path: "/dashboard/purchase-returns",
       },
       {
         label: "Credit Sale Invoice",
@@ -95,158 +100,30 @@ const menuItems: MenuItem[] = [
         path: "/dashboard/credit-sale-invoice",
       },
       {
-        label: "Sale Return",
+        label: "Sale Returns",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/sale-return",
+        path: "/dashboard/sale-returns",
       },
       {
-        label: "Sale Return With Invoice",
+        label: "Delivery Challan",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/sale-return-with-invoice",
-      },
-      {
-        label: "Cash Whole Sale Invoice",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/cash-wholesale-invoice",
-      },
-      {
-        label: "Credit Whole Sale Invoice",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/credit-wholesale-invoice",
-      },
-      {
-        label: "Whole Sale Return",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/whole-sale-return",
-      },
-      {
-        label: "Whole Sale Return With Invoice",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/whole-sale-return-with-invoice",
+        path: "/dashboard/delivery-challans",
       },
     ],
   },
   {
-    label: "Accounts",
-    icon: <IconUsers size={18} />,
+    label: "Inventory",
+    icon: <IconPackage size={18} />,
     children: [
       {
-        label: "Cash Payment / Debit Voucher",
+        label: "Products",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/cash-payment-debit-voucher",
+        path: "/dashboard/products",
       },
       {
-        label: "Cash Receipt / Credit Voucher",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/cash-receipt-credit-voucher",
-      },
-      {
-        label: "Journal Voucher",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/journal-voucher",
-      },
-      {
-        label: "Bank Credit Voucher",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/bank-credit-voucher",
-      },
-      {
-        label: "Bank Debit Voucher",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/bank-debit-voucher",
-      },
-      {
-        label: "Sales Commission",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/sales-commission",
-      },
-    ],
-  },
-  {
-    label: "Accounts Reports",
-    icon: <IconReport size={18} />,
-    children: [
-      {
-        label: "Chart of Accounts",
-        icon: <IconArrowRight size={16} />,
-        path: "/reports/chart-of-accounts",
-      },
-      {
-        label: "Account Ledger",
+        label: "Stock Opening",
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/account-ledger",
-      },
-      {
-        label: "Cash Book",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/cash-book",
-      },
-      {
-        label: "Day Book",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/day-book",
-      },
-      {
-        label: "Journal Book",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/journal-book",
-      },
-      {
-        label: "Balance Sheet",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/balance-sheet",
-      },
-      {
-        label: "Receivable / Payable",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/receivable-payable-amount",
-      },
-      {
-        label: "Profit / Loss",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/profit-loss",
-      },
-    ],
-  },
-  {
-    label: "Trial Balance",
-    icon: <IconReport size={18} />,
-    children: [
-      {
-        label: "Short Trial Balance",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/short-trial-balance",
-      },
-      {
-        label: "Trial Balance Between Dates",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/trial-balance-between-dates",
-      },
-      {
-        label: "Group Trial",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/group-trial",
-      },
-      {
-        label: "Detail Trial",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/detail-trial",
-      },
-      {
-        label: "Six Column Trial",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/six-column-trial",
-      },
-    ],
-  },
-  {
-    label: "Inventory Reports",
-    icon: <IconReport size={18} />,
-    children: [
-      {
-        label: "Daily Gross Profit",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/daily-gross-profit",
       },
       {
         label: "Stock Ledger",
@@ -254,76 +131,98 @@ const menuItems: MenuItem[] = [
         path: "/dashboard/stock-ledger",
       },
       {
-        label: "Stock In Hand",
+        label: "Stock Reports",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/stock-in-hand",
+        path: "/dashboard/stock-reports",
       },
     ],
   },
   {
-    label: "Product Reports",
-    icon: <IconBuilding size={18} />,
+    label: "Ledger & Reports",
+    icon: <IconReportAnalytics size={18} />,
     children: [
       {
-        label: "Product Purchase",
+        label: "General Ledger",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/product-purchase",
+        path: "/dashboard/general-ledger",
       },
       {
-        label: "Product Sale",
+        label: "Sales Ledger",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/product-sale",
+        path: "/dashboard/sales-ledger",
       },
       {
-        label: "Party Wise Product Sale",
+        label: "Purchase Ledger",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/party-wise-product-sale",
+        path: "/dashboard/purchase-ledger",
       },
       {
-        label: "Party List",
+        label: "Accounts Receivable",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/party-list",
+        path: "/dashboard/accounts-receivable",
       },
       {
-        label: "Product List Group Wise",
+        label: "Accounts Payable",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/product-list-group-wise",
+        path: "/dashboard/accounts-payable",
+      },
+      {
+        label: "Trial Balance",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/trial-balance",
       },
     ],
   },
   {
-    label: "System",
-    icon: <IconSettings size={18} />,
+    label: "Accounts",
+    icon: <IconCash size={18} />,
     children: [
       {
-        label: "Create User",
+        label: "Cash Book",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/create-user",
+        path: "/dashboard/cash-book",
       },
       {
-        label: "User Rights",
+        label: "Journal Vouchers",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/journal-vouchers",
+      },
+    ],
+  },
+  {
+    label: "Tax & Invoices",
+    icon: <IconReceipt2 size={18} />,
+    children: [
+      {
+        label: "GST Invoices",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/gst-invoices",
+      },
+      {
+        label: "Tax Reports",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/tax-reports",
+      },
+    ],
+  },
+  {
+    label: "Analytics",
+    icon: <IconChartBar size={18} />,
+    children: [
+      {
+        label: "Profit/Loss",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/profit-loss",
+      },
+      {
+        label: "Stock Movement",
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/user-rights",
       },
       {
-        label: "Account Master Deletion",
+        label: "GST Analysis",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/account-master-deletion",
-      },
-      {
-        label: "Control Accounts",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/control-accounts",
-      },
-      {
-        label: "Database Backup",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/database-backup",
-      },
-      {
-        label: "Database Restore",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/database-restore",
+        path: "/dashboard/gst-analysis",
       },
     ],
   },
@@ -331,6 +230,7 @@ const menuItems: MenuItem[] = [
 
 export default function DashboardLayout() {
   const [opened, setOpened] = useState<{ [key: string]: boolean }>({});
+  const location = useLocation();
 
   const toggle = (label: string) => {
     setOpened((prev) => ({ ...prev, [label]: !prev[label] }));
@@ -346,26 +246,17 @@ export default function DashboardLayout() {
       }}
       padding="md"
       styles={{
-        main: {
-          backgroundColor: "#1f232c", // dark background
-          color: "#ffffff", // white text
-        },
+        main: { backgroundColor: "#ffffffff" },
       }}
     >
-      {/* HEADER */}
       <AppShell.Header>
         <Group
           h="100%"
           px="md"
           justify="space-between"
-          style={{
-            backgroundColor: "#1f232c",
-            borderBottom: "1px solid #83746e", // Coffee Pot accent
-            overflow: "hidden", // Ensure marquee text stays inside
-            position: "relative",
-          }}
+          bg={"#FFFFFF"}
+          style={{ overflow: "hidden", position: "relative" }}
         >
-          {/* Logo */}
           <img
             src="../Logo.png"
             alt="Logo"
@@ -375,10 +266,9 @@ export default function DashboardLayout() {
               height: 50,
               objectFit: "cover",
               borderRadius: 8,
+              backgroundColor: "#819E00",
             }}
           />
-
-          {/* Marquee Text */}
           <Box
             style={{
               overflow: "hidden",
@@ -396,7 +286,7 @@ export default function DashboardLayout() {
                 paddingLeft: "100%",
                 animation: "scrollText 15s linear infinite",
                 backgroundImage:
-                  "linear-gradient(90deg, #dfd6d1, #83746e, #dfd6d1)",
+                  "linear-gradient(90deg, #0A6802, #819E00, #0A6802)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 fontSize: "1rem",
@@ -405,54 +295,36 @@ export default function DashboardLayout() {
               Developed by: <strong>SemiColon</strong>
             </Text>
           </Box>
-
           <style>
             {`
-        @keyframes scrollText {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-100%); }
-        }
-      `}
+              @keyframes scrollText {
+                0% { transform: translateX(0); }
+                100% { transform: translateX(-100%); }
+              }
+            `}
           </style>
           <Button
-            variant="outline"
             size="xs"
             mr={100}
-            style={{
-              borderColor: "#83746e", // Coffee Pot border
-              color: "#dfd6d1", // Serenity text
-              backgroundColor: "#1f232c", // Dark bg
-              transition: "all 0.3s ease",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = "#83746e"; // Coffee Pot hover bg
-              e.currentTarget.style.color = "#ffffff"; // White text on hover
-              e.currentTarget.style.borderColor = "#dfd6d1"; // Serenity border on hover
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "#1f232c"; // Dark bg
-              e.currentTarget.style.color = "#dfd6d1"; // Serenity text
-              e.currentTarget.style.borderColor = "#83746e"; // Coffee Pot border
-            }}
-            rightSection={<IconLogout size={14} color="#83746e" />}
+            color="#0A6802"
+            style={{ transition: "all 0.3s ease" }}
+            rightSection={<IconLogout size={14} color="#ffffffff" />}
           >
             Logout
           </Button>
         </Group>
       </AppShell.Header>
 
-      {/* SIDEBAR */}
-      <AppShell.Navbar p="xs" style={{ backgroundColor: "#1f232c" }}>
+      <AppShell.Navbar p="xs" bg={"#F1FCF0"}>
         <TextInput
           placeholder="Search"
           size="xs"
-          leftSection={<IconSearch size={14} color="#83746e" />}
+          leftSection={<IconSearch size={14} color="#819E00" />}
           styles={{
             input: {
-              backgroundColor: "#2a2f3a", // slightly lighter than main dark
-              border: "1px solid #83746e",
-              color: "#ffffff",
-              "::placeholder": { color: "#83746e" },
+              border: "1px solid #0A6802",
+              color: "#000000ff",
+              "::placeholder": { color: "#000000ff" },
             },
           }}
         />
@@ -473,16 +345,28 @@ export default function DashboardLayout() {
                   ) : null
                 }
                 onClick={() => item.children && toggle(item.label)}
+                active={
+                  location.pathname === `/dashboard/${item.label.toLowerCase()}`
+                }
                 styles={{
                   root: {
-                    color: "#dfd6d1",
                     borderRadius: 6,
+                    backgroundColor:
+                      location.pathname ===
+                      `/dashboard/${item.label.toLowerCase()}`
+                        ? "#0A6802"
+                        : "transparent",
+                    color:
+                      location.pathname ===
+                      `/dashboard/${item.label.toLowerCase()}`
+                        ? "#ffffff"
+                        : "#222222",
                     "&:hover": {
-                      backgroundColor: "#83746e", // Coffee Pot hover
+                      backgroundColor: "#819E00",
                       color: "#ffffff",
                     },
                   },
-                  label: { fontWeight: 500 },
+                  label: { fontWeight: 600 },
                 }}
               />
               {opened[item.label] &&
@@ -493,17 +377,24 @@ export default function DashboardLayout() {
                     leftSection={sub.icon}
                     component={Link}
                     to={sub.path}
+                    active={location.pathname === sub.path}
                     ml="lg"
                     styles={{
                       root: {
-                        color: "#dfd6d1", // Serenity
                         fontSize: "0.85rem",
                         borderRadius: 4,
                         transition: "all 0.2s ease",
+                        backgroundColor:
+                          location.pathname === sub.path
+                            ? "#0A6802"
+                            : "transparent",
+                        color:
+                          location.pathname === sub.path
+                            ? "#ffffff"
+                            : "#222222",
                         "&:hover": {
-                          backgroundColor: "#83746e",
+                          backgroundColor: "#819E00",
                           color: "#ffffff",
-                          boxShadow: "0 0 4px rgba(223,214,209,0.6)",
                         },
                       },
                     }}
@@ -514,7 +405,6 @@ export default function DashboardLayout() {
         </ScrollArea>
       </AppShell.Navbar>
 
-      {/* MAIN CONTENT */}
       <AppShell.Main>
         <Outlet />
       </AppShell.Main>
