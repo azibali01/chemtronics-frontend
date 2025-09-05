@@ -306,7 +306,7 @@ export default function PurchaseReturnModal() {
         opened={opened}
         onClose={() => setOpened(false)}
         title="Create Purchase Return"
-        size="xl"
+        size="70%"
         centered
       >
         <ReturnForm

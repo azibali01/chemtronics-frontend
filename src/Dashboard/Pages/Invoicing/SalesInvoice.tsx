@@ -34,10 +34,14 @@ type Invoice = {
 
 type InvoiceItem = {
   id: number;
+  code: number;
   product: string;
+  hsCode: string;
   description: string;
   qty: number;
   rate: number;
+  exGSTRate: string;
+  exGSTAmount: string;
 };
 
 export default function SalesInvoicePage() {
@@ -73,7 +77,17 @@ export default function SalesInvoicePage() {
   const [newDueDate, setNewDueDate] = useState("");
   const [includeGST, setIncludeGST] = useState(true);
   const [items, setItems] = useState<InvoiceItem[]>([
-    { id: 1, product: "", description: "", qty: 1, rate: 0 },
+    {
+      id: 1,
+      code: 1,
+      product: "",
+      hsCode: "",
+      description: "",
+      qty: 0,
+      rate: 0,
+      exGSTRate: "",
+      exGSTAmount: "",
+    },
   ]);
   const [notes, setNotes] = useState("");
 
@@ -240,7 +254,8 @@ export default function SalesInvoicePage() {
         opened={createModal}
         onClose={() => setCreateModal(false)}
         title="Create Sales Invoice"
-        size="xl"
+        size="70%"
+        // h="80%"
       >
         <Group grow mb="sm">
           <TextInput
@@ -252,28 +267,55 @@ export default function SalesInvoicePage() {
 
           <TextInput
             label="Invoice Date"
+            type="date"
             placeholder="mm/dd/yyyy"
             value={newDate}
             onChange={(e) => setNewDate(e.currentTarget.value)}
           />
-        </Group>
-        <Group grow mb="sm">
           <TextInput
-            label="Due Date"
+            label="Delivery No"
+            type="number"
+            placeholder="Delivery No"
+          />
+          <TextInput
+            label="Delivery Date"
+            type="date"
             placeholder="mm/dd/yyyy"
             value={newDueDate}
             onChange={(e) => setNewDueDate(e.currentTarget.value)}
           />
-
+        </Group>
+        <Group grow mb="sm" w={"50%"}>
+          <TextInput label="Po No" placeholder="Po No" />
+          <TextInput label="Po Date" type="date" placeholder="Po Date" />
+        </Group>
+        <Group grow>
+          <TextInput label="Account No" placeholder="Account No" />
           <Select
-            label="Customer"
-            placeholder="Select customer"
-            data={["Acme Corporation", "TechStart Solutions", "Global Traders"]}
+            label="Account Title"
+            placeholder="Select Account"
+            data={[
+              "Adv. Income Tax",
+              "Ahmad Fine Weaing Limited (Unit-I)",
+              "Ahmad Fine Weaing Limited (Unit-II)",
+            ]}
             value={newCustomer}
             onChange={(v) => setNewCustomer(v || "")}
             mb="sm"
           />
+          <TextInput label="Sale Account" />
+          <Select
+            label="Sale Account Title"
+            data={[
+              "Sale of Chemicals and Equipments",
+              "Sale of Equipments",
+              "Sales of Chemicals",
+              "Services",
+            ]}
+          />
+          <TextInput label="NTN No" />
         </Group>
+
         <Switch
           color="#0A6802"
           label="Include GST (18%)"
@@ -285,17 +327,24 @@ export default function SalesInvoicePage() {
         <Table withColumnBorders highlightOnHover>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Product/Service</Table.Th>
+              <Table.Th>Code</Table.Th>
+              <Table.Th>Product Name</Table.Th>
+              <Table.Th>HS Code</Table.Th>
               <Table.Th>Description</Table.Th>
               <Table.Th>Qty</Table.Th>
               <Table.Th>Rate</Table.Th>
               <Table.Th>Amount</Table.Th>
+              <Table.Th>Ex GST Rate</Table.Th>
+              <Table.Th>Ex GST Amount</Table.Th>
               <Table.Th>Remove</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {items.map((item, index) => (
               <Table.Tr key={item.id}>
+                <Table.Td>
+                  <TextInput value={item.code} />
+                </Table.Td>
                 <Table.Td>
                   <TextInput
                     placeholder="Product"
@@ -306,6 +355,9 @@ export default function SalesInvoicePage() {
                       setItems(newItems);
                     }}
                   />
+                </Table.Td>
+                <Table.Td>
+                  <TextInput value={item.hsCode} />
                 </Table.Td>
                 <Table.Td>
                   <TextInput
@@ -340,7 +392,13 @@ export default function SalesInvoicePage() {
                     }}
                   />
                 </Table.Td>
-                <Table.Td>${item.qty * item.rate}</Table.Td>
+                <Table.Td>{item.qty * item.rate}</Table.Td>
+                <Table.Td>
+                  <TextInput value={item.exGSTRate} />
+                </Table.Td>
+                <Table.Td>
+                  <TextInput value={item.exGSTAmount} />
+                </Table.Td>
                 <Table.Td>
                   <ActionIcon
                     color="red"
@@ -365,10 +423,14 @@ export default function SalesInvoicePage() {
               ...prev,
               {
                 id: prev.length + 1,
+                code: 1,
                 product: "",
+                hsCode: "",
                 description: "",
                 qty: 1,
                 rate: 0,
+                exGSTRate: "",
+                exGSTAmount: "",
               },
             ])
           }
@@ -377,9 +439,11 @@ export default function SalesInvoicePage() {
         </Button>
 
         <div className="mt-4 space-y-1">
-          <Text>Subtotal: ${subtotal.toFixed(2)}</Text>
-          {includeGST && <Text>GST (18%): ${gstAmount.toFixed(2)}</Text>}
-          <Text fw={700}>Total: ${total.toFixed(2)}</Text>
+          <Text>Ex GST Amount:</Text>
+          <Text>Total GST:</Text>
+          <Text>Subtotal: {subtotal.toFixed(2)}</Text>
+          {includeGST && <Text>GST (18%): {gstAmount.toFixed(2)}</Text>}
+          <Text fw={700}>Total: {total.toFixed(2)}</Text>
         </div>
 
         <Textarea
@@ -580,10 +644,14 @@ export default function SalesInvoicePage() {
                   ...prev,
                   {
                     id: prev.length + 1,
+                    code: 1,
                     product: "",
+                    hsCode: "",
                     description: "",
                     qty: 1,
                     rate: 0,
+                    exGSTRate: "",
+                    exGSTAmount: "",
                   },
                 ])
               }

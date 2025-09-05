@@ -44,8 +44,10 @@ type Invoice = {
 
 type Item = {
   id: number;
+  code: number;
   product: string;
   description: string;
+  unit: string;
   qty: number;
   rate: number;
 };
@@ -102,7 +104,15 @@ export default function PurchaseInvoice() {
   const addItem = () => {
     setItems([
       ...items,
-      { id: Date.now(), product: "", description: "", qty: 0, rate: 0 },
+      {
+        id: Date.now(),
+        code: 1,
+        product: "",
+        description: "",
+        unit: "",
+        qty: 0,
+        rate: 0,
+      },
     ]);
   };
 
@@ -126,10 +136,10 @@ export default function PurchaseInvoice() {
 
   const exportPDF = (invoice: Invoice) => {
     const doc = new jsPDF();
-    doc.text(`Invoice: ${invoice.number}`, 14, 20);
-    doc.text(`Vendor: ${invoice.vendor}`, 14, 30);
-    doc.text(`Date: ${invoice.date}`, 14, 40);
-    doc.text(`Due Date: ${invoice.dueDate}`, 14, 50);
+    doc.text(`Invoice: {invoice.number}`, 14, 20);
+    doc.text(`Vendor: {invoice.vendor}`, 14, 30);
+    doc.text(`Date: {invoice.date}`, 14, 40);
+    doc.text(`Due Date: {invoice.dueDate}`, 14, 50);
 
     if (invoice.items && invoice.items.length > 0) {
       const tableData = invoice.items.map((i) => [
@@ -146,13 +156,13 @@ export default function PurchaseInvoice() {
       });
     }
 
-    doc.text(`Subtotal: ${subtotal}`, 14, 200);
-    doc.text(`GST: ${gst}`, 14, 210);
-    doc.text(`Total: ${invoice.amount}`, 14, 220);
+    doc.text(`Subtotal: {subtotal}`, 14, 200);
+    doc.text(`GST: {gst}`, 14, 210);
+    doc.text(`Total: {invoice.amount}`, 14, 220);
 
-    if (invoice.notes) doc.text(`Notes: ${invoice.notes}`, 14, 230);
+    if (invoice.notes) doc.text(`Notes: {invoice.notes}`, 14, 230);
 
-    doc.save(`${invoice.number}.pdf`);
+    doc.save(`{invoice.number}.pdf`);
   };
 
   return (
@@ -218,7 +228,7 @@ export default function PurchaseInvoice() {
               <Text>Total Amount</Text> <IconFileText size={20} />
             </Group>
             <div style={{ marginTop: 10 }}>
-              <Text fw={700}>${totalAmount}</Text>
+              <Text fw={700}>{totalAmount}</Text>
             </div>
           </Card>
         </Grid.Col>
@@ -267,7 +277,7 @@ export default function PurchaseInvoice() {
                     {inv.status}
                   </Badge>
                 </Table.Td>
-                <Table.Td>${inv.amount}</Table.Td>
+                <Table.Td>{inv.amount}</Table.Td>
                 <Table.Td>
                   <Menu shadow="md" width={180}>
                     <Menu.Target>
@@ -320,7 +330,7 @@ export default function PurchaseInvoice() {
           setEditInvoice(null);
         }}
         title={editInvoice ? "Edit Invoice" : "Create Purchase Invoice"}
-        size="lg"
+        size="70%"
         centered
       >
         <Grid>
@@ -339,25 +349,29 @@ export default function PurchaseInvoice() {
               onChange={(e) => setDate(e.currentTarget.value)}
             />
           </Grid.Col>
-          <Grid.Col span={6}>
+          <Grid.Col span={3}>
+            <TextInput label="Supplier" />
+          </Grid.Col>
+          <Grid.Col span={3}>
             <Select
               label="Supplier"
-              placeholder="Select supplier"
+              placeholder="Supplier Title"
               data={[
-                "Office Supplies Co.",
-                "Tech Equipment Ltd.",
-                "Maintenance Services",
+                "MBL 05120109086371 CHEMTRONIX ENGINEERING SOLUTION",
+                "MBL 05120104085906 Hydro Worx",
               ]}
               value={vendor}
               onChange={(val) => setVendor(val || "")}
             />
           </Grid.Col>
-          <Grid.Col span={6}>
-            <TextInput
-              label="Due Date"
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.currentTarget.value)}
+          <Grid.Col span={3}>
+            <TextInput label="Purchase A/C" type="number" />
+          </Grid.Col>
+          <Grid.Col span={3}>
+            <Select
+              label="Purchase Title"
+              data={["Stock"]}
+              defaultValue={"Stock"}
             />
           </Grid.Col>
         </Grid>
@@ -379,8 +393,10 @@ export default function PurchaseInvoice() {
         <Table withTableBorder>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Product</Table.Th>
+              <Table.Th>Code</Table.Th>
+              <Table.Th>Product Name</Table.Th>
               <Table.Th>Description</Table.Th>
+              <Table.Th>Unit</Table.Th>
               <Table.Th>Qty</Table.Th>
               <Table.Th>Rate</Table.Th>
               <Table.Th>Amount</Table.Th>
@@ -390,6 +406,9 @@ export default function PurchaseInvoice() {
           <Table.Tbody>
             {items.map((item) => (
               <Table.Tr key={item.id}>
+                <Table.Td>
+                  <TextInput value={item.code} />
+                </Table.Td>
                 <Table.Td>
                   <TextInput
                     placeholder="Product name"
@@ -409,6 +428,9 @@ export default function PurchaseInvoice() {
                   />
                 </Table.Td>
                 <Table.Td>
+                  <TextInput value={item.unit} />
+                </Table.Td>
+                <Table.Td>
                   <NumberInput
                     min={1}
                     value={item.qty}
@@ -422,7 +444,7 @@ export default function PurchaseInvoice() {
                     onChange={(val) => updateItem(item.id, "rate", Number(val))}
                   />
                 </Table.Td>
-                <Table.Td>${(item.qty * item.rate).toFixed(2)}</Table.Td>
+                <Table.Td>{(item.qty * item.rate).toFixed(2)}</Table.Td>
                 <Table.Td>
                   <ActionIcon color="red" onClick={() => removeItem(item.id)}>
                     <IconTrash size={16} />
@@ -435,9 +457,11 @@ export default function PurchaseInvoice() {
 
         <Group justify="flex-end" mt="md">
           <div>
-            <Text>Subtotal: ${subtotal.toFixed(2)}</Text>
-            <Text>GST (18%): ${gst.toFixed(2)}</Text>
-            <Text fw={700}>Total: ${total.toFixed(2)}</Text>
+            <Text>Subtotal: {subtotal.toFixed(2)}</Text>
+            <Text>Discount %</Text>
+            <TextInput placeholder="Enter Discount "></TextInput>
+            <Text>GST (18%): {gst.toFixed(2)}</Text>
+            <Text fw={700}>Total: {total.toFixed(2)}</Text>
           </div>
         </Group>
 

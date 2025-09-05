@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Button,
   Card,
@@ -11,6 +11,7 @@ import {
   Divider,
   ScrollArea,
   ActionIcon,
+  Checkbox,
 } from "@mantine/core";
 import {
   IconCalculator,
@@ -21,13 +22,16 @@ import {
   IconUsers,
   IconEdit,
   IconTrash,
+  IconArrowDown,
 } from "@tabler/icons-react";
 
 type AccountType = "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
 
 interface AccountNode {
   code: string;
+  selCode: string;
   name: string;
+  icon?: ReactNode;
   type?: AccountType;
   balance: number;
   children?: AccountNode[];
@@ -36,99 +40,225 @@ interface AccountNode {
 const initialAccounts: AccountNode[] = [
   {
     code: "1000",
+    selCode: "100",
     name: "Assets",
+    icon: <IconCalculator />,
     type: "Asset",
     balance: 125000,
     children: [
       {
         code: "1100",
+        selCode: "110",
         name: "Current Assets",
+        icon: <IconCalculator />,
         type: "Asset",
         balance: 60000,
         children: [
-          { code: "1110", name: "Cash in Hand", balance: 20000 },
-          { code: "1120", name: "Cash at Bank", balance: 25000 },
-          { code: "1130", name: "Accounts Receivable", balance: 15000 },
+          {
+            code: "1110",
+            selCode: "111",
+            icon: <IconCalculator />,
+            name: "Cash in Hand",
+            balance: 20000,
+          },
+          {
+            code: "1120",
+            selCode: "112",
+            icon: <IconCalculator />,
+            name: "Cash at Bank",
+            balance: 25000,
+          },
+          {
+            code: "1130",
+            selCode: "113",
+            icon: <IconCalculator />,
+            name: "Accounts Receivable",
+            balance: 15000,
+          },
         ],
       },
       {
         code: "1200",
+        selCode: "120",
         name: "Fixed Assets",
+        icon: <IconCalculator />,
         type: "Asset",
         balance: 65000,
         children: [
-          { code: "1210", name: "Equipment", balance: 40000 },
-          { code: "1220", name: "Furniture & Fixtures", balance: 25000 },
+          {
+            code: "1210",
+            selCode: "121",
+            icon: <IconCalculator />,
+            name: "Equipment",
+            balance: 40000,
+          },
+          {
+            code: "1220",
+            selCode: "122",
+            icon: <IconCalculator />,
+            name: "Furniture & Fixtures",
+            balance: 25000,
+          },
         ],
       },
     ],
   },
   {
     code: "2000",
+    selCode: "130",
     name: "Liabilities",
+    icon: <IconCreditCard />,
     type: "Liability",
     balance: 45000,
     children: [
       {
         code: "2100",
+        selCode: "131",
         name: "Current Liabilities",
+        icon: <IconCreditCard />,
         balance: 25000,
         children: [
-          { code: "2110", name: "Accounts Payable", balance: 15000 },
-          { code: "2120", name: "Accrued Expenses", balance: 10000 },
+          {
+            code: "2110",
+            selCode: "132",
+            icon: <IconCreditCard />,
+            name: "Accounts Payable",
+            balance: 15000,
+          },
+          {
+            code: "2120",
+            selCode: "133",
+            icon: <IconCreditCard />,
+            name: "Accrued Expenses",
+            balance: 10000,
+          },
         ],
       },
       {
         code: "2200",
+        selCode: "140",
         name: "Long-term Liabilities",
+        icon: <IconCreditCard />,
         balance: 20000,
-        children: [{ code: "2210", name: "Bank Loan", balance: 20000 }],
+        children: [
+          {
+            code: "2210",
+            selCode: "141",
+            icon: <IconCreditCard />,
+            name: "Bank Loan",
+            balance: 20000,
+          },
+        ],
       },
     ],
   },
   {
     code: "3000",
+    selCode: "150",
     name: "Equity",
+    icon: <IconCurrencyDollar />,
     type: "Equity",
     balance: 80000,
     children: [
-      { code: "3100", name: "Owner's Equity", balance: 50000 },
-      { code: "3200", name: "Retained Earnings", balance: 30000 },
+      {
+        code: "3100",
+        selCode: "151",
+        icon: <IconCurrencyDollar />,
+        name: "Owner's Equity",
+        balance: 50000,
+      },
+      {
+        code: "3200",
+        selCode: "152",
+        icon: <IconCurrencyDollar />,
+        name: "Retained Earnings",
+        balance: 30000,
+      },
     ],
   },
   {
     code: "4000",
+    selCode: "160",
     name: "Revenue",
+    icon: <IconChartBar />,
     type: "Revenue",
     balance: 150000,
     children: [
-      { code: "4100", name: "Sales Revenue", balance: 100000 },
-      { code: "4200", name: "Service Revenue", balance: 50000 },
+      {
+        code: "4100",
+        selCode: "161",
+        icon: <IconChartBar />,
+        name: "Sales Revenue",
+        balance: 100000,
+      },
+      {
+        code: "4200",
+        selCode: "162",
+        icon: <IconChartBar />,
+        name: "Service Revenue",
+        balance: 50000,
+      },
     ],
   },
   {
     code: "5000",
+    selCode: "170",
     name: "Expenses",
+    icon: <IconArrowDown />,
     type: "Expense",
     balance: 95000,
     children: [
       {
         code: "5100",
+        selCode: "171",
         name: "Operating Expenses",
+        icon: <IconArrowDown />,
         balance: 70000,
         children: [
-          { code: "5110", name: "Salaries & Wages", balance: 40000 },
-          { code: "5120", name: "Rent Expense", balance: 20000 },
-          { code: "5130", name: "Utilities", balance: 10000 },
+          {
+            code: "5110",
+            selCode: "172",
+            icon: <IconArrowDown />,
+            name: "Salaries & Wages",
+            balance: 40000,
+          },
+          {
+            code: "5120",
+            selCode: "173",
+            icon: <IconArrowDown />,
+            name: "Rent Expense",
+            balance: 20000,
+          },
+          {
+            code: "5130",
+            selCode: "174",
+            icon: <IconArrowDown />,
+            name: "Utilities",
+            balance: 10000,
+          },
         ],
       },
       {
         code: "5200",
+        selCode: "175",
         name: "Administrative Expenses",
+        icon: <IconArrowDown />,
         balance: 25000,
         children: [
-          { code: "5210", name: "Office Supplies", balance: 12000 },
-          { code: "5220", name: "Professional Fees", balance: 13000 },
+          {
+            code: "5210",
+            selCode: "176",
+            icon: <IconArrowDown />,
+            name: "Office Supplies",
+            balance: 12000,
+          },
+          {
+            code: "5220",
+            selCode: "177",
+            icon: <IconArrowDown />,
+            name: "Professional Fees",
+            balance: 13000,
+          },
         ],
       },
     ],
@@ -145,7 +275,6 @@ function renderAccounts(
     <div key={acc.code} style={{ marginLeft: level * 20 }}>
       <Group justify="space-between" py={4}>
         <Group>
-          <IconCalculator size={18} color="blue" />
           <Text fw={level === 0 ? 600 : 400}>
             {acc.name} ({acc.code})
           </Text>
@@ -257,6 +386,7 @@ export default function ChartOfAccounts() {
 
   // modal form state
   const [accCode, setAccCode] = useState("");
+  const [selCode, setSelCode] = useState("");
   const [accName, setAccName] = useState("");
   const [accType, setAccType] = useState<AccountType | null>(null);
   const [parentCode, setParentCode] = useState<string | null>(null);
@@ -273,6 +403,7 @@ export default function ChartOfAccounts() {
     const balanceNumber = Number(openingBalance || 0);
     const newNode: AccountNode = {
       code: accCode.trim(),
+      selCode: selCode.trim(),
       name: accName.trim(),
       type: accType ?? undefined,
       balance: isNaN(balanceNumber) ? 0 : balanceNumber,
@@ -284,7 +415,7 @@ export default function ChartOfAccounts() {
     } else {
       setAccounts((prev) => insertAccount(prev, parentCode, newNode));
     }
-
+    setSelCode("");
     setAccCode("");
     setAccName("");
     setAccType(null);
@@ -296,6 +427,7 @@ export default function ChartOfAccounts() {
 
   const handleEdit = (acc: AccountNode) => {
     setEditing(acc);
+    setSelCode(selCode);
     setAccCode(acc.code);
     setAccName(acc.name);
     setAccType(acc.type ?? null);
@@ -416,47 +548,84 @@ export default function ChartOfAccounts() {
         size="lg"
       >
         <Stack>
-          <TextInput
-            label="Account Code"
-            placeholder="Account Code"
-            value={accCode}
-            onChange={(e) => setAccCode(e.currentTarget.value)}
-            disabled={!!editing}
-          />
-
-          <TextInput
-            label="Account Name"
-            placeholder="e.g., Inventory"
-            value={accName}
-            onChange={(e) => setAccName(e.currentTarget.value)}
-          />
-
-          <Select
-            label="Account Type"
-            placeholder="Select account type"
-            data={["Asset", "Liability", "Equity", "Revenue", "Expense"]}
-            value={accType}
-            onChange={(v) => setAccType(v as AccountType)}
-          />
-
-          {!editing && (
-            <Select
-              label="Parent Account (Optional)"
-              placeholder="Select parent account"
-              data={parentOptions}
-              value={parentCode}
-              onChange={setParentCode}
+          <Group grow>
+            <TextInput
+              label="Selected Code"
+              placeholder="Selected Code"
+              value={selCode}
+              onChange={(e) => setAccCode(e.currentTarget.value)}
+              disabled={!!editing}
             />
-          )}
+            <TextInput
+              label="Account Code"
+              placeholder="Account Code"
+              value={accCode}
+              onChange={(e) => setAccCode(e.currentTarget.value)}
+              disabled={!!editing}
+            />
+          </Group>
+          <Group grow>
+            <TextInput label="Level" placeholder="Level" />
 
-          <TextInput
+            <TextInput
+              label="Account Name"
+              placeholder="Title"
+              value={accName}
+              onChange={(e) => setAccName(e.currentTarget.value)}
+            />
+          </Group>
+          <Group grow>
+            <Select
+              label="Account Type"
+              placeholder="Select account type"
+              data={["Asset", "Liability", "Equity", "Revenue", "Expense"]}
+              value={accType}
+              onChange={(v) => setAccType(v as AccountType)}
+            />
+            {!editing && (
+              <Select
+                label="Parent Account"
+                placeholder="Select parent account"
+                data={parentOptions}
+                value={parentCode}
+                onChange={setParentCode}
+              />
+            )}
+          </Group>
+          <Group grow>
+            <Select
+              label="Type"
+              data={["Group", "Detail"]}
+              defaultValue={"Group"}
+            />
+            <Checkbox
+              label="Is Party"
+              color="#0A6802"
+              labelPosition="left"
+              size="md"
+              mt={25}
+            />
+          </Group>
+
+          {/* <TextInput
             label="Opening Balance"
             type="number"
             step="0.01"
             value={openingBalance}
             onChange={(e) => setOpeningBalance(e.currentTarget.value)}
-          />
-
+          /> */}
+          <Group grow>
+            <TextInput label="Address" placeholder="Address" />
+            <TextInput label="Phone No" placeholder="Phone No" type="number" />
+          </Group>
+          <Group grow>
+            <TextInput
+              label="Sales Tax#"
+              placeholder="Sales Tax#"
+              type="number"
+            />
+            <TextInput label="NTN" placeholder="NTN" type="number" />
+          </Group>
           <Group justify="flex-end" mt="md">
             <Button color="#0A6802" onClick={handleCreateOrUpdate}>
               {editing ? "Update Account" : "Create Account"}
