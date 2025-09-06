@@ -3,17 +3,15 @@ import {
   Group,
   Button,
   Table,
-  Badge,
+  // Badge removed (unused)
   ActionIcon,
   Title,
   Text,
   Modal,
   Select,
   NumberInput,
-  SimpleGrid,
   TextInput,
   Textarea,
-  ThemeIcon,
   Pagination,
 } from "@mantine/core";
 import {
@@ -21,134 +19,110 @@ import {
   IconTrash,
   IconPencil,
   IconDownload,
-  IconRefresh,
   IconSearch,
 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useReactToPrint } from "react-to-print";
 
 type ReturnItem = {
-  product: string;
-  qty: number | "";
-  rate: number | "";
+  code: string;
+  productName: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  rate: number;
   amount: number;
+  discount: number;
+  netAmount: number;
 };
 type SaleReturn = {
   id: string;
   customer: string;
-  invoice: string;
+  customerTitle: string;
+  saleAccount: string;
+  saleTitle: string;
+  salesman: string;
   date: string;
-  reason: string;
   items: ReturnItem[];
   notes?: string;
-  amount: number;
-  status: "pending" | "approved" | "refunded";
 };
 
 const dataInit: SaleReturn[] = [
   {
     id: "SR-001",
     customer: "John Doe",
-    invoice: "SI-2024-001",
+    customerTitle: "Mr.",
+    saleAccount: "Account 1",
+    saleTitle: "Retail",
+    salesman: "Ali",
     date: "2024-01-15",
-    reason: "Damaged product",
-    items: [
-      { product: "Keyboard", qty: 2, rate: 3000, amount: 6000 },
-      { product: "Mouse", qty: 2, rate: 3000, amount: 6000 },
-    ],
-    amount: 12000,
-    status: "pending",
+    items: [],
     notes: "Return due to damage",
   },
   {
     id: "SR-002",
     customer: "Jane Smith",
-    invoice: "SI-2024-002",
+    customerTitle: "Ms.",
+    saleAccount: "Account 2",
+    saleTitle: "Wholesale",
+    salesman: "Ahmed",
     date: "2024-01-14",
-    reason: "Incorrect item",
-    items: [{ product: "Monitor", qty: 1, rate: 5500, amount: 5500 }],
-    amount: 5500,
-    status: "approved",
+    items: [],
     notes: "Wrong size delivered",
   },
   {
     id: "SR-003",
     customer: "Global Inc",
-    invoice: "SI-2024-003",
+    customerTitle: "Company",
+    saleAccount: "Account 3",
+    saleTitle: "Corporate",
+    salesman: "Sara",
     date: "2024-01-10",
-    reason: "Refund processed",
-    items: [{ product: "Printer", qty: 1, rate: 12000, amount: 12000 }],
-    amount: 12000,
-    status: "refunded",
+    items: [],
   },
 ];
 
-function StatusBadge({ status }: { status: SaleReturn["status"] }) {
-  switch (status) {
-    case "pending":
-      return <Badge color="yellow">pending</Badge>;
-    case "approved":
-      return <Badge color="#0A6802">approved</Badge>;
-    case "refunded":
-      return <Badge color="blue">refunded</Badge>;
-  }
-}
 const toNumber = (v: string | number | null | undefined) =>
   typeof v === "number" ? v : v ? Number(v) : 0;
 
 export default function SaleReturns() {
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [data, setData] = useState<SaleReturn[]>(dataInit);
-
   const [opened, setOpened] = useState(false);
   const [editData, setEditData] = useState<SaleReturn | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  const [customer, setCustomer] = useState<string | null>(null);
-  const [invoice, setInvoice] = useState<string | null>(null);
+  const [invoiceNumber, setInvoiceNumber] = useState<string>("");
+  const [customer, setCustomer] = useState<string>("");
+  const [customerTitle, setCustomerTitle] = useState<string>("");
+  const [saleAccount, setSaleAccount] = useState<string>("");
+  const [saleTitle, setSaleTitle] = useState<string>("");
+  const [salesman, setSalesman] = useState<string>("");
   const [date, setDate] = useState<string>("");
-  const [reason, setReason] = useState<string | null>(null);
   const [items, setItems] = useState<ReturnItem[]>([]);
   const [notes, setNotes] = useState<string>("");
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const pageSize = 5;
-
-  const pending = useMemo(
-    () => data.filter((d) => d.status === "pending").length,
-    [data]
-  );
-  const approved = useMemo(
-    () => data.filter((d) => d.status === "approved").length,
-    [data]
-  );
-  const refunded = useMemo(
-    () => data.filter((d) => d.status === "refunded").length,
-    [data]
-  );
-  const totalValue = useMemo(
-    () => data.reduce((acc, d) => acc + d.amount, 0),
-    [data]
-  );
+  const [pageSize, setPageSize] = useState(5);
 
   const filteredData = useMemo(() => {
     const q = search.trim().toLowerCase();
     return data.filter((d) => {
-      const matchQ =
-        !q ||
-        d.id.toLowerCase().includes(q) ||
-        d.customer.toLowerCase().includes(q);
-      const matchStatus = statusFilter ? d.status === statusFilter : true;
-      return matchQ && matchStatus;
+      const matchesSearch = !q || d.id.toLowerCase().includes(q);
+      const matchesFromDate =
+        !fromDate || new Date(d.date) >= new Date(fromDate);
+      const matchesToDate = !toDate || new Date(d.date) <= new Date(toDate);
+      return matchesSearch && matchesFromDate && matchesToDate;
     });
-  }, [data, search, statusFilter]);
+  }, [data, search, fromDate, toDate]);
 
   const paginatedData = useMemo(() => {
     const start = (page - 1) * pageSize;
     return filteredData.slice(start, start + pageSize);
-  }, [filteredData, page]);
+  }, [filteredData, page, pageSize]);
 
   const exportPDF = (row: SaleReturn) => {
     const doc = new jsPDF();
@@ -159,13 +133,13 @@ export default function SaleReturns() {
       startY: 30,
       head: [["Field", "Value"]],
       body: [
-        ["Return #", row.id],
+        ["Invoice #", row.id],
         ["Customer", row.customer],
-        ["Invoice", row.invoice],
+        ["Customer Title", row.customerTitle],
+        ["Sale Account", row.saleAccount],
+        ["Sale Title", row.saleTitle],
+        ["Salesman", row.salesman],
         ["Date", row.date],
-        ["Reason", row.reason],
-        ["Amount", `₹${row.amount.toLocaleString()}`],
-        ["Status", row.status],
         ["Notes", row.notes || "-"],
       ],
     });
@@ -176,10 +150,10 @@ export default function SaleReturns() {
           .finalY + 10,
       head: [["Product", "Qty", "Rate", "Amount"]],
       body: row.items.map((i) => [
-        i.product,
-        String(i.qty),
-        `₹${toNumber(i.rate).toLocaleString()}`,
-        `₹${i.amount.toLocaleString()}`,
+        i.productName,
+        String(i.quantity),
+        `${i.rate}`,
+        `${i.amount}`,
       ]),
     });
 
@@ -194,24 +168,26 @@ export default function SaleReturns() {
 
   const openEdit = (row: SaleReturn) => {
     setEditData(row);
+    setInvoiceNumber(row.id);
     setCustomer(row.customer);
-    setInvoice(row.invoice);
+    setCustomerTitle(row.customerTitle);
+    setSaleAccount(row.saleAccount);
+    setSaleTitle(row.saleTitle);
+    setSalesman(row.salesman);
     setDate(row.date);
-    setReason(row.reason);
     setItems(row.items.map((i) => ({ ...i })));
     setNotes(row.notes || "");
     setOpened(true);
   };
 
   const handleSave = () => {
-    if (!customer || !invoice || !date) return;
+    if (!invoiceNumber || !date) return;
 
     const normalized = items.map((i) => {
-      const qty = toNumber(i.qty);
+      const qty = toNumber(i.quantity);
       const rate = toNumber(i.rate);
-      return { ...i, qty, rate, amount: qty * rate };
+      return { ...i, quantity: qty, rate, amount: qty * rate };
     });
-    const totalAmount = normalized.reduce((acc, i) => acc + i.amount, 0);
 
     if (editData) {
       setData((prev) =>
@@ -219,28 +195,30 @@ export default function SaleReturns() {
           d.id === editData.id
             ? {
                 ...d,
+                id: invoiceNumber,
                 customer,
-                invoice,
+                customerTitle,
+                saleAccount,
+                saleTitle,
+                salesman,
                 date,
-                reason: reason || "",
                 items: normalized,
                 notes,
-                amount: totalAmount,
               }
             : d
         )
       );
     } else {
       const newReturn: SaleReturn = {
-        id: `SR-${Math.floor(Math.random() * 1000)}`,
+        id: invoiceNumber,
         customer,
-        invoice,
+        customerTitle,
+        saleAccount,
+        saleTitle,
+        salesman,
         date,
-        reason: reason || "",
         items: normalized,
         notes,
-        amount: totalAmount,
-        status: "pending",
       };
       setData((prev) => [newReturn, ...prev]);
     }
@@ -256,18 +234,29 @@ export default function SaleReturns() {
   };
 
   const resetForm = () => {
-    setCustomer(null);
-    setInvoice(null);
+    setInvoiceNumber("");
+    setCustomer("");
+    setCustomerTitle("");
+    setSaleAccount("");
+    setSaleTitle("");
+    setSalesman("");
     setDate("");
-    setReason(null);
     setItems([]);
     setNotes("");
   };
+
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    // Use 'contentRef' instead of 'content' for latest react-to-print types
+    contentRef: printRef,
+    documentTitle: invoiceNumber || "Sale Return Invoice",
+  });
 
   return (
     <div>
       <Group justify="space-between" mb="md">
         <Title order={2}>Sale Returns</Title>
+
         <Button
           leftSection={<IconPlus size={16} />}
           color="#0A6802"
@@ -277,95 +266,122 @@ export default function SaleReturns() {
         </Button>
       </Group>
 
-      {/* Stats */}
-      <SimpleGrid cols={{ base: 1, sm: 4 }} spacing="lg" mb="lg">
-        <Card withBorder shadow="sm" bg={"#F1FCF0"}>
-          <Group justify="space-between">
-            <Text>Pending Returns</Text>
-            <ThemeIcon color="yellow" variant="light">
-              <IconRefresh size={20} />
-            </ThemeIcon>
-          </Group>
-          <Title order={3} mt={10}>
-            {pending}
-          </Title>
-        </Card>
-        <Card withBorder shadow="sm" bg={"#F1FCF0"}>
-          <Group justify="space-between">
-            <Text>Approved Returns</Text>
-            <ThemeIcon color="#0A6802" variant="light">
-              <IconRefresh size={20} />
-            </ThemeIcon>
-          </Group>
-          <Title order={3} mt={10}>
-            {approved}
-          </Title>
-        </Card>
-        <Card withBorder shadow="sm" bg={"#F1FCF0"}>
-          <Group justify="space-between">
-            <Text>Refunded</Text>
-            <ThemeIcon color="blue" variant="light">
-              <IconRefresh size={20} />
-            </ThemeIcon>
-          </Group>
-          <Title order={3} mt={10}>
-            {refunded}
-          </Title>
-        </Card>
-        <Card withBorder shadow="sm" bg={"#F1FCF0"}>
-          <Group justify="space-between">
-            <Text>Total Value</Text>
-            <ThemeIcon color="#0A6802" variant="light">
-              <IconRefresh size={20} />
-            </ThemeIcon>
-          </Group>
-          <Title order={3} mt={10}>
-            ₹{totalValue.toLocaleString()}
-          </Title>
-        </Card>
-      </SimpleGrid>
-
       <Card withBorder shadow="sm" radius="md" p="md">
         <Text fw={600} mb="sm">
           Sale Returns List
         </Text>
 
-        <Group mb="md">
-          <TextInput
-            w={300}
-            placeholder="Search by return number or customer..."
-            leftSection={<IconSearch size={16} />}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.currentTarget.value);
-              setPage(1);
-            }}
-          />
-          <Select
-            w={300}
-            placeholder="Filter by status"
-            data={[
-              { value: "pending", label: "Pending" },
-              { value: "approved", label: "Approved" },
-              { value: "refunded", label: "Refunded" },
-            ]}
-            value={statusFilter}
-            onChange={(val) => {
-              setStatusFilter(val);
-              setPage(1);
-            }}
-            clearable
-          />
+        <Group mb="md" gap={"xs"} justify="space-between">
+          <Group>
+            <TextInput
+              w={220}
+              placeholder="Search by invoice number..."
+              leftSection={<IconSearch size={16} />}
+              value={search}
+              onChange={(e) => {
+                setSearch(e.currentTarget.value);
+                setPage(1);
+              }}
+            />
+            <TextInput
+              type="date"
+              placeholder="From Date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.currentTarget.value)}
+              style={{ minWidth: 140 }}
+            />
+            <TextInput
+              type="date"
+              placeholder="To Date"
+              value={toDate}
+              onChange={(e) => setToDate(e.currentTarget.value)}
+              style={{ minWidth: 140 }}
+            />
+            <Button
+              variant="outline"
+              color="gray"
+              onClick={() => {
+                setSearch("");
+                setFromDate("");
+                setToDate("");
+              }}
+            >
+              Clear
+            </Button>
+            <Button
+              variant="filled"
+              color="#0A6802"
+              leftSection={<IconDownload size={16} />}
+              onClick={() => {
+                // Export filteredData to PDF for consistency
+                const doc = new jsPDF();
+                doc.text("Sale Returns", 14, 20);
+                if (filteredData.length > 0) {
+                  const tableData = filteredData.map((row: any) => [
+                    row.id,
+                    row.date,
+                    row.customer,
+                    row.customerTitle,
+                    row.saleAccount,
+                    row.saleTitle,
+                    row.salesman,
+                    row.notes || "",
+                  ]);
+
+                  autoTable(doc, {
+                    head: [
+                      [
+                        "Invoice #",
+                        "Invoice Date",
+                        "Customer",
+                        "Customer Title",
+                        "Sale Account",
+                        "Sale Title",
+                        "Salesman",
+                        "Notes",
+                      ],
+                    ],
+                    body: tableData,
+                    startY: 30,
+                  });
+                } else {
+                  doc.text(
+                    "No sale returns found for selected filters.",
+                    14,
+                    30
+                  );
+                }
+                doc.save("sale_returns.pdf");
+              }}
+            >
+              Export
+            </Button>
+          </Group>
+          <Group>
+            <Select
+              w={120}
+              data={["5", "10", "20", "50"]}
+              value={String(pageSize)}
+              onChange={(val) => {
+                setPageSize(Number(val));
+                setPage(1);
+              }}
+              label="Rows per page"
+            />
+          </Group>
         </Group>
         <Table highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Return #</Table.Th>
+              <Table.Th>Invoice #</Table.Th>
+              <Table.Th>Invoice Date</Table.Th>
               <Table.Th>Customer</Table.Th>
-              <Table.Th>Original Invoice</Table.Th>
-              <Table.Th>Date</Table.Th>
-              <Table.Th>Amount</Table.Th>
-              <Table.Th>Status</Table.Th>
+              <Table.Th>Customer Title</Table.Th>
+              <Table.Th>Sale Account</Table.Th>
+              <Table.Th>Sale Title</Table.Th>
+              <Table.Th>Salesman</Table.Th>
+
+              <Table.Th>Notes</Table.Th>
               <Table.Th>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -373,13 +389,14 @@ export default function SaleReturns() {
             {paginatedData.map((row) => (
               <Table.Tr key={row.id}>
                 <Table.Td>{row.id}</Table.Td>
-                <Table.Td>{row.customer}</Table.Td>
-                <Table.Td>{row.invoice}</Table.Td>
                 <Table.Td>{row.date}</Table.Td>
-                <Table.Td>₹{row.amount.toLocaleString()}</Table.Td>
-                <Table.Td>
-                  <StatusBadge status={row.status} />
-                </Table.Td>
+                <Table.Td>{row.customer}</Table.Td>
+                <Table.Td>{row.customerTitle}</Table.Td>
+                <Table.Td>{row.saleAccount}</Table.Td>
+                <Table.Td>{row.saleTitle}</Table.Td>
+                <Table.Td>{row.salesman}</Table.Td>
+
+                <Table.Td>{row.notes}</Table.Td>
                 <Table.Td>
                   <Group gap="xs">
                     <ActionIcon
@@ -431,131 +448,199 @@ export default function SaleReturns() {
             <strong>Create Sale Return</strong>
           )
         }
-        size="lg"
+        size="70%"
         centered
       >
-        <Group grow mb="md">
-          <Select
-            label="Customer"
-            placeholder="Select customer"
-            data={["John Doe", "Jane Smith", "Global Inc"]}
-            value={customer}
-            onChange={setCustomer}
+        <div ref={printRef}>
+          <Group grow mb="md" w={"50%"}>
+            <TextInput
+              label="Invoice #"
+              placeholder="Enter invoice number"
+              value={invoiceNumber}
+              onChange={(e) => setInvoiceNumber(e.currentTarget.value)}
+            />
+            <TextInput
+              label="Invoice Date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.currentTarget.value)}
+            />
+          </Group>
+          <Group grow mb="md">
+            <TextInput
+              label="Customer"
+              placeholder="Enter customer"
+              value={customer}
+              onChange={(e) => setCustomer(e.currentTarget.value)}
+            />
+            <Select
+              label="Customer Title"
+              placeholder="Enter customer title"
+              value={customerTitle}
+              onChange={(value) => setCustomerTitle(value || "")}
+            />
+            <TextInput
+              label="Sale Account"
+              placeholder="Enter sale account"
+              value={saleAccount}
+              onChange={(e) => setSaleAccount(e.currentTarget.value)}
+            />
+            <Select
+              label="Sale Title"
+              placeholder="Enter sale title"
+              value={saleTitle}
+              onChange={(value) => setSaleTitle(value || "")}
+            />
+            <Select
+              label="Salesman"
+              placeholder="Enter salesman"
+              value={salesman}
+              onChange={(value) => setSalesman(value || "")}
+            />
+          </Group>
+          <Card withBorder mb="md" p="md">
+            <Text fw={600} mb="sm">
+              Return Items
+            </Text>
+
+            {items.map((item, idx) => (
+              <Group key={idx} grow mb="xs" align="end">
+                <TextInput
+                  label="Code"
+                  placeholder="Code"
+                  value={item.code}
+                  onChange={(e) => {
+                    const next = [...items];
+                    next[idx].code = e.currentTarget.value;
+                    setItems(next);
+                  }}
+                />
+                <TextInput
+                  label="Product Name"
+                  placeholder="Product Name"
+                  value={item.productName}
+                  onChange={(e) => {
+                    const next = [...items];
+                    next[idx].productName = e.currentTarget.value;
+                    setItems(next);
+                  }}
+                />
+                <TextInput
+                  label="Description"
+                  placeholder="Description"
+                  value={item.description}
+                  onChange={(e) => {
+                    const next = [...items];
+                    next[idx].description = e.currentTarget.value;
+                    setItems(next);
+                  }}
+                />
+                <TextInput
+                  label="Unit"
+                  placeholder="Unit"
+                  value={item.unit}
+                  onChange={(e) => {
+                    const next = [...items];
+                    next[idx].unit = e.currentTarget.value;
+                    setItems(next);
+                  }}
+                />
+                <NumberInput
+                  label="Quantity"
+                  placeholder="Quantity"
+                  value={item.quantity}
+                  onChange={(val) => {
+                    const next = [...items];
+                    next[idx].quantity = Number(val) || 0;
+                    next[idx].amount = next[idx].quantity * next[idx].rate;
+                    next[idx].netAmount = next[idx].amount - next[idx].discount;
+                    setItems(next);
+                  }}
+                  min={0}
+                />
+                <NumberInput
+                  label="Rate"
+                  placeholder="Rate"
+                  value={item.rate}
+                  onChange={(val) => {
+                    const next = [...items];
+                    next[idx].rate = Number(val) || 0;
+                    next[idx].amount = next[idx].quantity * next[idx].rate;
+                    next[idx].netAmount = next[idx].amount - next[idx].discount;
+                    setItems(next);
+                  }}
+                  min={0}
+                />
+                <NumberInput
+                  label="Amount"
+                  placeholder="Amount"
+                  value={item.amount}
+                  readOnly
+                />
+                <NumberInput
+                  label="Discount"
+                  placeholder="Discount"
+                  value={item.discount}
+                  onChange={(val) => {
+                    const next = [...items];
+                    next[idx].discount = Number(val) || 0;
+                    next[idx].netAmount = next[idx].amount - next[idx].discount;
+                    setItems(next);
+                  }}
+                  min={0}
+                />
+                <NumberInput
+                  label="Net Amount"
+                  placeholder="Net Amount"
+                  value={item.netAmount}
+                  readOnly
+                />
+                <Button
+                  variant="light"
+                  color="red"
+                  onClick={() => setItems(items.filter((_, i) => i !== idx))}
+                >
+                  Remove
+                </Button>
+              </Group>
+            ))}
+
+            <Button
+              w={"5%"}
+              mt="xs"
+              color="#0A6802"
+              onClick={() =>
+                setItems([
+                  ...items,
+                  {
+                    code: "",
+                    productName: "",
+                    description: "",
+                    unit: "",
+                    quantity: 0,
+                    rate: 0,
+                    amount: 0,
+                    discount: 0,
+                    netAmount: 0,
+                  },
+                ])
+              }
+            >
+              + Add Item
+            </Button>
+          </Card>
+
+          <Textarea
+            label="Notes"
+            placeholder="Additional notes..."
+            value={notes}
+            onChange={(e) => setNotes(e.currentTarget.value)}
           />
-          <Select
-            label="Original Invoice"
-            placeholder="Select invoice"
-            data={["SI-2024-001", "SI-2024-002", "SI-2024-003"]}
-            value={invoice}
-            onChange={setInvoice}
-          />
-        </Group>
-
-        <Group grow mb="md">
-          <TextInput
-            label="Return Date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.currentTarget.value)}
-          />
-          <Select
-            label="Return Reason"
-            placeholder="Select reason"
-            data={[
-              "Damaged product",
-              "Incorrect item",
-              "Refund processed",
-              "Other",
-            ]}
-            value={reason}
-            onChange={setReason}
-          />
-        </Group>
-
-        <Card withBorder mb="md" p="md">
-          <Text fw={600} mb="sm">
-            Return Items
-          </Text>
-
-          {items.map((item, idx) => (
-            <Group key={idx} grow mb="xs" align="end">
-              <TextInput
-                label="Product"
-                placeholder="Product name"
-                value={item.product}
-                onChange={(e) => {
-                  const next = [...items];
-                  next[idx].product = e.currentTarget.value;
-                  setItems(next);
-                }}
-              />
-              <NumberInput
-                label="Quantity"
-                placeholder="Qty"
-                value={item.qty}
-                onChange={(val) => {
-                  const next = [...items];
-                  next[idx].qty = val === "" ? "" : Number(val);
-                  const q = toNumber(next[idx].qty);
-                  const r = toNumber(next[idx].rate);
-                  next[idx].amount = q * r;
-                  setItems(next);
-                }}
-                min={0}
-              />
-              <NumberInput
-                label="Rate"
-                placeholder="Rate"
-                value={item.rate}
-                onChange={(val) => {
-                  const next = [...items];
-                  next[idx].rate = val === "" ? "" : Number(val);
-                  const q = toNumber(next[idx].qty);
-                  const r = toNumber(next[idx].rate);
-                  next[idx].amount = q * r;
-                  setItems(next);
-                }}
-                min={0}
-              />
-              <TextInput
-                label="Amount"
-                placeholder="Amount"
-                value={item.amount.toString()}
-                readOnly
-              />
-              <Button
-                variant="light"
-                color="red"
-                onClick={() => setItems(items.filter((_, i) => i !== idx))}
-              >
-                Remove
-              </Button>
-            </Group>
-          ))}
-
-          <Button
-            mt="xs"
-            variant="light"
-            color="#0A6802"
-            onClick={() =>
-              setItems([
-                ...items,
-                { product: "", qty: 1, rate: 0, amount: 1 * 0 },
-              ])
-            }
-          >
-            + Add Item
-          </Button>
-        </Card>
-
-        <Textarea
-          label="Notes"
-          placeholder="Additional notes..."
-          value={notes}
-          onChange={(e) => setNotes(e.currentTarget.value)}
-        />
-
+        </div>
         <Group justify="flex-end" mt="md">
+          <Button color="#0A6802" onClick={handlePrint}>
+            Print
+          </Button>
           <Button variant="default" onClick={() => setOpened(false)}>
             Cancel
           </Button>

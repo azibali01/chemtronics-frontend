@@ -1,11 +1,9 @@
 import {
   ActionIcon,
-  Badge,
   Button,
   Card,
   Group,
   Pagination,
-  Select,
   Table,
   Text,
   TextInput,
@@ -16,98 +14,60 @@ import { useMemo, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-type TxType = "Sale" | "Purchase" | "Return" | "Adjustment";
-type LedgerRow = {
+type StockLedgerRow = {
   id: string;
   date: string;
+  invid: string;
+  particulars: string;
+  productCode: string;
   productName: string;
-  sku: string;
-  transaction: TxType;
-  reference: string;
   qtyIn: number;
   qtyOut: number;
-  balance: string;
-  remarks: string;
+  qtyBalance: number;
+  rate: number;
+  balance: number;
 };
 
-const LEDGER_DATA: LedgerRow[] = [
+const stockLedgerData: StockLedgerRow[] = [
   {
     id: "1",
-    date: "2024-01-15",
-    productName: "Wireless Mouse",
-    sku: "PRD-001",
-    transaction: "Sale",
-    reference: "SI-001",
-    qtyIn: 0,
+    date: "2024-09-01",
+    invid: "INV-001",
+    particulars: "Sale to ABC Corp",
+    productCode: "P-001",
+    productName: "A4 Paper",
+    qtyIn: 10,
     qtyOut: 5,
-    balance: "45 pcs",
-    remarks: "Sold to ABC Corporation",
+    qtyBalance: 5,
+    rate: 100,
+    balance: 500,
   },
   {
     id: "2",
-    date: "2024-01-14",
-    productName: "Office Chair",
-    sku: "PRD-002",
-    transaction: "Purchase",
-    reference: "PI-046",
-    qtyIn: 3,
+    date: "2024-09-02",
+    invid: "INV-002",
+    particulars: "Purchase from XYZ Ltd",
+    productCode: "P-002",
+    productName: "Printer",
+    qtyIn: 20,
     qtyOut: 0,
-    balance: "8 pcs",
-    remarks: "Purchased from Furniture World",
+    qtyBalance: 20,
+    rate: 90,
+    balance: 1800,
   },
   {
     id: "3",
-    date: "2024-01-13",
-    productName: "Printer Paper A4",
-    sku: "PRD-003",
-    transaction: "Sale",
-    reference: "SI-003",
-    qtyIn: 0,
-    qtyOut: 20,
-    balance: "5 reams",
-    remarks: "Sold to Tech Solutions Inc",
-  },
-  {
-    id: "4",
-    date: "2024-01-12",
-    productName: "Wireless Mouse",
-    sku: "PRD-001",
-    transaction: "Return",
-    reference: "SR-001",
-    qtyIn: 2,
-    qtyOut: 0,
-    balance: "50 pcs",
-    remarks: "Sales return from ABC Corp",
-  },
-  {
-    id: "5",
-    date: "2024-01-11",
-    productName: "Ballpoint Pens",
-    sku: "PRD-004",
-    transaction: "Adjustment",
-    reference: "ADJ-001",
+    date: "2024-09-03",
+    invid: "INV-003",
+    particulars: "Stock adjustment",
+    productCode: "P-003",
+    productName: "Stapler",
     qtyIn: 0,
     qtyOut: 2,
-    balance: "8 packs",
-    remarks: "Stock adjustment - damage",
+    qtyBalance: 18,
+    rate: 90,
+    balance: 1620,
   },
-];
-
-const productOptions = [
-  { value: "ALL", label: "All Products" },
-  ...Array.from(
-    new Map(
-      LEDGER_DATA.map((r) => [`${r.productName} (${r.sku})`, r])
-    ).entries()
-  ).map(([key]) => ({ value: key, label: key })),
-];
-
-const txOptions = [
-  { value: "ALL", label: "All Types" },
-  { value: "Sale", label: "Sale" },
-  { value: "Purchase", label: "Purchase" },
-  { value: "Return", label: "Return" },
-  { value: "Adjustment", label: "Adjustment" },
 ];
 
 const toDate = (s: string) => new Date(s + "T00:00:00");
@@ -118,63 +78,44 @@ const inRange = (d: string, from: string, to: string) => {
   return fromOk && toOk;
 };
 
-function TxBadge({ type }: { type: TxType }) {
-  switch (type) {
-    case "Sale":
-      return (
-        <Badge color="red" variant="light">
-          Sale
-        </Badge>
-      );
-    case "Purchase":
-      return (
-        <Badge color="green" variant="light">
-          Purchase
-        </Badge>
-      );
-    case "Return":
-      return (
-        <Badge color="yellow" variant="light">
-          Return
-        </Badge>
-      );
-    case "Adjustment":
-      return (
-        <Badge color="gray" variant="light">
-          Adjustment
-        </Badge>
-      );
-  }
-}
-
 export default function StockLedger() {
   // filters UI state
-  const [product, setProduct] = useState<string | null>("ALL");
-  const [txType, setTxType] = useState<string | null>("ALL");
+  const [productCode, setProductCode] = useState<string>("");
+  const [productName, setProductName] = useState<string>("");
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
 
   const [applied, setApplied] = useState({
-    product: "ALL",
-    txType: "ALL",
+    productCode: "",
+    productName: "",
     fromDate: "",
     toDate: "",
   });
 
+  // Auto-fill product name when product code changes
+  const handleProductCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const code = e.currentTarget.value;
+    setProductCode(code);
+    const found = stockLedgerData.find(
+      (r) => r.productCode.toLowerCase() === code.toLowerCase()
+    );
+    setProductName(found ? found.productName : "");
+  };
+
   const applyFilter = () =>
     setApplied({
-      product: product ?? "ALL",
-      txType: txType ?? "ALL",
+      productCode,
+      productName,
       fromDate,
       toDate,
     });
 
   const clearFilter = () => {
-    setProduct("ALL");
-    setTxType("ALL");
+    setProductCode("");
+    setProductName("");
     setFromDate("");
     setToDate("");
-    setApplied({ product: "ALL", txType: "ALL", fromDate: "", toDate: "" });
+    setApplied({ productCode: "", productName: "", fromDate: "", toDate: "" });
     setPage(1);
   };
 
@@ -183,18 +124,15 @@ export default function StockLedger() {
 
   // filtered data memo
   const filtered = useMemo(() => {
-    const rows = LEDGER_DATA.filter((r) => {
-      const matchesProduct =
-        applied.product === "ALL"
-          ? true
-          : `${r.productName} (${r.sku})` === applied.product;
-      const matchesType =
-        applied.txType === "ALL"
-          ? true
-          : r.transaction === (applied.txType as TxType);
-      const matchesDates = inRange(r.date, applied.fromDate, applied.toDate);
-      return matchesProduct && matchesType && matchesDates;
-    }).sort((a, b) => (a.date < b.date ? 1 : -1));
+    const rows = stockLedgerData
+      .filter((r) => {
+        const matchesCode = applied.productCode
+          ? r.productCode.toLowerCase() === applied.productCode.toLowerCase()
+          : true;
+        const matchesDates = inRange(r.date, applied.fromDate, applied.toDate);
+        return matchesCode && matchesDates;
+      })
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
 
     const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
     if (page > totalPages) setPage(1);
@@ -211,8 +149,10 @@ export default function StockLedger() {
     doc.text("Stock Ledger", 14, 18);
 
     const filterLine = [
-      applied.product === "ALL" ? "All Products" : applied.product,
-      applied.txType === "ALL" ? "All Types" : applied.txType,
+      applied.productCode
+        ? `Product Code: ${applied.productCode}`
+        : "All Products",
+      applied.productName ? `Product Name: ${applied.productName}` : "",
       applied.fromDate ? `From: ${applied.fromDate}` : "",
       applied.toDate ? `To: ${applied.toDate}` : "",
     ]
@@ -228,24 +168,28 @@ export default function StockLedger() {
       head: [
         [
           "Date",
-          "Product",
-          "Transaction",
-          "Reference",
+          "Invid",
+          "Particulars",
+          "Product Code",
+          "Product Name",
           "Qty In",
           "Qty Out",
+          "Qty Balance",
+          "Rate",
           "Balance",
-          "Remarks",
         ],
       ],
       body: filtered.map((r) => [
         r.date,
-        `${r.productName} (${r.sku})`,
-        r.transaction,
-        r.reference,
+        r.invid,
+        r.particulars,
+        r.productCode,
+        r.productName,
         r.qtyIn ? `+${r.qtyIn}` : "",
         r.qtyOut ? `-${r.qtyOut}` : "",
+        r.qtyBalance,
+        r.rate,
         r.balance,
-        r.remarks,
       ]),
       styles: { fontSize: 9 },
       headStyles: { fillColor: [10, 104, 2] }, // #0A6802
@@ -277,30 +221,26 @@ export default function StockLedger() {
 
       <Card withBorder radius="md" shadow="sm" mb="lg" bg="#F1FCF0">
         <Group gap="md" align="flex-end" grow wrap="wrap">
-          <div style={{ minWidth: 220 }}>
+          <div style={{ minWidth: 180 }}>
             <Text fw={600} size="sm" mb={6}>
-              Product
+              Product Code
             </Text>
-            <Select
-              data={productOptions}
-              value={product}
-              onChange={setProduct}
-              allowDeselect={false}
+            <TextInput
+              placeholder="Enter product code"
+              value={productCode}
+              onChange={handleProductCodeChange}
             />
           </div>
-
-          <div style={{ minWidth: 200 }}>
+          <div style={{ minWidth: 180 }}>
             <Text fw={600} size="sm" mb={6}>
-              Transaction Type
+              Product Name
             </Text>
-            <Select
-              data={txOptions}
-              value={txType}
-              onChange={setTxType}
-              allowDeselect={false}
+            <TextInput
+              placeholder="Product name will auto-fill"
+              value={productName}
+              readOnly
             />
           </div>
-
           <div style={{ minWidth: 180 }}>
             <Text fw={600} size="sm" mb={6}>
               From Date
@@ -311,7 +251,6 @@ export default function StockLedger() {
               onChange={(e) => setFromDate(e.currentTarget.value)}
             />
           </div>
-
           <div style={{ minWidth: 180 }}>
             <Text fw={600} size="sm" mb={6}>
               To Date
@@ -322,7 +261,6 @@ export default function StockLedger() {
               onChange={(e) => setToDate(e.currentTarget.value)}
             />
           </div>
-
           <Group justify="flex-end" mt="xs">
             <Button variant="default" onClick={clearFilter}>
               Clear
@@ -335,52 +273,46 @@ export default function StockLedger() {
       </Card>
 
       <Card withBorder radius="md" shadow="sm" p="md" bg={"#F1FCF0"}>
+        {(applied.productCode || applied.productName) && (
+          <Group mb="md">
+            <Text fw={600}>Product Code: {applied.productCode || "-"}</Text>
+            <Text fw={600} ml="lg">
+              Product Name: {applied.productName || "-"}
+            </Text>
+          </Group>
+        )}
         <Group mb="sm">
           <Text fw={600}>Stock Movement History</Text>
         </Group>
-
         <Table highlightOnHover withTableBorder verticalSpacing="sm">
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Date</Table.Th>
-              <Table.Th>Product</Table.Th>
-              <Table.Th>Transaction</Table.Th>
-              <Table.Th>Reference</Table.Th>
-              <Table.Th ta="right">Qty In</Table.Th>
-              <Table.Th ta="right">Qty Out</Table.Th>
+              <Table.Th>Invid</Table.Th>
+              <Table.Th>Particulars</Table.Th>
+              <Table.Th>Qty In</Table.Th>
+              <Table.Th>Qty Out</Table.Th>
+              <Table.Th>Qty Balance</Table.Th>
+              <Table.Th>Rate</Table.Th>
               <Table.Th>Balance</Table.Th>
-              <Table.Th>Remarks</Table.Th>
             </Table.Tr>
           </Table.Thead>
-
           <Table.Tbody>
             {paginatedData.map((r) => (
               <Table.Tr key={r.id}>
                 <Table.Td>{r.date}</Table.Td>
-                <Table.Td>
-                  <Text fw={600}>{r.productName}</Text>
-                  <Text size="xs" c="dimmed">
-                    {r.sku}
-                  </Text>
-                </Table.Td>
-                <Table.Td>
-                  <TxBadge type={r.transaction} />
-                </Table.Td>
-                <Table.Td>{r.reference}</Table.Td>
-                <Table.Td ta="right">
-                  {r.qtyIn ? <Text c="green">+{r.qtyIn}</Text> : "-"}
-                </Table.Td>
-                <Table.Td ta="right">
-                  {r.qtyOut ? <Text c="red">-{r.qtyOut}</Text> : "-"}
-                </Table.Td>
+                <Table.Td>{r.invid}</Table.Td>
+                <Table.Td>{r.particulars}</Table.Td>
+                <Table.Td>{r.qtyIn}</Table.Td>
+                <Table.Td>{r.qtyOut}</Table.Td>
+                <Table.Td>{r.qtyBalance}</Table.Td>
+                <Table.Td>{r.rate}</Table.Td>
                 <Table.Td>{r.balance}</Table.Td>
-                <Table.Td>{r.remarks}</Table.Td>
               </Table.Tr>
             ))}
-
             {paginatedData.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={8}>
+                <Table.Td colSpan={10}>
                   <Text c="dimmed" ta="center">
                     No records match the current filters.
                   </Text>
@@ -389,7 +321,6 @@ export default function StockLedger() {
             )}
           </Table.Tbody>
         </Table>
-
         <Group justify="center" mt="md">
           <Pagination
             total={totalPages}

@@ -3,7 +3,6 @@ import {
   Card,
   Text,
   Group,
-  Badge,
   Button,
   Table,
   Menu,
@@ -11,7 +10,6 @@ import {
   TextInput,
   Grid,
   Modal,
-  Select,
   NumberInput,
   Textarea,
   Switch,
@@ -22,8 +20,6 @@ import {
   IconTrash,
   IconPencil,
   IconDownload,
-  IconCircle,
-  IconFileText,
   IconShoppingCart,
 } from "@tabler/icons-react";
 import jsPDF from "jspdf";
@@ -32,14 +28,16 @@ import "jspdf-autotable";
 type Invoice = {
   id: number;
   number: string;
-  vendor: string;
   date: string;
-  dueDate: string;
-  status: "pending" | "paid" | "overdue";
-  amount: number;
+  supplierNo?: string;
+  supplierTitle?: string;
+  purchaseAccount?: string;
+  purchaseTitle?: string;
   items?: Item[];
   notes?: string;
   gst?: boolean;
+  amount?: number;
+  discount?: number;
 };
 
 type Item = {
@@ -53,33 +51,74 @@ type Item = {
 };
 
 export default function PurchaseInvoice() {
+  // Export filtered invoices to PDF
+  const exportFilteredPDF = () => {
+    const doc = new jsPDF();
+    doc.text("Purchase Invoices", 14, 20);
+    if (filteredInvoices.length > 0) {
+      const tableData = filteredInvoices.map((inv) => [
+        inv.number,
+        inv.date,
+        inv.supplierNo || "",
+        inv.supplierTitle || "",
+        inv.purchaseAccount || "",
+        inv.purchaseTitle || "",
+        inv.amount?.toFixed(2) || "0.00",
+        inv.discount?.toString() || "0",
+      ]);
+      (doc as any).autoTable({
+        head: [
+          [
+            "Invoice #",
+            "Date",
+            "Supplier No",
+            "Supplier Title",
+            "Purchase A/C",
+            "Purchase Title",
+            "Amount",
+            "Discount %",
+          ],
+        ],
+        body: tableData,
+        startY: 30,
+      });
+    } else {
+      doc.text("No invoices found for selected filters.", 14, 30);
+    }
+    doc.save("purchase_invoices.pdf");
+  };
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [invoices, setInvoices] = useState<Invoice[]>([
     {
       id: 1,
       number: "PUR-001",
-      vendor: "Office Supplies Co.",
       date: "3/15/2024",
-      dueDate: "4/15/2024",
-      status: "pending",
-      amount: 850,
+      supplierNo: "SUP-001",
+      supplierTitle: "CHEMTRONIX ENGINEERING SOLUTION",
+      purchaseAccount: "05120109086371",
+      purchaseTitle: "Stock",
+      items: [],
     },
     {
       id: 2,
       number: "PUR-002",
-      vendor: "Tech Equipment Ltd.",
       date: "3/14/2024",
-      dueDate: "4/14/2024",
-      status: "paid",
-      amount: 2500,
+      supplierNo: "SUP-002",
+      supplierTitle: "Hydro Worx",
+      purchaseAccount: "05120104085906",
+      purchaseTitle: "Stock",
+      items: [],
     },
     {
       id: 3,
       number: "PUR-003",
-      vendor: "Maintenance Services",
       date: "3/13/2024",
-      dueDate: "4/13/2024",
-      status: "overdue",
-      amount: 450,
+      supplierNo: "SUP-003",
+      supplierTitle: "Other Supplier",
+      purchaseAccount: "05120104085907",
+      purchaseTitle: "Stock",
+      items: [],
     },
   ]);
 
@@ -95,11 +134,14 @@ export default function PurchaseInvoice() {
   const [includeGST, setIncludeGST] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
   const [notes, setNotes] = useState("");
+  const [discount, setDiscount] = useState(0); // Discount percentage
+  const [supplierNo, setSupplierNo] = useState("");
+  const [supplierTitle, setSupplierTitle] = useState("");
+  const [purchaseAccount, setPurchaseAccount] = useState("");
+  const [purchaseTitle, setPurchaseTitle] = useState("");
 
   const totalPurchases = invoices.length;
-  const paidCount = invoices.filter((i) => i.status === "paid").length;
-  const pendingCount = invoices.filter((i) => i.status === "pending").length;
-  const totalAmount = invoices.reduce((sum, i) => sum + i.amount, 0);
+  // Removed paidCount, pendingCount, totalAmount
   // Add item
   const addItem = () => {
     setItems([
@@ -116,6 +158,12 @@ export default function PurchaseInvoice() {
     ]);
   };
 
+  // Calculate subtotal
+  const subtotal = items.reduce((sum, item) => sum + item.qty * item.rate, 0);
+  const discountAmount = subtotal * (discount / 100);
+  const gst = includeGST ? (subtotal - discountAmount) * 0.18 : 0;
+  const total = subtotal - discountAmount + gst;
+
   const removeItem = (id: number) => {
     setItems(items.filter((i) => i.id !== id));
   };
@@ -124,22 +172,17 @@ export default function PurchaseInvoice() {
     setItems(items.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
   };
 
-  const subtotal = items.reduce((sum, i) => sum + i.qty * i.rate, 0);
-  const gst = includeGST ? subtotal * 0.18 : 0;
-  const total = subtotal + gst;
-
   const filteredInvoices = invoices.filter(
     (inv) =>
-      inv.number.toLowerCase().includes(search.toLowerCase()) ||
-      inv.vendor.toLowerCase().includes(search.toLowerCase())
+      inv.number.toLowerCase().includes(search.toLowerCase()) &&
+      (!fromDate || new Date(inv.date) >= new Date(fromDate)) &&
+      (!toDate || new Date(inv.date) <= new Date(toDate))
   );
 
   const exportPDF = (invoice: Invoice) => {
     const doc = new jsPDF();
-    doc.text(`Invoice: {invoice.number}`, 14, 20);
-    doc.text(`Vendor: {invoice.vendor}`, 14, 30);
-    doc.text(`Date: {invoice.date}`, 14, 40);
-    doc.text(`Due Date: {invoice.dueDate}`, 14, 50);
+    doc.text(`Invoice: ${invoice.number}`, 14, 20);
+    doc.text(`Date: ${invoice.date}`, 14, 30);
 
     if (invoice.items && invoice.items.length > 0) {
       const tableData = invoice.items.map((i) => [
@@ -152,17 +195,17 @@ export default function PurchaseInvoice() {
       (doc as any).autoTable({
         head: [["Product", "Description", "Qty", "Rate", "Amount"]],
         body: tableData,
-        startY: 60,
+        startY: 40,
       });
     }
 
     doc.text(`Subtotal: {subtotal}`, 14, 200);
-    doc.text(`GST: {gst}`, 14, 210);
-    doc.text(`Total: {invoice.amount}`, 14, 220);
+    doc.text(`GST: ${gst}`, 14, 210);
+    doc.text(`Total: ${subtotal + gst}`, 14, 220);
 
     if (invoice.notes) doc.text(`Notes: {invoice.notes}`, 14, 230);
 
-    doc.save(`{invoice.number}.pdf`);
+    doc.save(`${invoice.number}.pdf`);
   };
 
   return (
@@ -202,57 +245,69 @@ export default function PurchaseInvoice() {
             </div>
           </Card>
         </Grid.Col>
-        <Grid.Col span={{ base: 12, sm: 3 }}>
-          <Card shadow="sm" radius="md" p="lg" withBorder bg={"#F1FCF0"}>
-            <Group justify="space-between">
-              <Text>Paid</Text> <IconCircle color="#0A6802" size={20} />
-            </Group>
-            <div style={{ marginTop: 10 }}>
-              <Text fw={700}>{paidCount}</Text>
-            </div>
-          </Card>
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, sm: 3 }}>
-          <Card shadow="sm" radius="md" p="lg" withBorder bg={"#F1FCF0"}>
-            <Group justify="space-between">
-              <Text>Pending</Text> <IconCircle color="blue" size={20} />
-            </Group>
-            <div style={{ marginTop: 10 }}>
-              <Text fw={700}>{pendingCount}</Text>
-            </div>
-          </Card>
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, sm: 3 }}>
-          <Card shadow="sm" radius="md" p="lg" withBorder bg={"#F1FCF0"}>
-            <Group justify="space-between">
-              <Text>Total Amount</Text> <IconFileText size={20} />
-            </Group>
-            <div style={{ marginTop: 10 }}>
-              <Text fw={700}>{totalAmount}</Text>
-            </div>
-          </Card>
-        </Grid.Col>
       </Grid>
 
       <Card shadow="sm" radius="md" p="lg" bg={"#F1FCF0"} withBorder>
         <Text fw={600} mb="md">
           Purchase Invoices
         </Text>
-        <TextInput
-          placeholder="Search purchase invoices..."
-          value={search}
-          onChange={(e) => setSearch(e.currentTarget.value)}
-          mb="md"
-          leftSection={<IconSearch size={16} />}
-        />
+        <Group mb="md" gap={"xs"}>
+          <TextInput
+            placeholder="Search purchase invoices..."
+            value={search}
+            onChange={(e) => setSearch(e.currentTarget.value)}
+            leftSection={<IconSearch size={16} />}
+            style={{ minWidth: 220 }}
+          />
+          <TextInput
+            type="date"
+            placeholder="From Date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.currentTarget.value)}
+            style={{ minWidth: 140 }}
+          />
+          <TextInput
+            type="date"
+            placeholder="To Date"
+            value={toDate}
+            onChange={(e) => setToDate(e.currentTarget.value)}
+            style={{ minWidth: 140 }}
+          />
+          <Button
+            variant="outline"
+            color="gray"
+            onClick={() => {
+              setSearch("");
+              setFromDate("");
+              setToDate("");
+            }}
+          >
+            Clear
+          </Button>
+          <Button
+            variant="filled"
+            color="#0A6802"
+            leftSection={<IconDownload size={16} />}
+            onClick={exportFilteredPDF}
+          >
+            Export
+          </Button>
+        </Group>
         <Table highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Invoice #</Table.Th>
-              <Table.Th>Vendor</Table.Th>
-              <Table.Th>Date</Table.Th>
-              <Table.Th>Due Date</Table.Th>
-              <Table.Th>Status</Table.Th>
+              <Table.Th>Invoice Date</Table.Th>
+              <Table.Th>Supplier No</Table.Th>
+              <Table.Th>Supplier Title</Table.Th>
+              <Table.Th>Purchase Account</Table.Th>
+              <Table.Th>Purchase Title</Table.Th>
+              <Table.Th>Code</Table.Th>
+              <Table.Th>Product Name</Table.Th>
+              <Table.Th>Description</Table.Th>
+              <Table.Th>Unit</Table.Th>
+              <Table.Th>Qty</Table.Th>
+              <Table.Th>Rate</Table.Th>
               <Table.Th>Amount</Table.Th>
               <Table.Th>Actions</Table.Th>
             </Table.Tr>
@@ -261,23 +316,23 @@ export default function PurchaseInvoice() {
             {filteredInvoices.map((inv) => (
               <Table.Tr key={inv.id}>
                 <Table.Td>{inv.number}</Table.Td>
-                <Table.Td>{inv.vendor}</Table.Td>
                 <Table.Td>{inv.date}</Table.Td>
-                <Table.Td>{inv.dueDate}</Table.Td>
+                <Table.Td>{inv.supplierNo || ""}</Table.Td>
+                <Table.Td>{inv.supplierTitle || ""}</Table.Td>
+                <Table.Td>{inv.purchaseAccount || ""}</Table.Td>
+                <Table.Td>{inv.purchaseTitle || ""}</Table.Td>
+                {/* Show first item from items array for each invoice, or blank if not available */}
+                <Table.Td>{inv.items?.[0]?.code || ""}</Table.Td>
+                <Table.Td>{inv.items?.[0]?.product || ""}</Table.Td>
+                <Table.Td>{inv.items?.[0]?.description || ""}</Table.Td>
+                <Table.Td>{inv.items?.[0]?.unit || ""}</Table.Td>
+                <Table.Td>{inv.items?.[0]?.qty || ""}</Table.Td>
+                <Table.Td>{inv.items?.[0]?.rate || ""}</Table.Td>
                 <Table.Td>
-                  <Badge
-                    color={
-                      inv.status === "paid"
-                        ? "#0A6802"
-                        : inv.status === "pending"
-                        ? "blue"
-                        : "red"
-                    }
-                  >
-                    {inv.status}
-                  </Badge>
+                  {inv.items?.[0]?.qty && inv.items?.[0]?.rate
+                    ? (inv.items[0].qty * inv.items[0].rate).toFixed(2)
+                    : ""}
                 </Table.Td>
-                <Table.Td>{inv.amount}</Table.Td>
                 <Table.Td>
                   <Menu shadow="md" width={180}>
                     <Menu.Target>
@@ -290,12 +345,14 @@ export default function PurchaseInvoice() {
                         leftSection={<IconPencil size={14} />}
                         onClick={() => {
                           setInvoiceNumber(inv.number);
-                          setVendor(inv.vendor);
                           setDate(inv.date);
-                          setDueDate(inv.dueDate);
                           setIncludeGST(inv.gst ?? true);
                           setItems(inv.items || []);
                           setNotes(inv.notes || "");
+                          setSupplierNo(inv.supplierNo || "");
+                          setSupplierTitle(inv.supplierTitle || "");
+                          setPurchaseAccount(inv.purchaseAccount || "");
+                          setPurchaseTitle(inv.purchaseTitle || "");
                           setEditInvoice(inv);
                         }}
                       >
@@ -350,28 +407,32 @@ export default function PurchaseInvoice() {
             />
           </Grid.Col>
           <Grid.Col span={3}>
-            <TextInput label="Supplier" />
-          </Grid.Col>
-          <Grid.Col span={3}>
-            <Select
-              label="Supplier"
-              placeholder="Supplier Title"
-              data={[
-                "MBL 05120109086371 CHEMTRONIX ENGINEERING SOLUTION",
-                "MBL 05120104085906 Hydro Worx",
-              ]}
-              value={vendor}
-              onChange={(val) => setVendor(val || "")}
+            <TextInput
+              label="Supplier No"
+              value={supplierNo}
+              onChange={(e) => setSupplierNo(e.currentTarget.value)}
             />
           </Grid.Col>
           <Grid.Col span={3}>
-            <TextInput label="Purchase A/C" type="number" />
+            <TextInput
+              label="Supplier Title"
+              value={supplierTitle}
+              onChange={(e) => setSupplierTitle(e.currentTarget.value)}
+            />
           </Grid.Col>
           <Grid.Col span={3}>
-            <Select
+            <TextInput
+              label="Purchase A/C"
+              type="number"
+              value={purchaseAccount}
+              onChange={(e) => setPurchaseAccount(e.currentTarget.value)}
+            />
+          </Grid.Col>
+          <Grid.Col span={3}>
+            <TextInput
               label="Purchase Title"
-              data={["Stock"]}
-              defaultValue={"Stock"}
+              value={purchaseTitle}
+              onChange={(e) => setPurchaseTitle(e.currentTarget.value)}
             />
           </Grid.Col>
         </Grid>
@@ -459,7 +520,14 @@ export default function PurchaseInvoice() {
           <div>
             <Text>Subtotal: {subtotal.toFixed(2)}</Text>
             <Text>Discount %</Text>
-            <TextInput placeholder="Enter Discount "></TextInput>
+            <NumberInput
+              min={0}
+              max={100}
+              value={discount}
+              onChange={(val) => setDiscount(Number(val))}
+              placeholder="Enter Discount %"
+            />
+            <Text>Discount Amount: {discountAmount.toFixed(2)}</Text>
             <Text>GST (18%): {gst.toFixed(2)}</Text>
             <Text fw={700}>Total: {total.toFixed(2)}</Text>
           </div>
@@ -488,6 +556,7 @@ export default function PurchaseInvoice() {
                           date,
                           dueDate,
                           amount: total,
+                          discount,
                           items,
                           notes,
                           gst: includeGST,
@@ -500,11 +569,9 @@ export default function PurchaseInvoice() {
                 const newInvoice: Invoice = {
                   id: Date.now(),
                   number: invoiceNumber,
-                  vendor,
                   date,
-                  dueDate,
-                  status: "pending",
                   amount: total,
+                  discount,
                   items,
                   notes,
                   gst: includeGST,
