@@ -10,6 +10,7 @@ import {
   ActionIcon,
   Table,
   Card,
+  Pagination,
 } from "@mantine/core";
 import {
   IconPlus,
@@ -21,10 +22,13 @@ import {
 } from "@tabler/icons-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { usePurchaseReturns } from "../../Context/Invoicing/PurchaseReturnsContext";
 
-// Attach autoTable to jsPDF prototype for TypeScript
-// Attach autoTable to jsPDF prototype for TypeScript
-// @ts-ignore
+declare module "jspdf" {
+  interface jsPDF {
+    autoTable: typeof autoTable;
+  }
+}
 jsPDF.prototype.autoTable = autoTable;
 
 interface ReturnItem {
@@ -38,11 +42,9 @@ interface ReturnItem {
 
 interface ReturnEntry {
   id: string;
-  vendor: string;
   invoice: string;
   date: string;
   amount: number;
-  status: "pending" | "approved";
   notes: string;
   items: ReturnItem[];
   supplierNumber: string;
@@ -52,12 +54,14 @@ interface ReturnEntry {
 }
 
 export default function PurchaseReturnModal() {
+  // Use context for returns
+  const { returns, setReturns } = usePurchaseReturns();
+
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ReturnEntry | null>(null);
   const [opened, setOpened] = useState(false);
   const [editOpened, setEditOpened] = useState(false);
 
-  const [reason, setReason] = useState<string>("");
   const [returnDate, setReturnDate] = useState("");
   const [notes, setNotes] = useState<string>("");
   const [supplierNumber, setSupplierNumber] = useState("");
@@ -74,59 +78,12 @@ export default function PurchaseReturnModal() {
     { product: "", quantity: 0, rate: 0, amount: 0, code: "", unit: "" },
   ]);
 
-  const [returns, setReturns] = useState<ReturnEntry[]>([
-    {
-      id: "PR-001",
-      vendor: "Vendor A",
-      invoice: "Invoice #1",
-      date: "2024-06-01",
-      amount: 100,
-      status: "pending",
-      notes: "Broken packaging",
-      items: [
-        {
-          product: "Product 1",
-          quantity: 2,
-          rate: 50,
-          amount: 100,
-          code: "",
-          unit: "",
-        },
-      ],
-      supplierNumber: "S-001",
-      supplierTitle: "Supplier A",
-      purchaseAccount: "PA-001",
-      purchaseTitle: "Purchase A",
-    },
-    {
-      id: "PR-002",
-      vendor: "Vendor B",
-      invoice: "Invoice #2",
-      date: "2024-06-02",
-      amount: 200,
-      status: "approved",
-      notes: "Wrong product delivered",
-      items: [
-        {
-          product: "Product 2",
-          quantity: 4,
-          rate: 50,
-          amount: 200,
-          code: "",
-          unit: "",
-        },
-      ],
-      supplierNumber: "S-002",
-      supplierTitle: "Supplier B",
-      purchaseAccount: "PA-002",
-      purchaseTitle: "Purchase B",
-    },
-  ]);
-
   const [editingReturn, setEditingReturn] = useState<ReturnEntry | null>(null);
-  // Removed unused showPrint state
 
   const printRef = useRef<HTMLDivElement>(null);
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
 
   const addItem = () => {
     setItems((prev) => [
@@ -168,13 +125,11 @@ export default function PurchaseReturnModal() {
   const handleSubmit = () => {
     const newReturn: ReturnEntry = {
       id: `PR-${returns.length + 1}`,
-      vendor: "",
-      invoice: "",
+      invoice,
       date: returnDate,
       notes,
       items,
       amount: items.reduce((acc, i) => acc + i.amount, 0),
-      status: "pending",
       supplierNumber,
       supplierTitle,
       purchaseAccount,
@@ -200,7 +155,6 @@ export default function PurchaseReturnModal() {
     setPurchaseAccount(entry.purchaseAccount);
     setPurchaseTitle(entry.purchaseTitle);
     setNotes(entry.notes);
-    // Ensure all item fields are present for editing
     const itemsWithAllFields = entry.items.map((item) => ({
       code: item.code || "",
       product: item.product || "",
@@ -217,8 +171,7 @@ export default function PurchaseReturnModal() {
     if (!editingReturn) return;
     const updated: ReturnEntry = {
       ...editingReturn,
-      vendor: "",
-      invoice: "",
+      invoice,
       date: returnDate,
       notes,
       items,
@@ -237,72 +190,172 @@ export default function PurchaseReturnModal() {
 
   const exportPDF = (entry: ReturnEntry) => {
     const doc = new jsPDF();
+
+    // Header
     doc.setFontSize(18);
-    doc.text(`Purchase Return - ${entry.id}`, 10, 10);
-
+    doc.text("CHEMTRONIX ENGINEERING SOLUTION", 14, 14);
     doc.setFontSize(12);
-    doc.text(`Vendor: ${entry.vendor}`, 10, 20);
-    doc.text(`Invoice: ${entry.invoice}`, 10, 30);
-    doc.text(`Date: ${entry.date}`, 10, 40);
-    doc.text(`Notes: ${entry.notes}`, 10, 60);
+    doc.text(`Purchase Return - ${entry.id}`, 14, 24);
 
-    doc.text("Items:", 10, 80);
-    entry.items.forEach((item, i) => {
-      doc.text(
-        `${i + 1}. ${item.product} | Qty: ${item.quantity} | Rate: ${
-          item.rate
-        } | Amount: ${item.amount}`,
-        10,
-        90 + i * 10
-      );
+    // Details Table
+    autoTable(doc, {
+      startY: 32,
+      head: [["Field", "Value"]],
+      body: [
+        ["Invoice", entry.invoice],
+        ["Date", entry.date],
+        ["Supplier Number", entry.supplierNumber],
+        ["Supplier Title", entry.supplierTitle],
+        ["Purchase Account", entry.purchaseAccount],
+        ["Purchase Title", entry.purchaseTitle],
+        ["Notes", entry.notes],
+      ],
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [10, 104, 2] },
+      theme: "grid",
+      margin: { left: 14, right: 14 },
     });
 
-    doc.text(`Total: ${entry.amount}`, 10, 120);
+    // Items Table
+    autoTable(doc, {
+      startY: (doc as jsPDF & { lastAutoTable?: { finalY?: number } })
+        .lastAutoTable?.finalY
+        ? ((doc as jsPDF & { lastAutoTable?: { finalY?: number } })
+            .lastAutoTable?.finalY ?? 60) + 8
+        : 60,
+      head: [["Code", "Product", "Unit", "Quantity", "Rate", "Amount"]],
+      body: entry.items.map((item) => [
+        item.code,
+        item.product,
+        item.unit,
+        item.quantity,
+        item.rate,
+        item.amount,
+      ]),
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [10, 104, 2] },
+      theme: "grid",
+      margin: { left: 14, right: 14 },
+      didDrawPage: (data) => {
+        const finalY = (data.cursor?.y ?? 68) + 8;
+        doc.setFontSize(12);
+        doc.text(`Total: ${entry.amount.toFixed(2)}`, 14, finalY);
+      },
+    });
+
+    // Footer
+    const pageHeight = doc.internal.pageSize.height || 297;
+    doc.setFontSize(10);
+    doc.text(
+      "*Computer generated invoice. No need for signature",
+      14,
+      pageHeight - 20
+    );
+    doc.setFontSize(11);
+    doc.text(
+      "HEAD OFFICE: 552 Mujtaba Canal View, Main Qasimpur Canal Road, Multan",
+      14,
+      pageHeight - 14
+    );
+    doc.text(
+      "PLANT SITE: 108-1 Tufailabad Industrial Estate Multan",
+      14,
+      pageHeight - 8
+    );
+
     doc.save(`${entry.id}.pdf`);
   };
 
-  const filteredReturns = returns.filter(
-    (entry) =>
-      (entry.invoice.toLowerCase().includes(search.toLowerCase()) ||
-        entry.supplierNumber.toLowerCase().includes(search.toLowerCase())) &&
-      (!fromDate || new Date(entry.date) >= new Date(fromDate)) &&
-      (!toDate || new Date(entry.date) <= new Date(toDate))
+  const filteredReturns = returns.filter((entry) => {
+    const matchesSearch =
+      entry.invoice.toLowerCase().includes(search.toLowerCase()) ||
+      entry.supplierNumber.toLowerCase().includes(search.toLowerCase());
+
+    const entryDate = new Date(entry.date).getTime();
+    const fromOk = fromDate ? entryDate >= new Date(fromDate).getTime() : true;
+    const toOk = toDate ? entryDate <= new Date(toDate).getTime() : true;
+
+    return matchesSearch && fromOk && toOk;
+  });
+
+  // Pagination logic
+  const paginatedReturns = filteredReturns.slice(
+    (page - 1) * pageSize,
+    page * pageSize
   );
 
   const exportFilteredPDF = () => {
     const doc = new jsPDF();
-    doc.text("Purchase Returns", 14, 20);
-    if (filteredReturns.length > 0) {
-      const tableData = filteredReturns.map((entry) => [
+
+    // Header
+    doc.setFontSize(18);
+    doc.text("CHEMTRONIX ENGINEERING SOLUTION", 14, 14);
+    doc.setFontSize(12);
+    doc.text("Purchase Returns", 14, 24);
+
+    // Table
+    autoTable(doc, {
+      startY: 32,
+      head: [
+        [
+          "Invoice",
+          "Date",
+          "Supplier Number",
+          "Supplier Title",
+          "Purchase Account",
+          "Purchase Title",
+          "Amount",
+          "Notes",
+        ],
+      ],
+      body: filteredReturns.map((entry) => [
         entry.invoice,
         entry.date,
-        entry.vendor,
-        entry.amount?.toFixed(2) || "0.00",
-        entry.supplierNumber || "",
-        entry.supplierTitle || "",
-        entry.purchaseAccount || "",
-        entry.purchaseTitle || "",
-      ]);
-      // @ts-ignore
-      doc.autoTable({
-        head: [
-          [
-            "Invoice",
-            "Date",
-            "Vendor",
-            "Amount",
-            "Supplier No",
-            "Supplier Title",
-            "Purchase A/C",
-            "Purchase Title",
-          ],
-        ],
-        body: tableData,
-        startY: 30,
-      });
-    } else {
-      doc.text("No returns found for selected filters.", 14, 30);
-    }
+        entry.supplierNumber,
+        entry.supplierTitle,
+        entry.purchaseAccount,
+        entry.purchaseTitle,
+        entry.amount.toFixed(2),
+        entry.notes,
+      ]),
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [10, 104, 2] },
+      theme: "grid",
+      margin: { left: 14, right: 14 },
+      didDrawPage: (data) => {
+        const finalY = (data.cursor?.y ?? 68) + 8;
+        doc.setFontSize(12);
+        doc.text(`Total Returns: ${filteredReturns.length}`, 14, finalY);
+        doc.text(
+          `Total Amount: ${filteredReturns
+            .reduce((sum, entry) => sum + entry.amount, 0)
+            .toFixed(2)}`,
+          80,
+          finalY
+        );
+      },
+    });
+
+    // Footer
+    const pageHeight = doc.internal.pageSize.height || 297;
+    doc.setFontSize(10);
+    doc.text(
+      "*Computer generated invoice. No need for signature",
+      14,
+      pageHeight - 20
+    );
+    doc.setFontSize(11);
+    doc.text(
+      "HEAD OFFICE: 552 Mujtaba Canal View, Main Qasimpur Canal Road, Multan",
+      14,
+      pageHeight - 14
+    );
+    doc.text(
+      "PLANT SITE: 108-1 Tufailabad Industrial Estate Multan",
+      14,
+      pageHeight - 8
+    );
+
     doc.save("purchase_returns.pdf");
   };
 
@@ -323,15 +376,17 @@ export default function PurchaseReturnModal() {
           </Button>
         </Group>
 
-        <Group mb="md">
+        <Group mb="md" grow>
           <TextInput
+            label="Search"
             w={220}
-            placeholder="Search by return number or vendor..."
+            placeholder="Search by Invoice No ..."
             leftSection={<IconSearch size={16} />}
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
           />
           <TextInput
+            label="From Date"
             type="date"
             placeholder="From Date"
             value={fromDate}
@@ -339,31 +394,50 @@ export default function PurchaseReturnModal() {
             style={{ minWidth: 140 }}
           />
           <TextInput
+            label="To Date"
             type="date"
             placeholder="To Date"
             value={toDate}
             onChange={(e) => setToDate(e.currentTarget.value)}
             style={{ minWidth: 140 }}
           />
-          <Button
-            variant="outline"
-            color="gray"
-            onClick={() => {
-              setSearch("");
-              setFromDate("");
-              setToDate("");
-            }}
-          >
-            Clear
-          </Button>
-          <Button
-            variant="filled"
-            color="#0A6802"
-            leftSection={<IconDownload size={16} />}
-            onClick={exportFilteredPDF}
-          >
-            Export
-          </Button>
+          <Group>
+            <Button
+              mt={22}
+              variant="outline"
+              color="#0A6802"
+              onClick={() => {
+                setSearch("");
+                setFromDate("");
+                setToDate("");
+              }}
+            >
+              Clear
+            </Button>
+            <Button
+              mt={22}
+              variant="filled"
+              color="#0A6802"
+              leftSection={<IconDownload size={16} />}
+              onClick={exportFilteredPDF}
+            >
+              Export
+            </Button>
+          </Group>
+
+          <Group justify="flex-end">
+            <Select
+              label="Rows per page"
+              data={["5", "10", "20", "50"]}
+              value={pageSize.toString()}
+              onChange={(val) => {
+                setPageSize(Number(val));
+                setPage(1);
+              }}
+              style={{ width: 120 }}
+              size="xs"
+            />
+          </Group>
         </Group>
 
         <Table highlightOnHover withColumnBorders>
@@ -380,7 +454,7 @@ export default function PurchaseReturnModal() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {filteredReturns.map((r) => (
+            {paginatedReturns.map((r) => (
               <Table.Tr key={r.id}>
                 <Table.Td>{r.invoice}</Table.Td>
                 <Table.Td>{r.date}</Table.Td>
@@ -448,6 +522,18 @@ export default function PurchaseReturnModal() {
             ))}
           </Table.Tbody>
         </Table>
+
+        <Group mt="md" justify="center">
+          <Pagination
+            value={page}
+            onChange={setPage}
+            total={Math.max(1, Math.ceil(filteredReturns.length / pageSize))}
+            color="#0A6802"
+            radius="md"
+            size="md"
+            withControls
+          />
+        </Group>
       </Card>
 
       <Modal
@@ -500,10 +586,6 @@ export default function PurchaseReturnModal() {
         </Group>
         <div ref={printRef}>
           <ReturnForm
-            reason={reason}
-            setReason={setReason}
-            returnDate={returnDate}
-            setReturnDate={setReturnDate}
             notes={notes}
             setNotes={setNotes}
             items={items}
@@ -595,6 +677,19 @@ export default function PurchaseReturnModal() {
   );
 }
 
+interface ReturnFormProps {
+  notes: string;
+  setNotes: (notes: string) => void;
+  items: ReturnItem[];
+  updateItem: (
+    index: number,
+    field: keyof ReturnItem,
+    value: string | number
+  ) => void;
+  addItem: () => void;
+  removeItem: (index: number) => void;
+}
+
 function ReturnForm({
   notes,
   setNotes,
@@ -602,8 +697,7 @@ function ReturnForm({
   updateItem,
   addItem,
   removeItem,
-}: // ...existing props...
-any) {
+}: ReturnFormProps) {
   return (
     <>
       <div>

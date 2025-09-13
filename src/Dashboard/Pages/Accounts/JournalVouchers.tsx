@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useMemo } from "react";
 import {
   Card,
   Text,
@@ -11,59 +11,24 @@ import {
   Modal,
   Stack,
 } from "@mantine/core";
-import { Download, Edit, Trash2, Filter, Plus } from "lucide-react";
+import { Download, Edit, Trash2, Plus } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useReactToPrint } from "react-to-print";
 import type { RowInput } from "jspdf-autotable";
+import {
+  JournalVouchersProvider,
+  useJournalVouchers,
+} from "../../Context/Accounts/JournalVouchersContext";
+import type { JournalVoucher } from "../../Context/Accounts/JournalVouchersContext";
 
-interface JournalVoucher {
-  voucherNo: string;
-  date: string;
-  account: string;
-  debit: number;
-  credit: number;
-  description: string;
-  status: "Draft" | "Posted";
-}
-
-const initialVouchers: JournalVoucher[] = [
-  {
-    voucherNo: "JV-001",
-    date: "2024-01-02",
-    account: "Cash",
-    debit: 10000,
-    credit: 0,
-    description: "Initial Capital",
-    status: "Draft",
-  },
-  {
-    voucherNo: "JV-002",
-    date: "2024-01-05",
-    account: "Sales Revenue",
-    debit: 0,
-    credit: 5000,
-    description: "Sale of goods",
-    status: "Posted",
-  },
-  {
-    voucherNo: "JV-003",
-    date: "2024-01-10",
-    account: "Rent Expense",
-    debit: 2000,
-    credit: 0,
-    description: "Office rent",
-    status: "Draft",
-  },
-];
-
-export default function JournalVoucherList() {
-  const [vouchers, setVouchers] = useState<JournalVoucher[]>(initialVouchers);
+function JournalVoucherList() {
+  const { vouchers, addVoucher, updateVoucher, deleteVoucher } =
+    useJournalVouchers();
 
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [filteredData, setFilteredData] = useState<JournalVoucher[]>(vouchers);
-
   const [activePage, setActivePage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(5);
 
@@ -71,7 +36,7 @@ export default function JournalVoucherList() {
   const [openedEdit, setOpenedEdit] = useState(false);
   const [editVoucher, setEditVoucher] = useState<JournalVoucher | null>(null);
 
-  const applyFilter = () => {
+  const filteredData = useMemo(() => {
     let result = vouchers;
     if (fromDate) {
       result = result.filter((v) => new Date(v.date) >= new Date(fromDate));
@@ -87,64 +52,104 @@ export default function JournalVoucherList() {
           v.description.toLowerCase().includes(search.toLowerCase())
       );
     }
-    setFilteredData(result);
-    setActivePage(1);
-  };
+    return result;
+  }, [vouchers, fromDate, toDate, search]);
 
-  const start = (activePage - 1) * rowsPerPage;
-  const end = start + rowsPerPage;
-  const paginatedData = filteredData.slice(start, end);
+  const paginatedData = useMemo(() => {
+    const start = (activePage - 1) * rowsPerPage;
+    const end = start + rowsPerPage;
+    return filteredData.slice(start, end);
+  }, [filteredData, activePage, rowsPerPage]);
 
   const exportRowPDF = (voucher: JournalVoucher) => {
-    const doc = new jsPDF();
-    doc.text(`Journal Voucher - ${voucher.voucherNo}`, 14, 15);
+    const doc = new jsPDF("p", "pt", "a4");
+    const companyName = "Chemtronix Engineering Solutions";
+    const reportTitle = "Journal Voucher";
+    const currentDate = new Date().toLocaleDateString();
+
+    doc.setFontSize(18);
+    doc.setTextColor("#0A6802");
+    doc.text(companyName, 40, 40);
+    doc.setFontSize(14);
+    doc.setTextColor("#222");
+    doc.text(reportTitle, 40, 65);
+
+    doc.setFontSize(11);
+    doc.setTextColor("#444");
+    doc.text(`Voucher No: ${voucher.voucherNo}`, 40, 95);
+    doc.text(`Date: ${voucher.date}`, 250, 95);
+    doc.text(`Account: ${voucher.account}`, 40, 115);
+    doc.text(`Title: ${voucher.title}`, 250, 115);
+    doc.text(`Description: ${voucher.description}`, 40, 135);
 
     autoTable(doc, {
-      head: [
-        [
-          "Voucher No",
-          "Date",
-          "Account",
-          "Debit",
-          "Credit",
-          "Description",
-          "Status",
-        ],
-      ],
+      startY: 155,
+      head: [["Debit", "Credit"]],
       body: [
         [
-          voucher.voucherNo,
-          voucher.date,
-          voucher.account,
           `₹${voucher.debit.toLocaleString()}`,
           `₹${voucher.credit.toLocaleString()}`,
-          voucher.description,
-          voucher.status,
         ],
       ] as RowInput[],
-      startY: 20,
+      styles: { fontSize: 12 },
+      headStyles: { fillColor: [10, 104, 2], textColor: 255 },
+      theme: "grid",
+      margin: { left: 40, right: 40 },
     });
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(
+      `Generated on: ${currentDate}`,
+      40,
+      doc.internal.pageSize.height - 30
+    );
+    doc.text(`Page 1 of 1`, 480, doc.internal.pageSize.height - 30);
 
     doc.save(`${voucher.voucherNo}.pdf`);
   };
 
   const exportAllPDF = () => {
-    const doc = new jsPDF();
-    doc.text("Journal Vouchers Report", 14, 15);
+    const doc = new jsPDF("p", "pt", "a4");
+    const companyName = "Chemtronix Engineering Solutions";
+    const reportTitle = "Journal Vouchers Report";
+    const currentDate = new Date().toLocaleDateString();
+
+    doc.setFontSize(18);
+    doc.setTextColor("#0A6802");
+    doc.text(companyName, 40, 40);
+    doc.setFontSize(14);
+    doc.setTextColor("#222");
+    doc.text(reportTitle, 40, 65);
+
+    doc.setFontSize(11);
+    doc.setTextColor("#444");
+    let dateText = "";
+    if (fromDate && toDate) {
+      dateText = `From: ${fromDate}   To: ${toDate}`;
+    } else if (fromDate) {
+      dateText = `From: ${fromDate}`;
+    } else if (toDate) {
+      dateText = `To: ${toDate}`;
+    }
+    if (dateText) {
+      doc.text(dateText, 40, 90);
+    }
 
     const totalDebit = filteredData.reduce((sum, v) => sum + v.debit, 0);
     const totalCredit = filteredData.reduce((sum, v) => sum + v.credit, 0);
 
     autoTable(doc, {
+      startY: dateText ? 110 : 90,
       head: [
         [
           "Voucher No",
           "Date",
           "Account",
+          "Title",
+          "Description",
           "Debit",
           "Credit",
-          "Description",
-          "Status",
         ],
       ],
       body: [
@@ -152,70 +157,58 @@ export default function JournalVoucherList() {
           v.voucherNo,
           v.date,
           v.account,
-          `${v.debit.toLocaleString()}`,
-          `${v.credit.toLocaleString()}`,
+          v.title,
           v.description,
-          v.status,
+          `₹${v.debit.toLocaleString()}`,
+          `₹${v.credit.toLocaleString()}`,
         ]),
         [
           {
             content: "Totals",
-            colSpan: 3,
+            colSpan: 5,
             styles: { halign: "right", fontStyle: "bold" },
           },
           {
-            content: `${totalDebit.toLocaleString()}`,
+            content: `₹${totalDebit.toLocaleString()}`,
             styles: { fontStyle: "bold" },
           },
           {
-            content: `${totalCredit.toLocaleString()}`,
+            content: `₹${totalCredit.toLocaleString()}`,
             styles: { fontStyle: "bold" },
           },
-          { content: "", colSpan: 2 },
         ],
       ] as RowInput[],
-      startY: 20,
+      styles: { fontSize: 11 },
+      headStyles: { fillColor: [10, 104, 2], textColor: 255 },
+      theme: "grid",
+      margin: { left: 40, right: 40 },
+      didDrawPage: function () {
+        const pageCount = doc.getNumberOfPages();
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(
+          `Generated on: ${currentDate}`,
+          40,
+          doc.internal.pageSize.height - 30
+        );
+        doc.text(
+          `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
+          480,
+          doc.internal.pageSize.height - 30
+        );
+      },
     });
 
     doc.save("journal_vouchers.pdf");
   };
 
-  const toggleStatus = (voucherNo: string) => {
-    setVouchers((prev) =>
-      prev.map((v) =>
-        v.voucherNo === voucherNo
-          ? { ...v, status: v.status === "Draft" ? "Posted" : "Draft" }
-          : v
-      )
-    );
-    setFilteredData((prev) =>
-      prev.map((v) =>
-        v.voucherNo === voucherNo
-          ? { ...v, status: v.status === "Draft" ? "Posted" : "Draft" }
-          : v
-      )
-    );
-  };
-
-  const deleteVoucher = (voucherNo: string) => {
-    const updated = vouchers.filter((v) => v.voucherNo !== voucherNo);
-    setVouchers(updated);
-    setFilteredData(updated);
-  };
-
   const handleCreate = (newVoucher: JournalVoucher) => {
-    const updated = [...vouchers, newVoucher];
-    setVouchers(updated);
-    setFilteredData(updated);
+    addVoucher(newVoucher);
     setOpenedCreate(false);
   };
 
   const handleEdit = (updatedVoucher: JournalVoucher) => {
-    const updated = vouchers.map((v) =>
-      v.voucherNo === updatedVoucher.voucherNo ? updatedVoucher : v
-    );
-    setVouchers(updated);
-    setFilteredData(updated);
+    updateVoucher(updatedVoucher);
     setOpenedEdit(false);
   };
 
@@ -240,33 +233,62 @@ export default function JournalVoucherList() {
       </Group>
 
       <Card shadow="sm" p="md" withBorder bg="#F1FCF0">
-        <Group grow>
-          <TextInput
-            label="Search"
-            placeholder="Search by voucher, account, description"
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
-          />
-          <TextInput
-            label="From Date"
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.currentTarget.value)}
-          />
-          <TextInput
-            label="To Date"
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.currentTarget.value)}
-          />
+        <Group>
+          <Group grow w="55%">
+            <TextInput
+              label="Search"
+              placeholder="Search by voucher, account, description"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+            />
+            <TextInput
+              label="From Date"
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.currentTarget.value)}
+            />
+            <TextInput
+              label="To Date"
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.currentTarget.value)}
+            />
+          </Group>
+          <Group>
+            <Button
+              variant="outline"
+              color="gray"
+              mt={22}
+              onClick={() => {
+                setSearch("");
+                setFromDate("");
+                setToDate("");
+              }}
+            >
+              Clear
+            </Button>
+          </Group>
           <Button
-            mt={23}
-            leftSection={<Filter size={16} />}
-            color="#0A6802"
-            onClick={applyFilter}
+            leftSection={<Download size={16} />}
+            color="#819E00"
+            onClick={exportAllPDF}
+            mt={22}
           >
-            Apply Filter
+            Export All
           </Button>
+          <Group justify="end" ml="auto">
+            <Select
+              label="Rows per page"
+              data={["5", "10", "20"]}
+              value={rowsPerPage.toString()}
+              onChange={(value) => {
+                setRowsPerPage(Number(value));
+                setActivePage(1);
+              }}
+              w={120}
+              mt={22}
+            />
+          </Group>
         </Group>
       </Card>
 
@@ -275,26 +297,18 @@ export default function JournalVoucherList() {
           <Stack>
             <Text fw={600}>Journal Entries</Text>
           </Stack>
-
-          <Button
-            leftSection={<Download size={16} />}
-            color="#819E00"
-            onClick={exportAllPDF}
-          >
-            Export All
-          </Button>
         </Group>
 
-        <Table striped highlightOnHover withTableBorder>
+        <Table highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Voucher No</Table.Th>
               <Table.Th>Date</Table.Th>
               <Table.Th>Account</Table.Th>
+              <Table.Th>Title</Table.Th>
               <Table.Th>Debit</Table.Th>
               <Table.Th>Credit</Table.Th>
               <Table.Th>Description</Table.Th>
-              <Table.Th>Status</Table.Th>
               <Table.Th>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -304,18 +318,10 @@ export default function JournalVoucherList() {
                 <Table.Td>{v.voucherNo}</Table.Td>
                 <Table.Td>{v.date}</Table.Td>
                 <Table.Td>{v.account}</Table.Td>
+                <Table.Td>{v.title}</Table.Td>
                 <Table.Td c="#0A6802">{v.debit.toLocaleString()}</Table.Td>
                 <Table.Td c="red">{v.credit.toLocaleString()}</Table.Td>
                 <Table.Td>{v.description}</Table.Td>
-                <Table.Td>
-                  <Button
-                    size="xs"
-                    color={v.status === "Draft" ? "orange" : "#0A6802"}
-                    onClick={() => toggleStatus(v.voucherNo)}
-                  >
-                    {v.status}
-                  </Button>
-                </Table.Td>
                 <Table.Td>
                   <Group gap="xs">
                     <Button
@@ -349,17 +355,7 @@ export default function JournalVoucherList() {
           </Table.Tbody>
         </Table>
 
-        <Group justify="space-between" mt="md">
-          <Select
-            label="Rows per page"
-            data={["5", "10", "20"]}
-            value={rowsPerPage.toString()}
-            onChange={(value) => {
-              setRowsPerPage(Number(value));
-              setActivePage(1);
-            }}
-            w={120}
-          />
+        <Group justify="center" mt="md">
           <Pagination
             total={Math.ceil(filteredData.length / rowsPerPage)}
             value={activePage}
@@ -402,14 +398,23 @@ function VoucherForm({
       voucherNo: "",
       date: "",
       account: "",
+      title: "",
       debit: 0,
       credit: 0,
       description: "",
-      status: "Draft",
     }
   );
 
-  const handleChange = (field: keyof JournalVoucher, value: any) => {
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useReactToPrint({
+    content: () => printRef.current,
+    documentTitle: voucher.voucherNo || "Journal Voucher",
+  });
+
+  const handleChange = (
+    field: keyof JournalVoucher,
+    value: string | number
+  ) => {
     setVoucher((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -420,48 +425,112 @@ function VoucherForm({
         onSubmit(voucher);
       }}
     >
+      {/* Hidden printable area */}
+      <div
+        ref={printRef}
+        style={{
+          height: 0,
+          overflow: "hidden",
+          opacity: 0,
+          pointerEvents: "none",
+          position: "absolute",
+          zIndex: -1,
+        }}
+      >
+        <div style={{ padding: 24, fontFamily: "Arial" }}>
+          <h2>Journal Voucher</h2>
+          <p>
+            <strong>Voucher No:</strong> {voucher.voucherNo}
+          </p>
+          <p>
+            <strong>Date:</strong> {voucher.date}
+          </p>
+          <p>
+            <strong>Account:</strong> {voucher.account}
+          </p>
+          <p>
+            <strong>Title:</strong> {voucher.title}
+          </p>
+          <p>
+            <strong>Debit:</strong> {voucher.debit}
+          </p>
+          <p>
+            <strong>Credit:</strong> {voucher.credit}
+          </p>
+          <p>
+            <strong>Description:</strong> {voucher.description}
+          </p>
+        </div>
+      </div>
+      <Group grow>
+        <TextInput
+          label="Voucher No"
+          value={voucher.voucherNo}
+          onChange={(e) => handleChange("voucherNo", e.currentTarget.value)}
+          required
+        />
+        <TextInput
+          label="Date"
+          type="date"
+          value={voucher.date}
+          onChange={(e) => handleChange("date", e.currentTarget.value)}
+          required
+        />
+      </Group>
+      <Group grow mt={"md"}>
+        <TextInput
+          label="Account Code"
+          value={voucher.account}
+          onChange={(e) => handleChange("account", e.currentTarget.value)}
+          required
+        />
+        <Select
+          label="Title"
+          value={voucher.title}
+          onChange={(value) => handleChange("title", value ?? "")}
+          required
+        />
+      </Group>
+      <Group grow mt={"md"}>
+        <TextInput
+          label="Debit"
+          type="number"
+          value={voucher.debit}
+          onChange={(e) => handleChange("debit", Number(e.currentTarget.value))}
+        />
+
+        <TextInput
+          label="Credit"
+          type="number"
+          value={voucher.credit}
+          onChange={(e) =>
+            handleChange("credit", Number(e.currentTarget.value))
+          }
+        />
+      </Group>
       <TextInput
-        label="Voucher No"
-        value={voucher.voucherNo}
-        onChange={(e) => handleChange("voucherNo", e.currentTarget.value)}
-        required
-      />
-      <TextInput
-        label="Date"
-        type="date"
-        value={voucher.date}
-        onChange={(e) => handleChange("date", e.currentTarget.value)}
-        required
-      />
-      <TextInput
-        label="Account"
-        value={voucher.account}
-        onChange={(e) => handleChange("account", e.currentTarget.value)}
-        required
-      />
-      <TextInput
-        label="Debit"
-        type="number"
-        value={voucher.debit}
-        onChange={(e) => handleChange("debit", Number(e.currentTarget.value))}
-      />
-      <TextInput
-        label="Credit"
-        type="number"
-        value={voucher.credit}
-        onChange={(e) => handleChange("credit", Number(e.currentTarget.value))}
-      />
-      <TextInput
+        mt={"md"}
         label="Description"
         value={voucher.description}
         onChange={(e) => handleChange("description", e.currentTarget.value)}
       />
 
       <Group justify="flex-end" mt="md">
+        <Button color="#819E00" variant="outline" onClick={handlePrint}>
+          Print
+        </Button>
         <Button type="submit" color="#0A6802">
           Save
         </Button>
       </Group>
     </form>
+  );
+}
+
+export default function JournalVouchers() {
+  return (
+    <JournalVouchersProvider>
+      <JournalVoucherList />
+    </JournalVouchersProvider>
   );
 }

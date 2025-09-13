@@ -210,20 +210,20 @@ const menuItems: MenuItem[] = [
     icon: <IconChartBar size={18} />,
     children: [
       {
-        label: "Profit/Loss",
+        label: "Analytics Dashboard",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/profit-loss",
+        path: "/dashboard/analytics",
       },
-      {
-        label: "Stock Movement",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/user-rights",
-      },
-      {
-        label: "GST Analysis",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/gst-analysis",
-      },
+      // {
+      //   label: "Stock Movement",
+      //   icon: <IconArrowRight size={16} />,
+      //   path: "/dashboard/user-rights",
+      // },
+      // {
+      //   label: "GST Analysis",
+      //   icon: <IconArrowRight size={16} />,
+      //   path: "/dashboard/gst-analysis",
+      // },
     ],
   },
 ];

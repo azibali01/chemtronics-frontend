@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useRef } from "react";
+import { useState, useRef } from "react";
 import { useReactToPrint } from "react-to-print";
 import {
   Card,
@@ -14,42 +13,45 @@ import {
   Textarea,
   Select,
   Switch,
+  Pagination,
 } from "@mantine/core";
 import {
   IconPlus,
   IconTrash,
   IconPencil,
   IconSearch,
+  IconDownload,
 } from "@tabler/icons-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { useSalesInvoice } from "../../Context/Invoicing/SalesInvoiceContext";
 
-type Invoice = {
-  id: number;
-  number: string;
-  date: string;
-  deliveryNo?: string;
-  deliveryDate?: string;
-  poNo?: string;
-  poDate?: string;
-  accountNo?: string;
-  accountTitle?: string;
-  saleAccount?: string;
-  saleAccountTitle?: string;
-  ntnNo?: string;
-  amount: number;
-  items?: InvoiceItem[];
-};
+// Helper for header/footer
+function addHeaderFooter(doc: jsPDF, title: string) {
+  doc.setFontSize(18);
+  doc.text("CHEMTRONIX ENGINEERING SOLUTION", 14, 14);
+  doc.setFontSize(12);
+  doc.text(title, 14, 24);
 
-type InvoiceItem = {
-  id: number;
-  code: number;
-  product: string;
-  hsCode: string;
-  description: string;
-  qty: number;
-  rate: number;
-  exGSTRate: string;
-  exGSTAmount: string;
-};
+  const pageHeight = doc.internal.pageSize.height || 297;
+  doc.setFontSize(10);
+  doc.text(
+    "*Computer generated invoice. No need for signature",
+    14,
+    pageHeight - 20
+  );
+  doc.setFontSize(11);
+  doc.text(
+    "HEAD OFFICE: 552 Mujtaba Canal View, Main Qasimpur Canal Road, Multan",
+    14,
+    pageHeight - 14
+  );
+  doc.text(
+    "PLANT SITE: 108-1 Tufailabad Industrial Estate Multan",
+    14,
+    pageHeight - 8
+  );
+}
 
 export default function SalesInvoicePage() {
   const printRef = useRef<HTMLDivElement>(null);
@@ -57,69 +59,18 @@ export default function SalesInvoicePage() {
     content: () => printRef.current,
     documentTitle: "Invoice",
   });
-  const [invoices, setInvoices] = useState<Invoice[]>([
-    {
-      id: 1,
-      number: "INV-001",
-      date: "3/15/2024",
-      deliveryNo: "1001",
-      deliveryDate: "3/16/2024",
-      poNo: "PO-001",
-      poDate: "3/10/2024",
-      accountNo: "A-001",
-      accountTitle: "Ahmad Fine Weaing Limited (Unit-I)",
-      saleAccount: "Sale Account 1",
-      saleAccountTitle: "Sale of Chemicals and Equipments",
-      ntnNo: "1234567",
-      amount: 1180,
-      items: [
-        {
-          id: 1,
-          code: 1,
-          product: "Product A",
-          hsCode: "HS001",
-          description: "Desc A",
-          qty: 10,
-          rate: 100,
-          exGSTRate: "90",
-          exGSTAmount: "900",
-        },
-      ],
-    },
-    {
-      id: 2,
-      number: "INV-002",
-      date: "3/14/2024",
-      deliveryNo: "1002",
-      deliveryDate: "3/15/2024",
-      poNo: "PO-002",
-      poDate: "3/11/2024",
-      accountNo: "A-002",
-      accountTitle: "Ahmad Fine Weaing Limited (Unit-II)",
-      saleAccount: "Sale Account 2",
-      saleAccountTitle: "Sale of Equipments",
-      ntnNo: "7654321",
-      amount: 1770,
-      items: [
-        {
-          id: 2,
-          code: 2,
-          product: "Product B",
-          hsCode: "HS002",
-          description: "Desc B",
-          qty: 5,
-          rate: 200,
-          exGSTRate: "180",
-          exGSTAmount: "900",
-        },
-      ],
-    },
-  ]);
 
-  const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
-  const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
+  // Use context for invoices
+  const { invoices, setInvoices } = useSalesInvoice();
+
+  // Local UI state
+  const [editInvoice, setEditInvoice] = useState<(typeof invoices)[0] | null>(
+    null
+  );
+  const [deleteInvoice, setDeleteInvoice] = useState<
+    (typeof invoices)[0] | null
+  >(null);
   const [search, setSearch] = useState("");
-
   const [createModal, setCreateModal] = useState(false);
   const [newInvoiceNumber, setNewInvoiceNumber] = useState("INV-003");
   const [newDate, setNewDate] = useState("");
@@ -133,6 +84,18 @@ export default function SalesInvoicePage() {
   const [newSaleAccountTitle, setNewSaleAccountTitle] = useState("");
   const [newNtnNo, setNewNtnNo] = useState("");
   const [includeGST, setIncludeGST] = useState(true);
+  interface InvoiceItem {
+    id: number;
+    code: number;
+    product: string;
+    hsCode: string;
+    description: string;
+    qty: number;
+    rate: number;
+    exGSTRate: string;
+    exGSTAmount: string;
+  }
+
   const [items, setItems] = useState<InvoiceItem[]>([
     {
       id: 1,
@@ -147,11 +110,10 @@ export default function SalesInvoicePage() {
     },
   ]);
   const [notes, setNotes] = useState("");
-
   const [pageSize, setPageSize] = useState(8);
-
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [page, setPage] = useState(1);
 
   const filteredInvoices = invoices.filter((i) => {
     const matchesSearch = i.number.toLowerCase().includes(search.toLowerCase());
@@ -165,27 +127,168 @@ export default function SalesInvoicePage() {
     return matchesSearch && fromOk && toOk;
   });
 
-  // Update filteredInvoices pagination
-  const [page, setPage] = useState(1);
   const start = (page - 1) * pageSize;
   const paginatedInvoices = filteredInvoices.slice(start, start + pageSize);
-  const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / pageSize));
 
   const subtotal = items.reduce((acc, i) => acc + i.qty * i.rate, 0);
   const gstAmount = includeGST ? subtotal * 0.18 : 0;
   const total = subtotal + gstAmount;
 
-  // Add clearFilters function
   const clearFilters = () => {
     setSearch("");
     setFromDate("");
     setToDate("");
-    setActivePage(1);
+    setPage(1);
   };
 
-  function setActivePage(arg0: number) {
-    throw new Error("Function not implemented.");
-  }
+  const exportInvoicesPDF = () => {
+    const doc = new jsPDF();
+    addHeaderFooter(doc, "Sales Invoices");
+
+    autoTable(doc, {
+      startY: 32,
+      head: [
+        [
+          "Invoice #",
+          "Invoice Date",
+          "Delivery No",
+          "Delivery Date",
+          "PO No",
+          "PO Date",
+          "Account No",
+          "Account Title",
+          "Sale Account",
+          "Sale Account Title",
+          "NTN No",
+          "Amount",
+        ],
+      ],
+      body: filteredInvoices.map((i) => [
+        i.number,
+        i.date,
+        i.deliveryNo || "",
+        i.deliveryDate || "",
+        i.poNo || "",
+        i.poDate || "",
+        i.accountNo || "",
+        i.accountTitle || "",
+        i.saleAccount || "",
+        i.saleAccountTitle || "",
+        i.ntnNo || "",
+        i.amount.toFixed(2),
+      ]),
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [10, 104, 2] },
+      theme: "grid",
+      margin: { left: 14, right: 14 },
+      didDrawPage: (data) => {
+        const finalY = (data.cursor?.y ?? 60) + 8;
+        doc.setFontSize(12);
+        doc.text(`Total Invoices: ${filteredInvoices.length}`, 14, finalY);
+        doc.text(
+          `Total Amount: ${filteredInvoices
+            .reduce((sum, i) => sum + (i.amount || 0), 0)
+            .toFixed(2)}`,
+          80,
+          finalY
+        );
+      },
+    });
+
+    doc.save("sales_invoices.pdf");
+  };
+
+  const exportSingleInvoicePDF = (invoice: (typeof invoices)[0]) => {
+    const doc = new jsPDF();
+    addHeaderFooter(doc, `Invoice: ${invoice.number}`);
+
+    // Details table
+    autoTable(doc, {
+      startY: 32,
+      head: [["Field", "Value"]],
+      body: [
+        ["Invoice #", invoice.number],
+        ["Invoice Date", invoice.date],
+        ["Delivery No", invoice.deliveryNo || ""],
+        ["Delivery Date", invoice.deliveryDate || ""],
+        ["PO No", invoice.poNo || ""],
+        ["PO Date", invoice.poDate || ""],
+        ["Account No", invoice.accountNo || ""],
+        ["Account Title", invoice.accountTitle || ""],
+        ["Sale Account", invoice.saleAccount || ""],
+        ["Sale Account Title", invoice.saleAccountTitle || ""],
+        ["NTN No", invoice.ntnNo || ""],
+        ["Amount", `$${invoice.amount.toFixed(2)}`],
+      ],
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [10, 104, 2] },
+      theme: "grid",
+      margin: { left: 14, right: 14 },
+    });
+
+    // Items table (after details table)
+    if (invoice.items && invoice.items.length > 0) {
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable?.finalY
+          ? (doc as any).lastAutoTable.finalY + 8
+          : 60,
+        head: [
+          [
+            "Code",
+            "Product Name",
+            "HS Code",
+            "Description",
+            "Qty",
+            "Rate",
+            "Amount",
+            "Ex GST Rate",
+            "Ex GST Amount",
+          ],
+        ],
+        body: (invoice.items ?? []).map((item) => [
+          item.code,
+          item.product,
+          item.hsCode,
+          item.description,
+          item.qty,
+          item.rate,
+          (item.qty * item.rate).toFixed(2),
+          item.exGSTRate,
+          item.exGSTAmount,
+        ]),
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [10, 104, 2] },
+        theme: "grid",
+        margin: { left: 14, right: 14 },
+        didDrawPage: (data) => {
+          const finalY = (data.cursor?.y ?? 68) + 8;
+          doc.setFontSize(12);
+          const subtotal = (invoice.items ?? []).reduce(
+            (acc, i) => acc + i.qty * i.rate,
+            0
+          );
+          const gstAmount = invoice.amount - subtotal;
+          doc.text(`Subtotal: ${subtotal.toFixed(2)}`, 14, finalY);
+          doc.text(`GST: ${gstAmount.toFixed(2)}`, 60, finalY);
+          doc.text(
+            `Total: ${
+              invoice.amount !== undefined ? invoice.amount.toFixed(2) : "0.00"
+            }`,
+            110,
+            finalY
+          );
+        },
+      });
+    }
+
+    doc.save(`invoice_${invoice.number}.pdf`);
+  };
+
+  // Edit modal calculations
+  const editSubtotal =
+    editInvoice?.items?.reduce((acc, i) => acc + i.qty * i.rate, 0) || 0;
+  const editGstAmount = includeGST ? editSubtotal * 0.18 : 0;
+  const editTotal = editSubtotal + editGstAmount;
 
   return (
     <div className="p-6 space-y-6">
@@ -234,18 +337,20 @@ export default function SalesInvoicePage() {
           </div>
         </Group>
 
-        <Group mb="md" gap="md">
+        <Group mb="md" gap="md" grow>
           <TextInput
+            label="Search"
             placeholder="Search invoices..."
             leftSection={<IconSearch size={16} />}
             value={search}
             onChange={(e) => {
               setSearch(e.currentTarget.value);
-              setActivePage(1);
+              setPage(1);
             }}
             w={250}
           />
           <TextInput
+            label="From Date"
             type="date"
             placeholder="From date"
             value={fromDate}
@@ -253,33 +358,41 @@ export default function SalesInvoicePage() {
             w={150}
           />
           <TextInput
+            label="To Date"
             type="date"
             placeholder="To date"
             value={toDate}
             onChange={(e) => setToDate(e.currentTarget.value)}
             w={150}
           />
-          <Button variant="default" onClick={clearFilters}>
-            Clear
-          </Button>
-        </Group>
-
-        {/* Add row count selector above the table */}
-        <Group mb="sm" gap="md" justify="flex-end">
-          <Text fw={600}>Rows per page:</Text>
-          <Select
-            data={[
-              { value: "8", label: "8" },
-              { value: "15", label: "15" },
-              { value: "30", label: "30" },
-            ]}
-            value={String(pageSize)}
-            onChange={(val) => {
-              setPageSize(Number(val));
-              setPage(1);
-            }}
-            w={80}
-          />
+          <Group mt={24}>
+            <Button variant="outline" color="#0A6802" onClick={clearFilters}>
+              Clear
+            </Button>
+            <Button
+              color="#0A6802"
+              onClick={exportInvoicesPDF}
+              leftSection={<IconDownload size={16} />}
+            >
+              Export
+            </Button>
+          </Group>
+          <Group mb="sm" gap="md" justify="flex-end">
+            <Text fw={500}>Rows per page:</Text>
+            <Select
+              data={[
+                { value: "8", label: "8" },
+                { value: "15", label: "15" },
+                { value: "30", label: "30" },
+              ]}
+              value={String(pageSize)}
+              onChange={(val) => {
+                setPageSize(Number(val));
+                setPage(1);
+              }}
+              w={80}
+            />
+          </Group>
         </Group>
 
         <Table highlightOnHover withColumnBorders>
@@ -296,15 +409,7 @@ export default function SalesInvoicePage() {
               <Table.Th>Sale Account</Table.Th>
               <Table.Th>Sale Account Title</Table.Th>
               <Table.Th>NTN No</Table.Th>
-              <Table.Th>Code</Table.Th>
-              <Table.Th>Product Name</Table.Th>
-              <Table.Th>HS Code</Table.Th>
-              <Table.Th>Description</Table.Th>
-              <Table.Th>Qty</Table.Th>
-              <Table.Th>Rate</Table.Th>
               <Table.Th>Amount</Table.Th>
-              <Table.Th>Ex GST Rate</Table.Th>
-              <Table.Th>Ex GST Amount</Table.Th>
               <Table.Th>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -322,20 +427,7 @@ export default function SalesInvoicePage() {
                 <Table.Td>{i.saleAccount || ""}</Table.Td>
                 <Table.Td>{i.saleAccountTitle || ""}</Table.Td>
                 <Table.Td>{i.ntnNo || ""}</Table.Td>
-                {/* Show first item from items array for each invoice, or blank if not available */}
-                <Table.Td>{i.items?.[0]?.code || ""}</Table.Td>
-                <Table.Td>{i.items?.[0]?.product || ""}</Table.Td>
-                <Table.Td>{i.items?.[0]?.hsCode || ""}</Table.Td>
-                <Table.Td>{i.items?.[0]?.description || ""}</Table.Td>
-                <Table.Td>{i.items?.[0]?.qty || ""}</Table.Td>
-                <Table.Td>{i.items?.[0]?.rate || ""}</Table.Td>
-                <Table.Td>
-                  {i.items?.[0]?.qty && i.items?.[0]?.rate
-                    ? i.items[0].qty * i.items[0].rate
-                    : ""}
-                </Table.Td>
-                <Table.Td>{i.items?.[0]?.exGSTRate || ""}</Table.Td>
-                <Table.Td>{i.items?.[0]?.exGSTAmount || ""}</Table.Td>
+                <Table.Td>${i.amount.toFixed(2)}</Table.Td>
                 <Table.Td>
                   <Group gap="xs">
                     <ActionIcon
@@ -343,9 +435,6 @@ export default function SalesInvoicePage() {
                       variant="light"
                       onClick={() => {
                         setEditInvoice(i);
-                        setItems(
-                          i.items ? i.items.map((item) => ({ ...item })) : []
-                        );
                       }}
                     >
                       <IconPencil size={16} />
@@ -357,22 +446,42 @@ export default function SalesInvoicePage() {
                     >
                       <IconTrash size={16} />
                     </ActionIcon>
+                    <ActionIcon
+                      color="#819E00"
+                      variant="light"
+                      onClick={() => exportSingleInvoicePDF(i)}
+                      title="Download PDF"
+                    >
+                      <IconDownload size={16} />
+                    </ActionIcon>
                   </Group>
                 </Table.Td>
               </Table.Tr>
             ))}
             {paginatedInvoices.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={20} align="center">
+                <Table.Td colSpan={13} align="center">
                   No invoices found.
                 </Table.Td>
               </Table.Tr>
             )}
           </Table.Tbody>
         </Table>
-        {/* Add pagination at the end of the table */}
+
+        <Group mt="md" justify="center">
+          <Pagination
+            value={page}
+            onChange={setPage}
+            total={Math.max(1, Math.ceil(filteredInvoices.length / pageSize))}
+            color="#0A6802"
+            radius="md"
+            size="md"
+            withControls
+          />
+        </Group>
       </Card>
 
+      {/* Create Invoice Modal */}
       <Modal
         opened={createModal}
         onClose={() => setCreateModal(false)}
@@ -387,7 +496,6 @@ export default function SalesInvoicePage() {
               onChange={(e) => setNewInvoiceNumber(e.currentTarget.value)}
               mb="sm"
             />
-
             <TextInput
               label="Invoice Date"
               type="date"
@@ -606,7 +714,12 @@ export default function SalesInvoicePage() {
           />
 
           <Group justify="flex-end" mt="md">
-            <Button variant="outline" color="blue" onClick={handlePrint} mr={8}>
+            <Button
+              variant="outline"
+              color="#819E00"
+              onClick={handlePrint}
+              mr={8}
+            >
               Print
             </Button>
             <Button variant="default" onClick={() => setCreateModal(false)}>
@@ -643,6 +756,7 @@ export default function SalesInvoicePage() {
         </div>
       </Modal>
 
+      {/* Edit Invoice Modal */}
       <Modal
         opened={!!editInvoice}
         onClose={() => setEditInvoice(null)}
@@ -808,33 +922,47 @@ export default function SalesInvoicePage() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {items.map((item, index) => (
+                {editInvoice.items?.map((item, index) => (
                   <Table.Tr key={item.id}>
                     <Table.Td>
-                      <TextInput value={item.code} />
+                      <TextInput
+                        value={item.code}
+                        onChange={(e) => {
+                          const newItems = [...(editInvoice.items || [])];
+                          newItems[index].code = Number(e.currentTarget.value);
+                          setEditInvoice({ ...editInvoice, items: newItems });
+                        }}
+                      />
                     </Table.Td>
                     <Table.Td>
                       <TextInput
                         placeholder="Product"
                         value={item.product}
                         onChange={(e) => {
-                          const newItems = [...items];
+                          const newItems = [...(editInvoice.items || [])];
                           newItems[index].product = e.currentTarget.value;
-                          setItems(newItems);
+                          setEditInvoice({ ...editInvoice, items: newItems });
                         }}
                       />
                     </Table.Td>
                     <Table.Td>
-                      <TextInput value={item.hsCode} />
+                      <TextInput
+                        value={item.hsCode}
+                        onChange={(e) => {
+                          const newItems = [...(editInvoice.items || [])];
+                          newItems[index].hsCode = e.currentTarget.value;
+                          setEditInvoice({ ...editInvoice, items: newItems });
+                        }}
+                      />
                     </Table.Td>
                     <Table.Td>
                       <TextInput
                         placeholder="Description"
                         value={item.description}
                         onChange={(e) => {
-                          const newItems = [...items];
+                          const newItems = [...(editInvoice.items || [])];
                           newItems[index].description = e.currentTarget.value;
-                          setItems(newItems);
+                          setEditInvoice({ ...editInvoice, items: newItems });
                         }}
                       />
                     </Table.Td>
@@ -843,9 +971,9 @@ export default function SalesInvoicePage() {
                         value={item.qty}
                         min={1}
                         onChange={(val) => {
-                          const newItems = [...items];
+                          const newItems = [...(editInvoice.items || [])];
                           newItems[index].qty = Number(val) || 0;
-                          setItems(newItems);
+                          setEditInvoice({ ...editInvoice, items: newItems });
                         }}
                       />
                     </Table.Td>
@@ -854,28 +982,43 @@ export default function SalesInvoicePage() {
                         value={item.rate}
                         min={0}
                         onChange={(val) => {
-                          const newItems = [...items];
+                          const newItems = [...(editInvoice.items || [])];
                           newItems[index].rate = Number(val) || 0;
-                          setItems(newItems);
+                          setEditInvoice({ ...editInvoice, items: newItems });
                         }}
                       />
                     </Table.Td>
                     <Table.Td>${item.qty * item.rate}</Table.Td>
                     <Table.Td>
-                      <TextInput value={item.exGSTRate} />
+                      <TextInput
+                        value={item.exGSTRate}
+                        onChange={(e) => {
+                          const newItems = [...(editInvoice.items || [])];
+                          newItems[index].exGSTRate = e.currentTarget.value;
+                          setEditInvoice({ ...editInvoice, items: newItems });
+                        }}
+                      />
                     </Table.Td>
                     <Table.Td>
-                      <TextInput value={item.exGSTAmount} />
+                      <TextInput
+                        value={item.exGSTAmount}
+                        onChange={(e) => {
+                          const newItems = [...(editInvoice.items || [])];
+                          newItems[index].exGSTAmount = e.currentTarget.value;
+                          setEditInvoice({ ...editInvoice, items: newItems });
+                        }}
+                      />
                     </Table.Td>
                     <Table.Td>
                       <ActionIcon
                         color="red"
                         variant="light"
-                        onClick={() =>
-                          setItems((prev) =>
-                            prev.filter((i) => i.id !== item.id)
-                          )
-                        }
+                        onClick={() => {
+                          const newItems = (editInvoice.items || []).filter(
+                            (i) => i.id !== item.id
+                          );
+                          setEditInvoice({ ...editInvoice, items: newItems });
+                        }}
                       >
                         <IconTrash size={18} />
                       </ActionIcon>
@@ -888,29 +1031,34 @@ export default function SalesInvoicePage() {
               mt="sm"
               leftSection={<IconPlus size={16} />}
               color="#0A6802"
-              onClick={() =>
-                setItems((prev) => [
-                  ...prev,
-                  {
-                    id: prev.length + 1,
-                    code: 1,
-                    product: "",
-                    hsCode: "",
-                    description: "",
-                    qty: 1,
-                    rate: 0,
-                    exGSTRate: "",
-                    exGSTAmount: "",
-                  },
-                ])
-              }
+              onClick={() => {
+                setEditInvoice({
+                  ...editInvoice,
+                  items: [
+                    ...(editInvoice.items || []),
+                    {
+                      id: (editInvoice.items?.length || 0) + 1,
+                      code: 1,
+                      product: "",
+                      hsCode: "",
+                      description: "",
+                      qty: 1,
+                      rate: 0,
+                      exGSTRate: "",
+                      exGSTAmount: "",
+                    },
+                  ],
+                });
+              }}
             >
               Add Item
             </Button>
             <div className="mt-4 space-y-1">
-              <Text>Subtotal: ${subtotal.toFixed(2)}</Text>
-              {includeGST && <Text>GST (18%): ${gstAmount.toFixed(2)}</Text>}
-              <Text fw={700}>Total: ${total.toFixed(2)}</Text>
+              <Text>Subtotal: ${editSubtotal.toFixed(2)}</Text>
+              {includeGST && (
+                <Text>GST (18%): ${editGstAmount.toFixed(2)}</Text>
+              )}
+              <Text fw={700}>Total: ${editTotal.toFixed(2)}</Text>
             </div>
             <Group mt="md" justify="flex-end">
               <Button variant="default" onClick={() => setEditInvoice(null)}>
@@ -922,7 +1070,7 @@ export default function SalesInvoicePage() {
                     setInvoices((prev) =>
                       prev.map((i) =>
                         i.id === editInvoice.id
-                          ? { ...editInvoice, amount: total, items: items }
+                          ? { ...editInvoice, amount: editTotal }
                           : i
                       )
                     );
@@ -937,6 +1085,7 @@ export default function SalesInvoicePage() {
         )}
       </Modal>
 
+      {/* Delete Invoice Modal */}
       <Modal
         opened={!!deleteInvoice}
         onClose={() => setDeleteInvoice(null)}
@@ -967,7 +1116,4 @@ export default function SalesInvoicePage() {
       </Modal>
     </div>
   );
-}
-function setActivePage(arg0: number) {
-  throw new Error("Function not implemented.");
 }

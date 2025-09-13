@@ -3,7 +3,6 @@ import {
   Group,
   Button,
   Table,
-  // Badge removed (unused)
   ActionIcon,
   Title,
   Text,
@@ -25,72 +24,21 @@ import { useMemo, useState, useRef } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useReactToPrint } from "react-to-print";
+import {
+  SaleReturnsProvider,
+  useSaleReturns,
+  type SaleReturn,
+  type SaleReturnItem,
+} from "../../Context/Invoicing/SaleReturnsContext";
 
-type ReturnItem = {
-  code: string;
-  productName: string;
-  description: string;
-  unit: string;
-  quantity: number;
-  rate: number;
-  amount: number;
-  discount: number;
-  netAmount: number;
-};
-type SaleReturn = {
-  id: string;
-  customer: string;
-  customerTitle: string;
-  saleAccount: string;
-  saleTitle: string;
-  salesman: string;
-  date: string;
-  items: ReturnItem[];
-  notes?: string;
-};
+// Fix: Add missing 'unit' property to SaleReturnItem type if not present in context
+// If your context does not have 'unit', add it there as well.
 
-const dataInit: SaleReturn[] = [
-  {
-    id: "SR-001",
-    customer: "John Doe",
-    customerTitle: "Mr.",
-    saleAccount: "Account 1",
-    saleTitle: "Retail",
-    salesman: "Ali",
-    date: "2024-01-15",
-    items: [],
-    notes: "Return due to damage",
-  },
-  {
-    id: "SR-002",
-    customer: "Jane Smith",
-    customerTitle: "Ms.",
-    saleAccount: "Account 2",
-    saleTitle: "Wholesale",
-    salesman: "Ahmed",
-    date: "2024-01-14",
-    items: [],
-    notes: "Wrong size delivered",
-  },
-  {
-    id: "SR-003",
-    customer: "Global Inc",
-    customerTitle: "Company",
-    saleAccount: "Account 3",
-    saleTitle: "Corporate",
-    salesman: "Sara",
-    date: "2024-01-10",
-    items: [],
-  },
-];
+function SaleReturnsInner() {
+  const { returns, addReturn, updateReturn, deleteReturn } = useSaleReturns();
 
-const toNumber = (v: string | number | null | undefined) =>
-  typeof v === "number" ? v : v ? Number(v) : 0;
-
-export default function SaleReturns() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [data, setData] = useState<SaleReturn[]>(dataInit);
   const [opened, setOpened] = useState(false);
   const [editData, setEditData] = useState<SaleReturn | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -101,7 +49,7 @@ export default function SaleReturns() {
   const [saleTitle, setSaleTitle] = useState<string>("");
   const [salesman, setSalesman] = useState<string>("");
   const [date, setDate] = useState<string>("");
-  const [items, setItems] = useState<ReturnItem[]>([]);
+  const [items, setItems] = useState<SaleReturnItem[]>([]);
   const [notes, setNotes] = useState<string>("");
 
   const [search, setSearch] = useState("");
@@ -110,54 +58,214 @@ export default function SaleReturns() {
 
   const filteredData = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return data.filter((d) => {
+    return returns.filter((d) => {
       const matchesSearch = !q || d.id.toLowerCase().includes(q);
       const matchesFromDate =
         !fromDate || new Date(d.date) >= new Date(fromDate);
       const matchesToDate = !toDate || new Date(d.date) <= new Date(toDate);
       return matchesSearch && matchesFromDate && matchesToDate;
     });
-  }, [data, search, fromDate, toDate]);
+  }, [returns, search, fromDate, toDate]);
 
   const paginatedData = useMemo(() => {
     const start = (page - 1) * pageSize;
     return filteredData.slice(start, start + pageSize);
   }, [filteredData, page, pageSize]);
 
+  // PDF Export
   const exportPDF = (row: SaleReturn) => {
-    const doc = new jsPDF();
+    const doc = new jsPDF("p", "pt", "a4");
+    const companyName = "Chemtronix Engineering Solutions";
+    const reportTitle = "Sale Return Invoice";
+    const currentDate = new Date().toLocaleDateString();
+
     doc.setFontSize(16);
-    doc.text("Sale Return Report", 14, 20);
+    doc.text(companyName, 40, 30);
+    doc.setFontSize(14);
+    doc.text(reportTitle, 40, 55);
+
+    doc.setFontSize(11);
+    doc.text(`Date: ${currentDate}`, 480, 30);
+    doc.text(`Invoice #: ${row.id}`, 40, 75);
+    doc.text(`Return Date: ${row.date}`, 250, 75);
+    doc.text(`Customer: ${row.customer || "-"}`, 40, 95);
+    doc.text(`Customer Title: ${row.customerTitle || "-"}`, 250, 95);
+    doc.text(`Sale Account: ${row.saleAccount || "-"}`, 40, 115);
+    doc.text(`Sale Title: ${row.saleTitle || "-"}`, 250, 115);
+    doc.text(`Salesman: ${row.salesman || "-"}`, 40, 135);
+    doc.text(`Notes: ${row.notes || "-"}`, 40, 155);
 
     autoTable(doc, {
-      startY: 30,
-      head: [["Field", "Value"]],
-      body: [
-        ["Invoice #", row.id],
-        ["Customer", row.customer],
-        ["Customer Title", row.customerTitle],
-        ["Sale Account", row.saleAccount],
-        ["Sale Title", row.saleTitle],
-        ["Salesman", row.salesman],
-        ["Date", row.date],
-        ["Notes", row.notes || "-"],
+      startY: 175,
+      head: [
+        [
+          "Code",
+          "Product Name",
+          "Description",
+          "Unit",
+          "Quantity",
+          "Rate",
+          "Amount",
+          "Reason",
+        ],
       ],
+      body:
+        row.items && row.items.length > 0
+          ? row.items.map((item) => [
+              item.code,
+              item.productName,
+              item.description,
+              item.unit ?? "-", // Fix: handle missing unit
+              item.quantity,
+              item.rate,
+              item.amount,
+              item.reason,
+            ])
+          : [["-", "-", "-", "-", "-", "-", "-", "-"]],
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [10, 104, 2] },
+      theme: "grid",
+      margin: { left: 40, right: 40 },
+      didDrawPage: function () {
+        const pageCount = doc.getNumberOfPages();
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`Date: ${currentDate}`, 40, doc.internal.pageSize.height - 30);
+        doc.text(
+          `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
+          480,
+          doc.internal.pageSize.height - 30
+        );
+      },
     });
 
-    autoTable(doc, {
-      startY:
-        (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
-          .finalY + 10,
-      head: [["Product", "Qty", "Rate", "Amount"]],
-      body: row.items.map((i) => [
-        i.productName,
-        String(i.quantity),
-        `${i.rate}`,
-        `${i.amount}`,
-      ]),
-    });
+    // Totals
+    let totalQty = 0;
+    let totalAmount = 0;
+    if (row.items && row.items.length > 0) {
+      row.items.forEach((item) => {
+        totalQty += Number(item.quantity) || 0;
+        totalAmount += Number(item.amount) || 0;
+      });
+    }
+
+    doc.setFontSize(12);
+    doc.setTextColor("#0A6802");
+    type JsPDFWithAutoTable = jsPDF & { lastAutoTable?: { finalY?: number } };
+    const docWithAutoTable = doc as JsPDFWithAutoTable;
+    const finalY =
+      docWithAutoTable.lastAutoTable && docWithAutoTable.lastAutoTable.finalY
+        ? docWithAutoTable.lastAutoTable.finalY + 20
+        : doc.internal.pageSize.height - 60;
+    doc.text(`Total Qty: ${totalQty}`, 40, finalY);
+    doc.text(`Total Amount: ${totalAmount.toFixed(2)}`, 200, finalY);
 
     doc.save(`${row.id}.pdf`);
+  };
+
+  const exportFilteredPDF = () => {
+    const doc = new jsPDF("p", "pt", "a4");
+    const companyName = "Chemtronix Engineering Solutions";
+    const reportTitle = "Sale Returns Report";
+    const currentDate = new Date().toLocaleDateString();
+
+    doc.setFontSize(16);
+    doc.text(companyName, 40, 30);
+    doc.setFontSize(14);
+    doc.text(reportTitle, 40, 55);
+
+    doc.setFontSize(11);
+    let dateText = "";
+    if (fromDate && toDate) {
+      dateText = `From: ${fromDate}   To: ${toDate}`;
+    } else if (fromDate) {
+      dateText = `From: ${fromDate}`;
+    } else if (toDate) {
+      dateText = `To: ${toDate}`;
+    }
+    if (dateText) {
+      doc.text(dateText, 40, 75);
+    }
+
+    autoTable(doc, {
+      startY: dateText ? 95 : 80,
+      head: [
+        [
+          "Invoice #",
+          "Date",
+          "Customer",
+          "Customer Title",
+          "Sale Account",
+          "Sale Title",
+          "Salesman",
+          "Notes",
+          "Total Qty",
+          "Total Amount",
+        ],
+      ],
+      body: filteredData.map((row) => {
+        let totalQty = 0;
+        let totalAmount = 0;
+        if (row.items && row.items.length > 0) {
+          row.items.forEach((item) => {
+            totalQty += Number(item.quantity) || 0;
+            totalAmount += Number(item.amount) || 0;
+          });
+        }
+        return [
+          row.id,
+          row.date,
+          row.customer || "-",
+          row.customerTitle || "-",
+          row.saleAccount || "-",
+          row.saleTitle || "-",
+          row.salesman || "-",
+          row.notes || "-",
+          totalQty,
+          totalAmount.toFixed(2),
+        ];
+      }),
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [10, 104, 2] },
+      theme: "grid",
+      margin: { left: 40, right: 40 },
+      didDrawPage: function () {
+        const pageCount = doc.getNumberOfPages();
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`Date: ${currentDate}`, 40, doc.internal.pageSize.height - 30);
+        doc.text(
+          `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
+          480,
+          doc.internal.pageSize.height - 30
+        );
+      },
+    });
+
+    // Grand Totals
+    let grandQty = 0;
+    let grandAmount = 0;
+    filteredData.forEach((row) => {
+      if (row.items && row.items.length > 0) {
+        row.items.forEach((item) => {
+          grandQty += Number(item.quantity) || 0;
+          grandAmount += Number(item.amount) || 0;
+        });
+      }
+    });
+
+    doc.setFontSize(12);
+    doc.setTextColor("#0A6802");
+    type JsPDFWithAutoTable = jsPDF & { lastAutoTable?: { finalY?: number } };
+    const docWithAutoTable = doc as JsPDFWithAutoTable;
+    const finalY =
+      docWithAutoTable.lastAutoTable && docWithAutoTable.lastAutoTable.finalY
+        ? docWithAutoTable.lastAutoTable.finalY + 20
+        : doc.internal.pageSize.height - 60;
+    doc.text(`Grand Total Qty: ${grandQty}`, 40, finalY);
+    doc.text(`Grand Total Amount: ${grandAmount.toFixed(2)}`, 200, finalY);
+
+    doc.save("sale_returns_report.pdf");
   };
 
   const openCreate = () => {
@@ -184,30 +292,24 @@ export default function SaleReturns() {
     if (!invoiceNumber || !date) return;
 
     const normalized = items.map((i) => {
-      const qty = toNumber(i.quantity);
-      const rate = toNumber(i.rate);
+      const qty = Number(i.quantity) || 0;
+      const rate = Number(i.rate) || 0;
       return { ...i, quantity: qty, rate, amount: qty * rate };
     });
 
     if (editData) {
-      setData((prev) =>
-        prev.map((d) =>
-          d.id === editData.id
-            ? {
-                ...d,
-                id: invoiceNumber,
-                customer,
-                customerTitle,
-                saleAccount,
-                saleTitle,
-                salesman,
-                date,
-                items: normalized,
-                notes,
-              }
-            : d
-        )
-      );
+      updateReturn({
+        ...editData,
+        id: invoiceNumber,
+        customer,
+        customerTitle,
+        saleAccount,
+        saleTitle,
+        salesman,
+        date,
+        items: normalized,
+        notes,
+      });
     } else {
       const newReturn: SaleReturn = {
         id: invoiceNumber,
@@ -220,7 +322,7 @@ export default function SaleReturns() {
         items: normalized,
         notes,
       };
-      setData((prev) => [newReturn, ...prev]);
+      addReturn(newReturn);
     }
 
     setOpened(false);
@@ -229,7 +331,7 @@ export default function SaleReturns() {
 
   const openDelete = (id: string) => setDeleteId(id);
   const confirmDelete = () => {
-    if (deleteId) setData((prev) => prev.filter((d) => d.id !== deleteId));
+    if (deleteId) deleteReturn(deleteId);
     setDeleteId(null);
   };
 
@@ -247,8 +349,7 @@ export default function SaleReturns() {
 
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useReactToPrint({
-    // Use 'contentRef' instead of 'content' for latest react-to-print types
-    contentRef: printRef,
+    content: () => printRef.current,
     documentTitle: invoiceNumber || "Sale Return Invoice",
   });
 
@@ -256,7 +357,6 @@ export default function SaleReturns() {
     <div>
       <Group justify="space-between" mb="md">
         <Title order={2}>Sale Returns</Title>
-
         <Button
           leftSection={<IconPlus size={16} />}
           color="#0A6802"
@@ -312,47 +412,7 @@ export default function SaleReturns() {
               variant="filled"
               color="#0A6802"
               leftSection={<IconDownload size={16} />}
-              onClick={() => {
-                // Export filteredData to PDF for consistency
-                const doc = new jsPDF();
-                doc.text("Sale Returns", 14, 20);
-                if (filteredData.length > 0) {
-                  const tableData = filteredData.map((row: any) => [
-                    row.id,
-                    row.date,
-                    row.customer,
-                    row.customerTitle,
-                    row.saleAccount,
-                    row.saleTitle,
-                    row.salesman,
-                    row.notes || "",
-                  ]);
-
-                  autoTable(doc, {
-                    head: [
-                      [
-                        "Invoice #",
-                        "Invoice Date",
-                        "Customer",
-                        "Customer Title",
-                        "Sale Account",
-                        "Sale Title",
-                        "Salesman",
-                        "Notes",
-                      ],
-                    ],
-                    body: tableData,
-                    startY: 30,
-                  });
-                } else {
-                  doc.text(
-                    "No sale returns found for selected filters.",
-                    14,
-                    30
-                  );
-                }
-                doc.save("sale_returns.pdf");
-              }}
+              onClick={exportFilteredPDF}
             >
               Export
             </Button>
@@ -380,7 +440,6 @@ export default function SaleReturns() {
               <Table.Th>Sale Account</Table.Th>
               <Table.Th>Sale Title</Table.Th>
               <Table.Th>Salesman</Table.Th>
-
               <Table.Th>Notes</Table.Th>
               <Table.Th>Actions</Table.Th>
             </Table.Tr>
@@ -395,7 +454,6 @@ export default function SaleReturns() {
                 <Table.Td>{row.saleAccount}</Table.Td>
                 <Table.Td>{row.saleTitle}</Table.Td>
                 <Table.Td>{row.salesman}</Table.Td>
-
                 <Table.Td>{row.notes}</Table.Td>
                 <Table.Td>
                   <Group gap="xs">
@@ -553,7 +611,6 @@ export default function SaleReturns() {
                     const next = [...items];
                     next[idx].quantity = Number(val) || 0;
                     next[idx].amount = next[idx].quantity * next[idx].rate;
-                    next[idx].netAmount = next[idx].amount - next[idx].discount;
                     setItems(next);
                   }}
                   min={0}
@@ -566,7 +623,6 @@ export default function SaleReturns() {
                     const next = [...items];
                     next[idx].rate = Number(val) || 0;
                     next[idx].amount = next[idx].quantity * next[idx].rate;
-                    next[idx].netAmount = next[idx].amount - next[idx].discount;
                     setItems(next);
                   }}
                   min={0}
@@ -577,23 +633,15 @@ export default function SaleReturns() {
                   value={item.amount}
                   readOnly
                 />
-                <NumberInput
-                  label="Discount"
-                  placeholder="Discount"
-                  value={item.discount}
-                  onChange={(val) => {
+                <TextInput
+                  label="Reason"
+                  placeholder="Reason"
+                  value={item.reason || ""}
+                  onChange={(e) => {
                     const next = [...items];
-                    next[idx].discount = Number(val) || 0;
-                    next[idx].netAmount = next[idx].amount - next[idx].discount;
+                    next[idx].reason = e.currentTarget.value;
                     setItems(next);
                   }}
-                  min={0}
-                />
-                <NumberInput
-                  label="Net Amount"
-                  placeholder="Net Amount"
-                  value={item.netAmount}
-                  readOnly
                 />
                 <Button
                   variant="light"
@@ -620,8 +668,7 @@ export default function SaleReturns() {
                     quantity: 0,
                     rate: 0,
                     amount: 0,
-                    discount: 0,
-                    netAmount: 0,
+                    reason: "",
                   },
                 ])
               }
@@ -667,5 +714,13 @@ export default function SaleReturns() {
         </Group>
       </Modal>
     </div>
+  );
+}
+
+export default function SaleReturns() {
+  return (
+    <SaleReturnsProvider>
+      <SaleReturnsInner />
+    </SaleReturnsProvider>
   );
 }

@@ -22,6 +22,7 @@ import AccountsPayable from "../Pages/Ledger&Reports/AccountsPayable";
 import TrialBalance from "../Pages/Ledger&Reports/TrialBalance";
 import JournalVouchers from "../Pages/Accounts/JournalVouchers";
 import GSTInvoices from "../Pages/Tax & Invoices/GstInvoices";
+import Analytics from "../Pages/Analytics/Analytics";
 const routes: RouteObject[] = [
   {
     path: "/dashboard",
@@ -117,6 +118,10 @@ const routes: RouteObject[] = [
       {
         path: "gst-invoices",
         element: <GSTInvoices />,
+      },
+      {
+        path: "analytics",
+        element: <Analytics />,
       },
     ],
   },

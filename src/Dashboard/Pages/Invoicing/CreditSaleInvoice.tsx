@@ -17,60 +17,27 @@ import {
   IconDownload,
   IconSearch,
 } from "@tabler/icons-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useReactToPrint } from "react-to-print";
-import { useRef } from "react";
+import {
+  CreditSalesProvider,
+  useCreditSales,
+  type CreditSale,
+  type CreditSaleItem,
+} from "../../Context/Invoicing/CreditSalesContext";
 
-type Item = {
-  code: string;
-  productName: string;
-  description: string;
-  quantity: number;
-  rate: number;
-  amount: number;
-  discount: number;
-  netAmount: number;
-};
+function CreditSaleInvoiceInner() {
+  const { sales, addSale, updateSale, deleteSale } = useCreditSales();
 
-type CreditSale = {
-  id: string;
-  date: string;
-  customer?: string;
-  customerTitle?: string;
-  saleAccount?: string;
-  saleTitle?: string;
-  salesman?: string;
-  items?: Item[];
-};
-
-const dataInit: CreditSale[] = [
-  {
-    id: "CS-012",
-    date: "2024-01-15",
-  },
-  {
-    id: "CS-013",
-    date: "2024-01-10",
-  },
-  {
-    id: "CS-014",
-    date: "2024-01-05",
-  },
-];
-
-export default function CreditSaleInvoice() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [data, setData] = useState<CreditSale[]>(dataInit);
-
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
-
   const [search, setSearch] = useState("");
 
-  const filteredData = data.filter(
+  const filteredData = sales.filter(
     (d) =>
       d.id.toLowerCase().includes(search.toLowerCase()) &&
       (!fromDate || new Date(d.date) >= new Date(fromDate)) &&
@@ -92,37 +59,232 @@ export default function CreditSaleInvoice() {
   const [salesman, setSalesman] = useState<string>("");
   const [invoiceNumber, setInvoiceNumber] = useState<string>("");
 
-  const [items, setItems] = useState<
-    Array<{
-      code: string;
-      productName: string;
-      description: string;
-      quantity: number;
-      rate: number;
-      amount: number;
-      discount: number;
-      netAmount: number;
-    }>
-  >([]);
+  const [items, setItems] = useState<CreditSaleItem[]>([]);
 
-  const activeSales = data.length;
+  const activeSales = sales.length;
 
   const exportPDF = (row: CreditSale) => {
-    const doc = new jsPDF();
+    const doc = new jsPDF("p", "pt", "a4");
+    const companyName = "Chemtronix Engineering Solutions";
+    const reportTitle = "Credit Sale Invoice";
+    const currentDate = new Date().toLocaleDateString();
 
+    // Header
     doc.setFontSize(16);
-    doc.text("Credit Sale Report", 14, 20);
+    doc.text(companyName, 40, 30);
+    doc.setFontSize(14);
+    doc.text(reportTitle, 40, 55);
 
+    // Invoice Info
+    doc.setFontSize(11);
+    doc.text(`Date: ${currentDate}`, 480, 30);
+    doc.text(`Invoice #: ${row.id}`, 40, 75);
+    doc.text(`Sale Date: ${row.date}`, 250, 75);
+    doc.text(`Customer: ${row.customer || "-"}`, 40, 95);
+    doc.text(`Customer Title: ${row.customerTitle || "-"}`, 250, 95);
+    doc.text(`Sale Account: ${row.saleAccount || "-"}`, 40, 115);
+    doc.text(`Sale Title: ${row.saleTitle || "-"}`, 250, 115);
+    doc.text(`Salesman: ${row.salesman || "-"}`, 40, 135);
+
+    // Items Table
     autoTable(doc, {
-      startY: 30,
-      head: [["Field", "Value"]],
-      body: [
-        ["Invoice #", row.id],
-        ["Sale Date", row.date],
+      startY: 155,
+      head: [
+        [
+          "Code",
+          "Product Name",
+          "Description",
+          "Quantity",
+          "Rate",
+          "Amount",
+          "Discount",
+          "Net Amount",
+        ],
       ],
+      body:
+        row.items && row.items.length > 0
+          ? row.items.map((item) => [
+              item.code,
+              item.productName,
+              item.description,
+              item.quantity,
+              item.rate,
+              item.amount,
+              item.discount,
+              item.netAmount,
+            ])
+          : [["-", "-", "-", "-", "-", "-", "-", "-"]],
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [10, 104, 2] },
+      theme: "grid",
+      margin: { left: 40, right: 40 },
+      didDrawPage: function () {
+        // Footer: current date and total pages
+        const pageCount = doc.getNumberOfPages();
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`Date: ${currentDate}`, 40, doc.internal.pageSize.height - 30);
+        doc.text(
+          `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
+          480,
+          doc.internal.pageSize.height - 30
+        );
+      },
     });
 
+    // Totals
+    let totalQty = 0;
+    let totalAmount = 0;
+    let totalDiscount = 0;
+    let totalNetAmount = 0;
+    if (row.items && row.items.length > 0) {
+      row.items.forEach((item) => {
+        totalQty += Number(item.quantity) || 0;
+        totalAmount += Number(item.amount) || 0;
+        totalDiscount += Number(item.discount) || 0;
+        totalNetAmount += Number(item.netAmount) || 0;
+      });
+    }
+
+    doc.setFontSize(12);
+    doc.setTextColor("#0A6802");
+    type JsPDFWithAutoTable = jsPDF & { lastAutoTable?: { finalY?: number } };
+    const docWithAutoTable = doc as JsPDFWithAutoTable;
+    const finalY =
+      docWithAutoTable.lastAutoTable && docWithAutoTable.lastAutoTable.finalY
+        ? docWithAutoTable.lastAutoTable.finalY + 20
+        : doc.internal.pageSize.height - 60;
+    doc.text(`Total Qty: ${totalQty}`, 40, finalY);
+    doc.text(`Total Amount: ${totalAmount.toFixed(2)}`, 150, finalY);
+    doc.text(`Total Discount: ${totalDiscount.toFixed(2)}`, 300, finalY);
+    doc.text(`Total Net Amount: ${totalNetAmount.toFixed(2)}`, 450, finalY);
+
     doc.save(`${row.id}.pdf`);
+  };
+
+  const exportFilteredPDF = () => {
+    const doc = new jsPDF("p", "pt", "a4");
+    const companyName = "Chemtronix Engineering Solutions";
+    const reportTitle = "Credit Sales Report";
+    const currentDate = new Date().toLocaleDateString();
+
+    // Header
+    doc.setFontSize(16);
+    doc.text(companyName, 40, 30);
+    doc.setFontSize(14);
+    doc.text(reportTitle, 40, 55);
+
+    // From/To Date
+    doc.setFontSize(11);
+    let dateText = "";
+    if (fromDate && toDate) {
+      dateText = `From: ${fromDate}   To: ${toDate}`;
+    } else if (fromDate) {
+      dateText = `From: ${fromDate}`;
+    } else if (toDate) {
+      dateText = `To: ${toDate}`;
+    }
+    if (dateText) {
+      doc.text(dateText, 40, 75);
+    }
+
+    // Table
+    autoTable(doc, {
+      startY: dateText ? 95 : 80,
+      head: [
+        [
+          "Invoice#",
+          "Date",
+          "Customer",
+          "Customer Title",
+          "Sale Account",
+          "Sale Title",
+          "Salesman",
+          "Total Qty",
+          "Total Amount",
+          "Total Discount",
+          "Total Net Amount",
+        ],
+      ],
+      body: filteredData.map((row) => {
+        let totalQty = 0;
+        let totalAmount = 0;
+        let totalDiscount = 0;
+        let totalNetAmount = 0;
+        if (row.items && row.items.length > 0) {
+          row.items.forEach((item) => {
+            totalQty += Number(item.quantity) || 0;
+            totalAmount += Number(item.amount) || 0;
+            totalDiscount += Number(item.discount) || 0;
+            totalNetAmount += Number(item.netAmount) || 0;
+          });
+        }
+        return [
+          row.id,
+          row.date,
+          row.customer || "-",
+          row.customerTitle || "-",
+          row.saleAccount || "-",
+          row.saleTitle || "-",
+          row.salesman || "-",
+          totalQty,
+          totalAmount.toFixed(2),
+          totalDiscount.toFixed(2),
+          totalNetAmount.toFixed(2),
+        ];
+      }),
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [10, 104, 2] },
+      theme: "grid",
+      margin: { left: 40, right: 40 },
+      didDrawPage: function () {
+        // Footer: current date and total pages
+        const pageCount = doc.getNumberOfPages();
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`Date: ${currentDate}`, 40, doc.internal.pageSize.height - 30);
+        doc.text(
+          `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
+          480,
+          doc.internal.pageSize.height - 30
+        );
+      },
+    });
+
+    // Grand Totals
+    let grandQty = 0;
+    let grandAmount = 0;
+    let grandDiscount = 0;
+    let grandNetAmount = 0;
+    filteredData.forEach((row) => {
+      if (row.items && row.items.length > 0) {
+        row.items.forEach((item) => {
+          grandQty += Number(item.quantity) || 0;
+          grandAmount += Number(item.amount) || 0;
+          grandDiscount += Number(item.discount) || 0;
+          grandNetAmount += Number(item.netAmount) || 0;
+        });
+      }
+    });
+
+    doc.setFontSize(12);
+    doc.setTextColor("#0A6802");
+    type JsPDFWithAutoTable = jsPDF & { lastAutoTable?: { finalY?: number } };
+    const docWithAutoTable = doc as JsPDFWithAutoTable;
+    const finalY =
+      docWithAutoTable.lastAutoTable && docWithAutoTable.lastAutoTable.finalY
+        ? docWithAutoTable.lastAutoTable.finalY + 20
+        : doc.internal.pageSize.height - 60;
+    doc.text(`Grand Total Qty: ${grandQty}`, 40, finalY);
+    doc.text(`Grand Total Amount: ${grandAmount.toFixed(2)}`, 180, finalY);
+    doc.text(`Grand Total Discount: ${grandDiscount.toFixed(2)}`, 340, finalY);
+    doc.text(
+      `Grand Total Net Amount: ${grandNetAmount.toFixed(2)}`,
+      500,
+      finalY
+    );
+
+    doc.save("credit_sales_report.pdf");
   };
 
   const openCreate = () => {
@@ -146,37 +308,21 @@ export default function CreditSaleInvoice() {
 
   const handleSave = () => {
     if (!saleDate) return;
+    const newSale: CreditSale = {
+      id: invoiceNumber || `CS-${Math.floor(Math.random() * 1000)}`,
+      date: saleDate,
+      customer,
+      customerTitle,
+      saleAccount,
+      saleTitle,
+      salesman,
+      items: [...items],
+    };
     if (editData) {
-      setData((prev) =>
-        prev.map((d) =>
-          d.id === editData.id
-            ? {
-                ...d,
-                id: invoiceNumber,
-                date: saleDate,
-                customer,
-                customerTitle,
-                saleAccount,
-                saleTitle,
-                salesman,
-                items: [...items],
-              }
-            : d
-        )
-      );
+      updateSale(newSale);
     } else {
-      const newSale: CreditSale = {
-        id: invoiceNumber || `CS-${Math.floor(Math.random() * 1000)}`,
-        date: saleDate,
-        customer,
-        customerTitle,
-        saleAccount,
-        saleTitle,
-        salesman,
-        items: [...items],
-      };
-      setData((prev) => [...prev, newSale]);
-      setItems([]); // Reset items after adding
+      addSale(newSale);
+      setItems([]);
     }
     setOpened(false);
     resetForm();
@@ -185,7 +331,7 @@ export default function CreditSaleInvoice() {
   const openDelete = (id: string) => setDeleteId(id);
 
   const confirmDelete = () => {
-    if (deleteId) setData((prev) => prev.filter((d) => d.id !== deleteId));
+    if (deleteId) deleteSale(deleteId);
     setDeleteId(null);
   };
 
@@ -205,7 +351,11 @@ export default function CreditSaleInvoice() {
     ]);
   };
 
-  const updateItem = (index: number, field: string, value: any) => {
+  const updateItem = (
+    index: number,
+    field: keyof CreditSaleItem,
+    value: string | number
+  ) => {
     const updated = items.map((item, i) =>
       i === index ? { ...item, [field]: value } : item
     );
@@ -315,38 +465,7 @@ export default function CreditSaleInvoice() {
             color="#0A6802"
             style={{ marginLeft: 8 }}
             leftSection={<IconDownload size={16} />}
-            onClick={() => {
-              // Export filtered data to PDF
-              const doc = new jsPDF();
-              doc.text("Credit Sales", 14, 20);
-              const filtered = data.filter(
-                (sale: any) =>
-                  (!search ||
-                    sale.invoice
-                      .toLowerCase()
-                      .includes(search.toLowerCase())) &&
-                  (!fromDate || new Date(sale.date) >= new Date(fromDate)) &&
-                  (!toDate || new Date(sale.date) <= new Date(toDate))
-              );
-              if (filtered.length > 0) {
-                const tableData = filtered.map((sale: any) => [
-                  sale.invoice,
-                  sale.date,
-                  sale.customer,
-                  sale.amount?.toFixed(2) || "0.00",
-                  sale.status || "",
-                ]);
-
-                autoTable(doc, {
-                  head: [["Invoice#", "Date", "Customer", "Amount", "Status"]],
-                  body: tableData,
-                  startY: 30,
-                });
-              } else {
-                doc.text("No sales found for selected filters.", 14, 30);
-              }
-              doc.save("credit_sales.pdf");
-            }}
+            onClick={exportFilteredPDF}
           >
             Export
           </Button>
@@ -379,7 +498,7 @@ export default function CreditSaleInvoice() {
                 <Table.Th>Sale Title</Table.Th>
                 <Table.Th>Salesman</Table.Th>
                 <Table.Th>Items</Table.Th>
-                <Table.Th>Actions</Table.Th>
+                <Table.Td>Actions</Table.Td>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -695,5 +814,13 @@ export default function CreditSaleInvoice() {
         </Group>
       </Modal>
     </div>
+  );
+}
+
+export default function CreditSaleInvoice() {
+  return (
+    <CreditSalesProvider>
+      <CreditSaleInvoiceInner />
+    </CreditSalesProvider>
   );
 }

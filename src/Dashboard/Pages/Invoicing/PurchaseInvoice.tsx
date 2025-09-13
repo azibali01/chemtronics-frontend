@@ -13,6 +13,8 @@ import {
   NumberInput,
   Textarea,
   Switch,
+  Pagination,
+  Select,
 } from "@mantine/core";
 import {
   IconSearch,
@@ -23,7 +25,8 @@ import {
   IconShoppingCart,
 } from "@tabler/icons-react";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
+import { usePurchaseInvoice } from "../../Context/Invoicing/PurchaseInvoiceContext";
 
 type Invoice = {
   id: number;
@@ -51,77 +54,89 @@ type Item = {
 };
 
 export default function PurchaseInvoice() {
+  const { invoices, setInvoices } = usePurchaseInvoice();
+
+  // Helper for header/footer
+  function addHeaderFooter(doc: jsPDF, title: string) {
+    doc.setFontSize(18);
+    doc.text("CHEMTRONIX ENGINEERING SOLUTION", 14, 14);
+    doc.setFontSize(12);
+    doc.text(title, 14, 24);
+
+    const pageHeight = doc.internal.pageSize.height || 297;
+    doc.setFontSize(10);
+    doc.text(
+      "*Computer generated invoice. No need for signature",
+      14,
+      pageHeight - 20
+    );
+    doc.setFontSize(11);
+    doc.text(
+      "HEAD OFFICE: 552 Mujtaba Canal View, Main Qasimpur Canal Road, Multan",
+      14,
+      pageHeight - 14
+    );
+    doc.text(
+      "PLANT SITE: 108-1 Tufailabad Industrial Estate Multan",
+      14,
+      pageHeight - 8
+    );
+  }
+
   // Export filtered invoices to PDF
   const exportFilteredPDF = () => {
     const doc = new jsPDF();
-    doc.text("Purchase Invoices", 14, 20);
-    if (filteredInvoices.length > 0) {
-      const tableData = filteredInvoices.map((inv) => [
+    addHeaderFooter(doc, "Purchase Invoices");
+
+    autoTable(doc, {
+      startY: 32,
+      head: [
+        [
+          "Invoice #",
+          "Date",
+          "Supplier No",
+          "Supplier Title",
+          "Purchase Account",
+          "Purchase Title",
+          "Discount %",
+          "GST",
+          "Amount",
+        ],
+      ],
+      body: filteredInvoices.map((inv) => [
         inv.number,
         inv.date,
         inv.supplierNo || "",
         inv.supplierTitle || "",
         inv.purchaseAccount || "",
         inv.purchaseTitle || "",
-        inv.amount?.toFixed(2) || "0.00",
         inv.discount?.toString() || "0",
-      ]);
-      (doc as any).autoTable({
-        head: [
-          [
-            "Invoice #",
-            "Date",
-            "Supplier No",
-            "Supplier Title",
-            "Purchase A/C",
-            "Purchase Title",
-            "Amount",
-            "Discount %",
-          ],
-        ],
-        body: tableData,
-        startY: 30,
-      });
-    } else {
-      doc.text("No invoices found for selected filters.", 14, 30);
-    }
+        inv.gst ? "Yes" : "No",
+        inv.amount !== undefined ? inv.amount.toFixed(2) : "0.00",
+      ]),
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [10, 104, 2] },
+      theme: "grid",
+      margin: { left: 14, right: 14 },
+      didDrawPage: (data) => {
+        const finalY = (data.cursor?.y ?? 60) + 8;
+        doc.setFontSize(12);
+        doc.text(`Total Invoices: ${filteredInvoices.length}`, 14, finalY);
+        doc.text(
+          `Total Amount: ${filteredInvoices
+            .reduce((sum, i) => sum + (i.amount || 0), 0)
+            .toFixed(2)}`,
+          80,
+          finalY
+        );
+      },
+    });
+
     doc.save("purchase_invoices.pdf");
   };
+
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [invoices, setInvoices] = useState<Invoice[]>([
-    {
-      id: 1,
-      number: "PUR-001",
-      date: "3/15/2024",
-      supplierNo: "SUP-001",
-      supplierTitle: "CHEMTRONIX ENGINEERING SOLUTION",
-      purchaseAccount: "05120109086371",
-      purchaseTitle: "Stock",
-      items: [],
-    },
-    {
-      id: 2,
-      number: "PUR-002",
-      date: "3/14/2024",
-      supplierNo: "SUP-002",
-      supplierTitle: "Hydro Worx",
-      purchaseAccount: "05120104085906",
-      purchaseTitle: "Stock",
-      items: [],
-    },
-    {
-      id: 3,
-      number: "PUR-003",
-      date: "3/13/2024",
-      supplierNo: "SUP-003",
-      supplierTitle: "Other Supplier",
-      purchaseAccount: "05120104085907",
-      purchaseTitle: "Stock",
-      items: [],
-    },
-  ]);
-
   const [search, setSearch] = useState("");
   const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -134,15 +149,14 @@ export default function PurchaseInvoice() {
   const [includeGST, setIncludeGST] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
   const [notes, setNotes] = useState("");
-  const [discount, setDiscount] = useState(0); // Discount percentage
+  const [discount, setDiscount] = useState(0);
   const [supplierNo, setSupplierNo] = useState("");
   const [supplierTitle, setSupplierTitle] = useState("");
   const [purchaseAccount, setPurchaseAccount] = useState("");
   const [purchaseTitle, setPurchaseTitle] = useState("");
 
   const totalPurchases = invoices.length;
-  // Removed paidCount, pendingCount, totalAmount
-  // Add item
+
   const addItem = () => {
     setItems([
       ...items,
@@ -158,7 +172,6 @@ export default function PurchaseInvoice() {
     ]);
   };
 
-  // Calculate subtotal
   const subtotal = items.reduce((sum, item) => sum + item.qty * item.rate, 0);
   const discountAmount = subtotal * (discount / 100);
   const gst = includeGST ? (subtotal - discountAmount) * 0.18 : 0;
@@ -168,7 +181,11 @@ export default function PurchaseInvoice() {
     setItems(items.filter((i) => i.id !== id));
   };
 
-  const updateItem = (id: number, field: keyof Item, value: any) => {
+  const updateItem = (
+    id: number,
+    field: keyof Item,
+    value: Item[keyof Item]
+  ) => {
     setItems(items.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
   };
 
@@ -179,34 +196,110 @@ export default function PurchaseInvoice() {
       (!toDate || new Date(inv.date) <= new Date(toDate))
   );
 
+  // Single Invoice PDF
   const exportPDF = (invoice: Invoice) => {
     const doc = new jsPDF();
-    doc.text(`Invoice: ${invoice.number}`, 14, 20);
-    doc.text(`Date: ${invoice.date}`, 14, 30);
+    addHeaderFooter(doc, `Purchase Invoice: ${invoice.number}`);
+
+    autoTable(doc, {
+      startY: 32,
+      head: [["Field", "Value"]],
+      body: [
+        ["Invoice #", invoice.number],
+        ["Date", invoice.date],
+        ["Supplier No", invoice.supplierNo || ""],
+        ["Supplier Title", invoice.supplierTitle || ""],
+        ["Purchase Account", invoice.purchaseAccount || ""],
+        ["Purchase Title", invoice.purchaseTitle || ""],
+        ["Discount %", invoice.discount?.toString() || "0"],
+        ["GST", invoice.gst ? "Yes" : "No"],
+        ["Notes", invoice.notes || ""],
+        [
+          "Amount",
+          invoice.amount !== undefined ? invoice.amount.toFixed(2) : "0.00",
+        ],
+      ],
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [10, 104, 2] },
+      theme: "grid",
+      margin: { left: 14, right: 14 },
+    });
 
     if (invoice.items && invoice.items.length > 0) {
-      const tableData = invoice.items.map((i) => [
-        i.product,
-        i.description,
-        i.qty,
-        i.rate,
-        i.qty * i.rate,
-      ]);
-      (doc as any).autoTable({
-        head: [["Product", "Description", "Qty", "Rate", "Amount"]],
-        body: tableData,
-        startY: 40,
+      autoTable(doc, {
+        startY: (doc as any).lastAutoTable?.finalY
+          ? (doc as any).lastAutoTable.finalY + 8
+          : 60,
+        head: [
+          [
+            "Code",
+            "Product Name",
+            "Description",
+            "Unit",
+            "Qty",
+            "Rate",
+            "Amount",
+          ],
+        ],
+        body: (invoice.items ?? []).map((item) => [
+          item.code,
+          item.product,
+          item.description,
+          item.unit,
+          item.qty,
+          item.rate,
+          (item.qty * item.rate).toFixed(2),
+        ]),
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [10, 104, 2] },
+        theme: "grid",
+        margin: { left: 14, right: 14 },
+        didDrawPage: (data) => {
+          const finalY = (data.cursor?.y ?? 68) + 8;
+          doc.setFontSize(12);
+          doc.text(
+            `Subtotal: ${(invoice.items ?? [])
+              .reduce((sum, i) => sum + i.qty * i.rate, 0)
+              .toFixed(2)}`,
+            14,
+            finalY
+          );
+          doc.text(`Discount: ${invoice.discount || 0}%`, 60, finalY);
+          doc.text(
+            `GST (18%): ${
+              invoice.gst
+                ? (
+                    (invoice.items ?? []).reduce(
+                      (sum, i) => sum + i.qty * i.rate,
+                      0
+                    ) * 0.18 || 0
+                  ).toFixed(2)
+                : "0.00"
+            }`,
+            110,
+            finalY
+          );
+          doc.text(
+            `Total: ${
+              invoice.amount !== undefined ? invoice.amount.toFixed(2) : "0.00"
+            }`,
+            170,
+            finalY
+          );
+        },
       });
     }
 
-    doc.text(`Subtotal: {subtotal}`, 14, 200);
-    doc.text(`GST: ${gst}`, 14, 210);
-    doc.text(`Total: ${subtotal + gst}`, 14, 220);
-
-    if (invoice.notes) doc.text(`Notes: {invoice.notes}`, 14, 230);
-
     doc.save(`${invoice.number}.pdf`);
   };
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+
+  const paginatedInvoices = filteredInvoices.slice(
+    (page - 1) * pageSize,
+    page * pageSize
+  );
 
   return (
     <div>
@@ -248,11 +341,12 @@ export default function PurchaseInvoice() {
       </Grid>
 
       <Card shadow="sm" radius="md" p="lg" bg={"#F1FCF0"} withBorder>
-        <Text fw={600} mb="md">
-          Purchase Invoices
-        </Text>
-        <Group mb="md" gap={"xs"}>
+        <Group justify="space-between" mb="md">
+          <Text fw={600}>Purchase Invoices</Text>
+        </Group>
+        <Group mb="md" gap={"xs"} grow>
           <TextInput
+            label="Search"
             placeholder="Search purchase invoices..."
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
@@ -260,6 +354,7 @@ export default function PurchaseInvoice() {
             style={{ minWidth: 220 }}
           />
           <TextInput
+            label="From Date"
             type="date"
             placeholder="From Date"
             value={fromDate}
@@ -267,32 +362,50 @@ export default function PurchaseInvoice() {
             style={{ minWidth: 140 }}
           />
           <TextInput
+            label="To Date"
             type="date"
             placeholder="To Date"
             value={toDate}
             onChange={(e) => setToDate(e.currentTarget.value)}
             style={{ minWidth: 140 }}
           />
-          <Button
-            variant="outline"
-            color="gray"
-            onClick={() => {
-              setSearch("");
-              setFromDate("");
-              setToDate("");
-            }}
-          >
-            Clear
-          </Button>
-          <Button
-            variant="filled"
-            color="#0A6802"
-            leftSection={<IconDownload size={16} />}
-            onClick={exportFilteredPDF}
-          >
-            Export
-          </Button>
+          <Group mt={24} gap="xs">
+            <Button
+              variant="outline"
+              color="#0A6802"
+              onClick={() => {
+                setSearch("");
+                setFromDate("");
+                setToDate("");
+              }}
+            >
+              Clear
+            </Button>
+            <Button
+              variant="filled"
+              color="#0A6802"
+              leftSection={<IconDownload size={16} />}
+              onClick={exportFilteredPDF}
+            >
+              Export
+            </Button>
+          </Group>
+
+          <Group justify="flex-end" mb="md">
+            <Select
+              data={["5", "10", "20", "50"]}
+              value={pageSize.toString()}
+              onChange={(val) => {
+                setPageSize(Number(val));
+                setPage(1);
+              }}
+              label="Rows per page"
+              style={{ width: 120 }}
+              size="xs"
+            />
+          </Group>
         </Group>
+
         <Table highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
@@ -313,7 +426,7 @@ export default function PurchaseInvoice() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {filteredInvoices.map((inv) => (
+            {paginatedInvoices.map((inv) => (
               <Table.Tr key={inv.id}>
                 <Table.Td>{inv.number}</Table.Td>
                 <Table.Td>{inv.date}</Table.Td>
@@ -321,7 +434,6 @@ export default function PurchaseInvoice() {
                 <Table.Td>{inv.supplierTitle || ""}</Table.Td>
                 <Table.Td>{inv.purchaseAccount || ""}</Table.Td>
                 <Table.Td>{inv.purchaseTitle || ""}</Table.Td>
-                {/* Show first item from items array for each invoice, or blank if not available */}
                 <Table.Td>{inv.items?.[0]?.code || ""}</Table.Td>
                 <Table.Td>{inv.items?.[0]?.product || ""}</Table.Td>
                 <Table.Td>{inv.items?.[0]?.description || ""}</Table.Td>
@@ -378,6 +490,18 @@ export default function PurchaseInvoice() {
             ))}
           </Table.Tbody>
         </Table>
+
+        <Group mt="md" justify="center">
+          <Pagination
+            value={page}
+            onChange={setPage}
+            total={Math.max(1, Math.ceil(filteredInvoices.length / pageSize))}
+            color="#0A6802"
+            radius="md"
+            size="md"
+            withControls
+          />
+        </Group>
       </Card>
 
       <Modal
