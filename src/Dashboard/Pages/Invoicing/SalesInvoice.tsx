@@ -1,5 +1,4 @@
 import { useState, useRef } from "react";
-import { useReactToPrint } from "react-to-print";
 import {
   Card,
   Text,
@@ -53,12 +52,50 @@ function addHeaderFooter(doc: jsPDF, title: string) {
   );
 }
 
+function PrintableInvoice({ invoice }: { invoice: any }) {
+  if (!invoice) return <div>No invoice to print</div>;
+  return (
+    <div
+      style={{
+        padding: 24,
+        fontFamily: "Arial",
+        background: "#fff",
+        color: "#222",
+      }}
+    >
+      <h2>Invoice #{invoice.number}</h2>
+      <p>Date: {invoice.date}</p>
+      <p>Account: {invoice.accountTitle}</p>
+      <p>Amount: ${invoice.amount?.toFixed(2)}</p>
+      {/* Add more invoice details as needed */}
+    </div>
+  );
+}
+
+function PrintableInvoiceContent(invoice: any) {
+  return `
+    <html>
+      <head>
+        <title>Invoice ${invoice.number}</title>
+        <style>
+          body { font-family: Arial; color: #222; padding: 24px; }
+          h2 { margin-bottom: 8px; }
+          p { margin: 4px 0; }
+        </style>
+      </head>
+      <body>
+        <h2>Invoice #${invoice.number}</h2>
+        <p>Date: ${invoice.date}</p>
+        <p>Account: ${invoice.accountTitle}</p>
+        <p>Amount: $${invoice.amount?.toFixed(2)}</p>
+        <!-- Add more invoice details as needed -->
+      </body>
+    </html>
+  `;
+}
+
 export default function SalesInvoicePage() {
   const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useReactToPrint({
-    content: () => printRef.current,
-    documentTitle: "Invoice",
-  });
 
   // Use context for invoices
   const { invoices, setInvoices } = useSalesInvoice();
@@ -114,6 +151,9 @@ export default function SalesInvoicePage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
+  // Add state to track current invoice for printing
+  const [currentInvoiceForPrint, setCurrentInvoiceForPrint] =
+    useState<any>(null);
 
   const filteredInvoices = invoices.filter((i) => {
     const matchesSearch = i.number.toLowerCase().includes(search.toLowerCase());
@@ -290,8 +330,27 @@ export default function SalesInvoicePage() {
   const editGstAmount = includeGST ? editSubtotal * 0.18 : 0;
   const editTotal = editSubtotal + editGstAmount;
 
+  const printInvoiceWindow = (invoice: any) => {
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(PrintableInvoiceContent(invoice));
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 300);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
+      {/* Printable invoice content (always rendered, hidden off-screen) */}
+      <div
+        style={{ position: "fixed", left: "-9999px", top: 0, zIndex: -1 }}
+        ref={printRef}
+      >
+        <PrintableInvoice invoice={currentInvoiceForPrint} />
+      </div>
+
       <Group justify="space-between" mb="lg">
         <Text size="xl" fw={600}>
           Sales Invoice
@@ -488,272 +547,278 @@ export default function SalesInvoicePage() {
         title="Create Invoice"
         size="70%"
       >
-        <div ref={printRef}>
-          <Group grow mb="sm">
-            <TextInput
-              label="Invoice Number"
-              value={newInvoiceNumber}
-              onChange={(e) => setNewInvoiceNumber(e.currentTarget.value)}
-              mb="sm"
-            />
-            <TextInput
-              label="Invoice Date"
-              type="date"
-              placeholder="mm/dd/yyyy"
-              value={newDate}
-              onChange={(e) => setNewDate(e.currentTarget.value)}
-            />
-            <TextInput
-              label="Delivery No"
-              type="number"
-              placeholder="Delivery No"
-              value={newDeliveryNo}
-              onChange={(e) => setNewDeliveryNo(e.currentTarget.value)}
-            />
-            <TextInput
-              label="Delivery Date"
-              type="date"
-              placeholder="mm/dd/yyyy"
-              value={newDeliveryDate}
-              onChange={(e) => setNewDeliveryDate(e.currentTarget.value)}
-            />
-          </Group>
-          <Group grow mb="sm" w={"50%"}>
-            <TextInput
-              label="Po No"
-              placeholder="Po No"
-              value={newPoNo}
-              onChange={(e) => setNewPoNo(e.currentTarget.value)}
-            />
-            <TextInput
-              label="Po Date"
-              type="date"
-              placeholder="Po Date"
-              value={newPoDate}
-              onChange={(e) => setNewPoDate(e.currentTarget.value)}
-            />
-          </Group>
-          <Group grow>
-            <TextInput
-              label="Account No"
-              placeholder="Account No"
-              value={newAccountNo}
-              onChange={(e) => setNewAccountNo(e.currentTarget.value)}
-            />
-            <Select
-              label="Account Title"
-              placeholder="Select Account"
-              data={[
-                "Adv. Income Tax",
-                "Ahmad Fine Weaing Limited (Unit-I)",
-                "Ahmad Fine Weaing Limited (Unit-II)",
-              ]}
-              value={newAccountTitle}
-              onChange={(v) => setNewAccountTitle(v || "")}
-              mb="sm"
-            />
-            <TextInput
-              label="Sale Account"
-              value={newSaleAccount}
-              onChange={(e) => setNewSaleAccount(e.currentTarget.value)}
-            />
-            <Select
-              label="Sale Account Title"
-              data={[
-                "Sale of Chemicals and Equipments",
-                "Sale of Equipments",
-                "Sales of Chemicals",
-                "Services",
-              ]}
-              value={newSaleAccountTitle}
-              onChange={(v) => setNewSaleAccountTitle(v || "")}
-            />
-            <TextInput
-              label="NTN No"
-              value={newNtnNo}
-              onChange={(e) => setNewNtnNo(e.currentTarget.value)}
-            />
-          </Group>
-
-          <Switch
-            color="#0A6802"
-            label="Include GST (18%)"
-            checked={includeGST}
-            onChange={(e) => setIncludeGST(e.currentTarget.checked)}
-            mb="md"
+        <Group grow mb="sm">
+          <TextInput
+            label="Invoice Number"
+            value={newInvoiceNumber}
+            onChange={(e) => setNewInvoiceNumber(e.currentTarget.value)}
+            mb="sm"
           />
+          <TextInput
+            label="Invoice Date"
+            type="date"
+            placeholder="mm/dd/yyyy"
+            value={newDate}
+            onChange={(e) => setNewDate(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Delivery No"
+            type="number"
+            placeholder="Delivery No"
+            value={newDeliveryNo}
+            onChange={(e) => setNewDeliveryNo(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Delivery Date"
+            type="date"
+            placeholder="mm/dd/yyyy"
+            value={newDeliveryDate}
+            onChange={(e) => setNewDeliveryDate(e.currentTarget.value)}
+          />
+        </Group>
+        <Group grow mb="sm" w={"50%"}>
+          <TextInput
+            label="Po No"
+            placeholder="Po No"
+            value={newPoNo}
+            onChange={(e) => setNewPoNo(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Po Date"
+            type="date"
+            placeholder="Po Date"
+            value={newPoDate}
+            onChange={(e) => setNewPoDate(e.currentTarget.value)}
+          />
+        </Group>
+        <Group grow>
+          <TextInput
+            label="Account No"
+            placeholder="Account No"
+            value={newAccountNo}
+            onChange={(e) => setNewAccountNo(e.currentTarget.value)}
+          />
+          <Select
+            label="Account Title"
+            placeholder="Select Account"
+            data={[
+              "Adv. Income Tax",
+              "Ahmad Fine Weaing Limited (Unit-I)",
+              "Ahmad Fine Weaing Limited (Unit-II)",
+            ]}
+            value={newAccountTitle}
+            onChange={(v) => setNewAccountTitle(v || "")}
+            mb="sm"
+          />
+          <TextInput
+            label="Sale Account"
+            value={newSaleAccount}
+            onChange={(e) => setNewSaleAccount(e.currentTarget.value)}
+          />
+          <Select
+            label="Sale Account Title"
+            data={[
+              "Sale of Chemicals and Equipments",
+              "Sale of Equipments",
+              "Sales of Chemicals",
+              "Services",
+            ]}
+            value={newSaleAccountTitle}
+            onChange={(v) => setNewSaleAccountTitle(v || "")}
+          />
+          <TextInput
+            label="NTN No"
+            value={newNtnNo}
+            onChange={(e) => setNewNtnNo(e.currentTarget.value)}
+          />
+        </Group>
 
-          <Table withColumnBorders highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Code</Table.Th>
-                <Table.Th>Product Name</Table.Th>
-                <Table.Th>HS Code</Table.Th>
-                <Table.Th>Description</Table.Th>
-                <Table.Th>Qty</Table.Th>
-                <Table.Th>Rate</Table.Th>
-                <Table.Th>Amount</Table.Th>
-                <Table.Th>Ex GST Rate</Table.Th>
-                <Table.Th>Ex GST Amount</Table.Th>
-                <Table.Th>Remove</Table.Th>
+        <Switch
+          color="#0A6802"
+          label="Include GST (18%)"
+          checked={includeGST}
+          onChange={(e) => setIncludeGST(e.currentTarget.checked)}
+          mb="md"
+        />
+
+        <Table withColumnBorders highlightOnHover>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Code</Table.Th>
+              <Table.Th>Product Name</Table.Th>
+              <Table.Th>HS Code</Table.Th>
+              <Table.Th>Description</Table.Th>
+              <Table.Th>Qty</Table.Th>
+              <Table.Th>Rate</Table.Th>
+              <Table.Th>Amount</Table.Th>
+              <Table.Th>Ex GST Rate</Table.Th>
+              <Table.Th>Ex GST Amount</Table.Th>
+              <Table.Th>Remove</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {items.map((item, index) => (
+              <Table.Tr key={item.id}>
+                <Table.Td>
+                  <TextInput value={item.code} />
+                </Table.Td>
+                <Table.Td>
+                  <TextInput
+                    placeholder="Product"
+                    value={item.product}
+                    onChange={(e) => {
+                      const newItems = [...items];
+                      newItems[index].product = e.currentTarget.value;
+                      setItems(newItems);
+                    }}
+                  />
+                </Table.Td>
+                <Table.Td>
+                  <TextInput value={item.hsCode} />
+                </Table.Td>
+                <Table.Td>
+                  <TextInput
+                    placeholder="Description"
+                    value={item.description}
+                    onChange={(e) => {
+                      const newItems = [...items];
+                      newItems[index].description = e.currentTarget.value;
+                      setItems(newItems);
+                    }}
+                  />
+                </Table.Td>
+                <Table.Td>
+                  <NumberInput
+                    value={item.qty}
+                    min={1}
+                    onChange={(val) => {
+                      const newItems = [...items];
+                      newItems[index].qty = Number(val) || 0;
+                      setItems(newItems);
+                    }}
+                  />
+                </Table.Td>
+                <Table.Td>
+                  <NumberInput
+                    value={item.rate}
+                    min={0}
+                    onChange={(val) => {
+                      const newItems = [...items];
+                      newItems[index].rate = Number(val) || 0;
+                      setItems(newItems);
+                    }}
+                  />
+                </Table.Td>
+                <Table.Td>{item.qty * item.rate}</Table.Td>
+                <Table.Td>
+                  <TextInput value={item.exGSTRate} />
+                </Table.Td>
+                <Table.Td>
+                  <TextInput value={item.exGSTAmount} />
+                </Table.Td>
+                <Table.Td>
+                  <ActionIcon
+                    color="red"
+                    variant="light"
+                    onClick={() =>
+                      setItems((prev) => prev.filter((i) => i.id !== item.id))
+                    }
+                  >
+                    <IconTrash size={18} />
+                  </ActionIcon>
+                </Table.Td>
               </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {items.map((item, index) => (
-                <Table.Tr key={item.id}>
-                  <Table.Td>
-                    <TextInput value={item.code} />
-                  </Table.Td>
-                  <Table.Td>
-                    <TextInput
-                      placeholder="Product"
-                      value={item.product}
-                      onChange={(e) => {
-                        const newItems = [...items];
-                        newItems[index].product = e.currentTarget.value;
-                        setItems(newItems);
-                      }}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <TextInput value={item.hsCode} />
-                  </Table.Td>
-                  <Table.Td>
-                    <TextInput
-                      placeholder="Description"
-                      value={item.description}
-                      onChange={(e) => {
-                        const newItems = [...items];
-                        newItems[index].description = e.currentTarget.value;
-                        setItems(newItems);
-                      }}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <NumberInput
-                      value={item.qty}
-                      min={1}
-                      onChange={(val) => {
-                        const newItems = [...items];
-                        newItems[index].qty = Number(val) || 0;
-                        setItems(newItems);
-                      }}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <NumberInput
-                      value={item.rate}
-                      min={0}
-                      onChange={(val) => {
-                        const newItems = [...items];
-                        newItems[index].rate = Number(val) || 0;
-                        setItems(newItems);
-                      }}
-                    />
-                  </Table.Td>
-                  <Table.Td>{item.qty * item.rate}</Table.Td>
-                  <Table.Td>
-                    <TextInput value={item.exGSTRate} />
-                  </Table.Td>
-                  <Table.Td>
-                    <TextInput value={item.exGSTAmount} />
-                  </Table.Td>
-                  <Table.Td>
-                    <ActionIcon
-                      color="red"
-                      variant="light"
-                      onClick={() =>
-                        setItems((prev) => prev.filter((i) => i.id !== item.id))
-                      }
-                    >
-                      <IconTrash size={18} />
-                    </ActionIcon>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+            ))}
+          </Table.Tbody>
+        </Table>
+        <Button
+          mt="sm"
+          leftSection={<IconPlus size={16} />}
+          color="#0A6802"
+          onClick={() =>
+            setItems((prev) => [
+              ...prev,
+              {
+                id: prev.length + 1,
+                code: 1,
+                product: "",
+                hsCode: "",
+                description: "",
+                qty: 1,
+                rate: 0,
+                exGSTRate: "",
+                exGSTAmount: "",
+              },
+            ])
+          }
+        >
+          Add Item
+        </Button>
+
+        <div className="mt-4 space-y-1">
+          <Text>Ex GST Amount:</Text>
+          <Text>Total GST:</Text>
+          <Text>Subtotal: {subtotal.toFixed(2)}</Text>
+          {includeGST && <Text>GST (18%): {gstAmount.toFixed(2)}</Text>}
+          <Text fw={700}>Total: {total.toFixed(2)}</Text>
+        </div>
+
+        <Textarea
+          label="Notes (Optional)"
+          placeholder="Additional notes or terms..."
+          value={notes}
+          onChange={(e) => setNotes(e.currentTarget.value)}
+          mt="md"
+        />
+
+        <Group justify="flex-end" mt="md">
           <Button
-            mt="sm"
-            leftSection={<IconPlus size={16} />}
+            variant="outline"
+            color="#819E00"
+            onClick={() => {
+              printInvoiceWindow({
+                number: newInvoiceNumber,
+                date: newDate,
+                accountTitle: newAccountTitle,
+                amount: total,
+                // Add other fields as needed
+              });
+            }}
+            mr={8}
+          >
+            Print
+          </Button>
+          <Button variant="default" onClick={() => setCreateModal(false)}>
+            Save as Draft
+          </Button>
+          <Button
             color="#0A6802"
-            onClick={() =>
-              setItems((prev) => [
+            onClick={() => {
+              setInvoices((prev) => [
                 ...prev,
                 {
                   id: prev.length + 1,
-                  code: 1,
-                  product: "",
-                  hsCode: "",
-                  description: "",
-                  qty: 1,
-                  rate: 0,
-                  exGSTRate: "",
-                  exGSTAmount: "",
+                  number: newInvoiceNumber,
+                  date: newDate,
+                  deliveryNo: newDeliveryNo,
+                  deliveryDate: newDeliveryDate,
+                  poNo: newPoNo,
+                  poDate: newPoDate,
+                  accountNo: newAccountNo,
+                  accountTitle: newAccountTitle,
+                  saleAccount: newSaleAccount,
+                  saleAccountTitle: newSaleAccountTitle,
+                  ntnNo: newNtnNo,
+                  amount: total,
+                  items: items,
                 },
-              ])
-            }
+              ]);
+              setCreateModal(false);
+            }}
           >
-            Add Item
+            Create & Send
           </Button>
-
-          <div className="mt-4 space-y-1">
-            <Text>Ex GST Amount:</Text>
-            <Text>Total GST:</Text>
-            <Text>Subtotal: {subtotal.toFixed(2)}</Text>
-            {includeGST && <Text>GST (18%): {gstAmount.toFixed(2)}</Text>}
-            <Text fw={700}>Total: {total.toFixed(2)}</Text>
-          </div>
-
-          <Textarea
-            label="Notes (Optional)"
-            placeholder="Additional notes or terms..."
-            value={notes}
-            onChange={(e) => setNotes(e.currentTarget.value)}
-            mt="md"
-          />
-
-          <Group justify="flex-end" mt="md">
-            <Button
-              variant="outline"
-              color="#819E00"
-              onClick={handlePrint}
-              mr={8}
-            >
-              Print
-            </Button>
-            <Button variant="default" onClick={() => setCreateModal(false)}>
-              Save as Draft
-            </Button>
-            <Button
-              color="#0A6802"
-              onClick={() => {
-                setInvoices((prev) => [
-                  ...prev,
-                  {
-                    id: prev.length + 1,
-                    number: newInvoiceNumber,
-                    date: newDate,
-                    deliveryNo: newDeliveryNo,
-                    deliveryDate: newDeliveryDate,
-                    poNo: newPoNo,
-                    poDate: newPoDate,
-                    accountNo: newAccountNo,
-                    accountTitle: newAccountTitle,
-                    saleAccount: newSaleAccount,
-                    saleAccountTitle: newSaleAccountTitle,
-                    ntnNo: newNtnNo,
-                    amount: total,
-                    items: items,
-                  },
-                ]);
-                setCreateModal(false);
-              }}
-            >
-              Create & Send
-            </Button>
-          </Group>
-        </div>
+        </Group>
       </Modal>
 
       {/* Edit Invoice Modal */}
@@ -1061,6 +1126,16 @@ export default function SalesInvoicePage() {
               <Text fw={700}>Total: ${editTotal.toFixed(2)}</Text>
             </div>
             <Group mt="md" justify="flex-end">
+              <Button
+                variant="outline"
+                color="#819E00"
+                onClick={() => {
+                  printInvoiceWindow(editInvoice);
+                }}
+                mr={8}
+              >
+                Print
+              </Button>
               <Button variant="default" onClick={() => setEditInvoice(null)}>
                 Cancel
               </Button>

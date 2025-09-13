@@ -23,7 +23,6 @@ import {
 import { useMemo, useState, useRef } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { useReactToPrint } from "react-to-print";
 import {
   SaleReturnsProvider,
   useSaleReturns,
@@ -347,11 +346,38 @@ function SaleReturnsInner() {
     setNotes("");
   };
 
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useReactToPrint({
-    content: () => printRef.current,
-    documentTitle: invoiceNumber || "Sale Return Invoice",
-  });
+  function PrintableInvoiceContent(invoice: any) {
+    return `
+    <html>
+      <head>
+        <title>Sale Return ${invoice.number}</title>
+        <style>
+          body { font-family: Arial; color: #222; padding: 24px; }
+          h2 { margin-bottom: 8px; }
+          p { margin: 4px 0; }
+        </style>
+      </head>
+      <body>
+        <h2>Sale Return #${invoice.number}</h2>
+        <p>Date: ${invoice.date}</p>
+        <p>Account: ${invoice.accountTitle}</p>
+        <p>Amount: $${invoice.amount?.toFixed(2)}</p>
+        <!-- Add more details as needed -->
+      </body>
+    </html>
+  `;
+  }
+
+  const printInvoiceWindow = (invoice: any) => {
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(PrintableInvoiceContent(invoice));
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 300);
+    }
+  };
 
   return (
     <div>
@@ -509,7 +535,7 @@ function SaleReturnsInner() {
         size="70%"
         centered
       >
-        <div ref={printRef}>
+        <div ref={useRef(null)}>
           <Group grow mb="md" w={"50%"}>
             <TextInput
               label="Invoice #"
@@ -685,7 +711,7 @@ function SaleReturnsInner() {
           />
         </div>
         <Group justify="flex-end" mt="md">
-          <Button color="#0A6802" onClick={handlePrint}>
+          <Button color="#0A6802" onClick={() => printInvoiceWindow({})}>
             Print
           </Button>
           <Button variant="default" onClick={() => setOpened(false)}>

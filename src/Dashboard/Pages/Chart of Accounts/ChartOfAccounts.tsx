@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import type { JSX } from "react";
 import {
   Button,
   Card,
@@ -24,6 +25,9 @@ import {
   IconTrash,
   IconArrowDown,
 } from "@tabler/icons-react";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+
+// Types and initial data
 
 type AccountType = "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
 
@@ -34,6 +38,7 @@ interface AccountNode {
   icon?: ReactNode;
   type?: AccountType;
   balance: number;
+  city?: string;
   children?: AccountNode[];
 }
 
@@ -112,6 +117,13 @@ const initialAccounts: AccountNode[] = [
     balance: 45000,
     children: [
       {
+        code: "2090",
+        selCode: "129",
+        name: "Capital",
+        icon: <IconCreditCard />,
+        balance: 5000,
+      },
+      {
         code: "2100",
         selCode: "131",
         name: "Current Liabilities",
@@ -119,37 +131,45 @@ const initialAccounts: AccountNode[] = [
         balance: 25000,
         children: [
           {
-            code: "2110",
-            selCode: "132",
+            code: "2111",
+            selCode: "134",
             icon: <IconCreditCard />,
-            name: "Accounts Payable",
+            name: "Purchase Party",
             balance: 15000,
           },
           {
-            code: "2120",
-            selCode: "133",
+            code: "2112",
+            selCode: "135",
             icon: <IconCreditCard />,
-            name: "Accrued Expenses",
+            name: "Advance Exp.",
             balance: 10000,
           },
         ],
       },
       {
-        code: "2200",
-        selCode: "140",
-        name: "Long-term Liabilities",
+        code: "2130",
+        selCode: "136",
+        name: "Others",
         icon: <IconCreditCard />,
-        balance: 20000,
-        children: [
-          {
-            code: "2210",
-            selCode: "141",
-            icon: <IconCreditCard />,
-            name: "Bank Loan",
-            balance: 20000,
-          },
-        ],
+        balance: 0,
+        children: [],
       },
+      {
+        code: "2140",
+        selCode: "137",
+        name: "Salesman A/C",
+        icon: <IconCreditCard />,
+        balance: 0,
+        children: [],
+      },
+      {
+        code: "2150",
+        selCode: "138",
+        name: "Bismillah",
+        icon: <IconCreditCard />,
+        balance: 0,
+      },
+      // Removed: Long-term Liabilities, Other, Salesman A/C, Bismillah
     ],
   },
   {
@@ -161,25 +181,18 @@ const initialAccounts: AccountNode[] = [
     balance: 80000,
     children: [
       {
-        code: "3100",
-        selCode: "151",
+        code: "3101",
+        selCode: "153",
         icon: <IconCurrencyDollar />,
-        name: "Owner's Equity",
-        balance: 50000,
-      },
-      {
-        code: "3200",
-        selCode: "152",
-        icon: <IconCurrencyDollar />,
-        name: "Retained Earnings",
-        balance: 30000,
+        name: "Share Capital",
+        balance: 80000,
       },
     ],
   },
   {
     code: "4000",
     selCode: "160",
-    name: "Revenue",
+    name: "Income",
     icon: <IconChartBar />,
     type: "Revenue",
     balance: 150000,
@@ -188,22 +201,24 @@ const initialAccounts: AccountNode[] = [
         code: "4100",
         selCode: "161",
         icon: <IconChartBar />,
-        name: "Sales Revenue",
+        name: "SALES Controll A/c",
         balance: 100000,
-      },
-      {
-        code: "4200",
-        selCode: "162",
-        icon: <IconChartBar />,
-        name: "Service Revenue",
-        balance: 50000,
+        children: [
+          {
+            code: "4110",
+            selCode: "163",
+            icon: <IconChartBar />,
+            name: "Sales",
+            balance: 100000,
+          },
+        ],
       },
     ],
   },
   {
     code: "5000",
     selCode: "170",
-    name: "Expenses",
+    name: "Expense",
     icon: <IconArrowDown />,
     type: "Expense",
     balance: 95000,
@@ -211,98 +226,27 @@ const initialAccounts: AccountNode[] = [
       {
         code: "5100",
         selCode: "171",
-        name: "Operating Expenses",
+        name: "EXPENSES",
         icon: <IconArrowDown />,
-        balance: 70000,
-        children: [
-          {
-            code: "5110",
-            selCode: "172",
-            icon: <IconArrowDown />,
-            name: "Salaries & Wages",
-            balance: 40000,
-          },
-          {
-            code: "5120",
-            selCode: "173",
-            icon: <IconArrowDown />,
-            name: "Rent Expense",
-            balance: 20000,
-          },
-          {
-            code: "5130",
-            selCode: "174",
-            icon: <IconArrowDown />,
-            name: "Utilities",
-            balance: 10000,
-          },
-        ],
+        balance: 0,
       },
       {
         code: "5200",
-        selCode: "175",
-        name: "Administrative Expenses",
+        selCode: "172",
+        name: "Ware House Expenses",
         icon: <IconArrowDown />,
-        balance: 25000,
-        children: [
-          {
-            code: "5210",
-            selCode: "176",
-            icon: <IconArrowDown />,
-            name: "Office Supplies",
-            balance: 12000,
-          },
-          {
-            code: "5220",
-            selCode: "177",
-            icon: <IconArrowDown />,
-            name: "Professional Fees",
-            balance: 13000,
-          },
-        ],
+        balance: 0,
+      },
+      {
+        code: "5300",
+        selCode: "173",
+        name: "Cost of Goods",
+        icon: <IconArrowDown />,
+        balance: 0,
       },
     ],
   },
 ];
-
-function renderAccounts(
-  data: AccountNode[],
-  onEdit: (acc: AccountNode) => void,
-  onDelete: (code: string) => void,
-  level = 0
-): JSX.Element[] {
-  return data.flatMap((acc) => [
-    <div key={acc.code} style={{ marginLeft: level * 20 }}>
-      <Group justify="space-between" py={4}>
-        <Group>
-          <Text fw={level === 0 ? 600 : 400}>
-            {acc.name} ({acc.code})
-          </Text>
-        </Group>
-        <Group>
-          <Text fw={500}>${acc.balance.toLocaleString()}</Text>
-          <ActionIcon
-            variant="subtle"
-            color="#0A6802"
-            onClick={() => onEdit(acc)}
-          >
-            <IconEdit size={16} />
-          </ActionIcon>
-          <ActionIcon
-            variant="subtle"
-            color="red"
-            onClick={() => onDelete(acc.code)}
-          >
-            <IconTrash size={16} />
-          </ActionIcon>
-        </Group>
-      </Group>
-    </div>,
-    ...(acc.children
-      ? renderAccounts(acc.children, onEdit, onDelete, level + 1)
-      : []),
-  ]);
-}
 
 function flattenAccounts(
   nodes: AccountNode[],
@@ -380,22 +324,115 @@ function filterAccounts(
     .filter(Boolean) as AccountNode[];
 }
 
-export default function ChartOfAccounts() {
-  const [opened, setOpened] = useState(false);
-  const [accounts, setAccounts] = useState<AccountNode[]>(initialAccounts);
+function renderAccounts(
+  data: AccountNode[],
+  onEdit: (acc: AccountNode) => void,
+  onDelete: (code: string) => void,
+  expanded: Record<string, boolean>,
+  setExpanded: (exp: Record<string, boolean>) => void,
+  level = 0
+): JSX.Element[] {
+  return data.flatMap(function (acc) {
+    return [
+      <div key={acc.code} style={{ marginLeft: level * 20 }}>
+        <Group align="center" py={4} gap={8} style={{ width: "100%" }}>
+          {/* Expand/collapse arrow for accounts with children */}
+          {acc.children && acc.children.length > 0 && (
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => {
+                setExpanded({
+                  ...expanded,
+                  [acc.code]: !expanded[acc.code],
+                });
+              }}
+              size={24}
+            >
+              {expanded[acc.code] ? (
+                <IconArrowDown color="#0A6802" size={16} />
+              ) : (
+                <IconArrowDown
+                  style={{ transform: "rotate(-90deg)" }}
+                  size={16}
+                  color="#0A6802"
+                />
+              )}
+            </ActionIcon>
+          )}
+          {/* Show summary card icon for top-level accounts, else nothing */}
+          {level === 0 && (
+            <span style={{ marginRight: 8 }}>
+              {acc.type === "Asset" && (
+                <IconBuildingBank size={24} color="blue" />
+              )}
+              {acc.type === "Liability" && (
+                <IconCreditCard size={24} color="red" />
+              )}
+              {acc.type === "Equity" && <IconUsers size={24} color="#0A6802" />}
+              {acc.type === "Revenue" && (
+                <IconChartBar size={24} color="teal" />
+              )}
+              {acc.type === "Expense" && (
+                <IconCurrencyDollar size={24} color="orange" />
+              )}
+            </span>
+          )}
+          <Text fw={600} style={{ textTransform: "uppercase" }}>
+            {acc.name}
+          </Text>
+          <div style={{ flex: 1 }} />
+          {/* Edit and Delete icons */}
+          <ActionIcon
+            variant="subtle"
+            color="#0A6802"
+            onClick={() => onEdit(acc)}
+            title="Edit Account"
+          >
+            <IconEdit size={16} />
+          </ActionIcon>
+          <ActionIcon
+            variant="subtle"
+            color="red"
+            onClick={() => onDelete(acc.code)}
+            title="Delete Account"
+          >
+            <IconTrash size={16} />
+          </ActionIcon>
+        </Group>
+        {acc.children &&
+          expanded[acc.code] &&
+          renderAccounts(
+            acc.children,
+            onEdit,
+            onDelete,
+            expanded,
+            setExpanded,
+            level + 1
+          )}
+      </div>,
+    ];
+  });
+}
 
-  // modal form state
+export default function ChartOfAccounts() {
+  const { accounts, setAccounts, expanded, setExpanded } = useChartOfAccounts();
+  const [opened, setOpened] = useState(false);
+
+  // If accounts is empty, initialize with initialAccounts
+  if (accounts.length === 0) {
+    setAccounts(initialAccounts);
+  }
   const [accCode, setAccCode] = useState("");
   const [selCode, setSelCode] = useState("");
   const [accName, setAccName] = useState("");
   const [accType, setAccType] = useState<AccountType | null>(null);
   const [parentCode, setParentCode] = useState<string | null>(null);
   const [openingBalance, setOpeningBalance] = useState<string>("0");
-
   const [editing, setEditing] = useState<AccountNode | null>(null);
-
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<AccountType | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const parentOptions = flattenAccounts(accounts);
 
@@ -407,6 +444,7 @@ export default function ChartOfAccounts() {
       name: accName.trim(),
       type: accType ?? undefined,
       balance: isNaN(balanceNumber) ? 0 : balanceNumber,
+      // city: accCity || undefined,
     };
     if (!newNode.code || !newNode.name) return;
 
@@ -427,19 +465,32 @@ export default function ChartOfAccounts() {
 
   const handleEdit = (acc: AccountNode) => {
     setEditing(acc);
-    setSelCode(selCode);
+    setSelCode(acc.selCode);
     setAccCode(acc.code);
     setAccName(acc.name);
     setAccType(acc.type ?? null);
     setOpeningBalance(String(acc.balance));
+    // setAccCity(acc.city || "");
     setOpened(true);
   };
 
   const handleDelete = (code: string) => {
-    setAccounts((prev) => deleteAccount(prev, code));
+    setDeleteId(code);
+  };
+  const confirmDelete = () => {
+    if (deleteId) setAccounts((prev) => deleteAccount(prev, deleteId));
+    setDeleteId(null);
   };
 
   const filteredAccounts = filterAccounts(accounts, search, filterType);
+  // const filteredAccountsByCity = filterCity
+  //   ? filteredAccounts.filter(
+  //       (acc) =>
+  //         acc.city === filterCity ||
+  //         (acc.children &&
+  //           acc.children.some((child) => child.city === filterCity))
+  //     )
+  //   : filteredAccounts;
 
   return (
     <div className="p-6">
@@ -457,7 +508,6 @@ export default function ChartOfAccounts() {
           + Add Account
         </Button>
       </Group>
-
       <Group grow mb="xl">
         <Card withBorder padding="lg">
           <Group justify="space-between">
@@ -515,7 +565,6 @@ export default function ChartOfAccounts() {
           </Group>
         </Card>
       </Group>
-
       <Card withBorder padding="lg">
         <Stack>
           <Text fw={600}>Account Structure</Text>
@@ -532,18 +581,38 @@ export default function ChartOfAccounts() {
               onChange={(v) => setFilterType(v as AccountType)}
               clearable
             />
+            {/*
+            <Select
+              placeholder="Filter by city"
+              data={["Multan", "Faisalabad", "Lahore", "Karachi", "Rawalpindi"]}
+              value={filterCity}
+              onChange={setFilterCity}
+              clearable
+            />
+            */}
           </Group>
           <Divider />
           <ScrollArea h={400}>
-            {renderAccounts(filteredAccounts, handleEdit, handleDelete)}
+            {renderAccounts(
+              filteredAccounts,
+              handleEdit,
+              handleDelete,
+              expanded,
+              setExpanded
+            )}
           </ScrollArea>
         </Stack>
       </Card>
-
       <Modal
         opened={opened}
         onClose={() => setOpened(false)}
-        title={editing ? "Edit Account" : "Add New Account"}
+        title={
+          editing ? (
+            <strong>Edit Account</strong>
+          ) : (
+            <strong>Add New Account</strong>
+          )
+        }
         centered
         size="lg"
       >
@@ -553,7 +622,7 @@ export default function ChartOfAccounts() {
               label="Selected Code"
               placeholder="Selected Code"
               value={selCode}
-              onChange={(e) => setAccCode(e.currentTarget.value)}
+              onChange={(e) => setSelCode(e.currentTarget.value)}
               disabled={!!editing}
             />
             <TextInput
@@ -566,7 +635,6 @@ export default function ChartOfAccounts() {
           </Group>
           <Group grow>
             <TextInput label="Level" placeholder="Level" />
-
             <TextInput
               label="Account Name"
               placeholder="Title"
@@ -598,22 +666,22 @@ export default function ChartOfAccounts() {
               data={["Group", "Detail"]}
               defaultValue={"Group"}
             />
-            <Checkbox
-              label="Is Party"
-              color="#0A6802"
-              labelPosition="left"
-              size="md"
-              mt={25}
+            {/*
+            <Select
+              label="City"
+              placeholder="Select city"
+              data={["Multan", "Faisalabad", "Lahore", "Karachi", "Rawalpindi"]}
+              value={accCity}
+              onChange={(v) => setAccCity(v || "")}
             />
+            */}
           </Group>
-
-          {/* <TextInput
-            label="Opening Balance"
-            type="number"
-            step="0.01"
-            value={openingBalance}
-            onChange={(e) => setOpeningBalance(e.currentTarget.value)}
-          /> */}
+          <Checkbox
+            label="Is Party"
+            color="#0A6802"
+            labelPosition="left"
+            size="md"
+          />
           <Group grow>
             <TextInput label="Address" placeholder="Address" />
             <TextInput label="Phone No" placeholder="Phone No" type="number" />
@@ -632,6 +700,22 @@ export default function ChartOfAccounts() {
             </Button>
           </Group>
         </Stack>
+      </Modal>
+      <Modal
+        opened={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        title={<strong>Delete Account</strong>}
+        centered
+      >
+        <Text mb="md">Are you sure you want to delete this account?</Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={() => setDeleteId(null)}>
+            Cancel
+          </Button>
+          <Button color="red" onClick={confirmDelete}>
+            Delete
+          </Button>
+        </Group>
       </Modal>
     </div>
   );

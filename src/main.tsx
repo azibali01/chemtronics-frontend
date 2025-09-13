@@ -13,6 +13,8 @@ import { DeliveryChallanProvider } from "./Dashboard/Context/Invoicing/DeliveryC
 import { CreditSalesProvider } from "./Dashboard/Context/Invoicing/CreditSalesContext.tsx";
 import { SaleReturnsProvider } from "./Dashboard/Context/Invoicing/SaleReturnsContext.tsx";
 import { JournalVouchersProvider } from "./Dashboard/Context/Accounts/JournalVouchersContext.tsx"; // <-- Add this import
+import { ChartOfAccountsProvider } from "./Dashboard/Context/ChartOfAccountsContext";
+import { DashboardHomeProvider } from "./Dashboard/Context/DashboardHomeContext";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -28,7 +30,11 @@ createRoot(document.getElementById("root")!).render(
                       <CreditSalesProvider>
                         <SaleReturnsProvider>
                           <JournalVouchersProvider>
-                            <RouterProvider />
+                            <ChartOfAccountsProvider>
+                              <DashboardHomeProvider>
+                                <RouterProvider />
+                              </DashboardHomeProvider>
+                            </ChartOfAccountsProvider>
                           </JournalVouchersProvider>
                         </SaleReturnsProvider>
                       </CreditSalesProvider>

@@ -13,9 +13,8 @@ import {
 } from "@mantine/core";
 import { Download, Edit, Trash2, Plus } from "lucide-react";
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import { useReactToPrint } from "react-to-print";
-import type { RowInput } from "jspdf-autotable";
+import autoTable, { type RowInput } from "jspdf-autotable";
+
 import {
   JournalVouchersProvider,
   useJournalVouchers,
@@ -212,6 +211,39 @@ function JournalVoucherList() {
     setOpenedEdit(false);
   };
 
+  function PrintableVoucherContent(voucher: any) {
+    return `
+      <html>
+        <head>
+          <title>Journal Voucher ${voucher.number}</title>
+          <style>
+            body { font-family: Arial; color: #222; padding: 24px; }
+            h2 { margin-bottom: 8px; }
+            p { margin: 4px 0; }
+          </style>
+        </head>
+        <body>
+          <h2>Journal Voucher #${voucher.number}</h2>
+          <p>Date: ${voucher.date}</p>
+          <p>Account: ${voucher.accountTitle}</p>
+          <p>Amount: $${voucher.amount?.toFixed(2)}</p>
+          <!-- Add more details as needed -->
+        </body>
+      </html>
+    `;
+  }
+
+  const printVoucherWindow = (voucher: any) => {
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(PrintableVoucherContent(voucher));
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 300);
+    }
+  };
+
   return (
     <div className="p-6">
       <Group justify="space-between" mb="md">
@@ -406,10 +438,6 @@ function VoucherForm({
   );
 
   const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useReactToPrint({
-    content: () => printRef.current,
-    documentTitle: voucher.voucherNo || "Journal Voucher",
-  });
 
   const handleChange = (
     field: keyof JournalVoucher,
@@ -418,6 +446,38 @@ function VoucherForm({
     setVoucher((prev) => ({ ...prev, [field]: value }));
   };
 
+  function printVoucherWindow(voucher: JournalVoucher): void {
+    const printContent = `
+      <html>
+        <head>
+          <title>Journal Voucher ${voucher.voucherNo}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #222; padding: 24px; }
+            h2 { margin-bottom: 8px; }
+            p { margin: 4px 0; }
+          </style>
+        </head>
+        <body>
+          <h2>Journal Voucher</h2>
+          <p><strong>Voucher No:</strong> ${voucher.voucherNo}</p>
+          <p><strong>Date:</strong> ${voucher.date}</p>
+          <p><strong>Account:</strong> ${voucher.account}</p>
+          <p><strong>Title:</strong> ${voucher.title}</p>
+          <p><strong>Debit:</strong> ₹${voucher.debit.toLocaleString()}</p>
+          <p><strong>Credit:</strong> ₹${voucher.credit.toLocaleString()}</p>
+          <p><strong>Description:</strong> ${voucher.description}</p>
+        </body>
+      </html>
+    `;
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 300);
+    }
+  }
   return (
     <form
       onSubmit={(e) => {
@@ -516,7 +576,11 @@ function VoucherForm({
       />
 
       <Group justify="flex-end" mt="md">
-        <Button color="#819E00" variant="outline" onClick={handlePrint}>
+        <Button
+          color="#819E00"
+          variant="outline"
+          onClick={() => printVoucherWindow(voucher)}
+        >
           Print
         </Button>
         <Button type="submit" color="#0A6802">

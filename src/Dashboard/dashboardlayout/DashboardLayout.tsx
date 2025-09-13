@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { Children, useState, type ReactNode } from "react";
 import {
   AppShell,
   ScrollArea,
@@ -41,7 +41,17 @@ type MenuItem = {
 };
 
 const menuItems: MenuItem[] = [
-  { label: "Dashboard", icon: <IconHome size={18} /> },
+  {
+    label: "Dashboard",
+    icon: <IconHome size={18} />,
+    children: [
+      {
+        label: "Dashboard Home",
+        path: "/dashboard/dashboard-home",
+        icon: <IconArrowRight size={16} />,
+      },
+    ],
+  },
   {
     label: "Company & Users",
     icon: <IconBuildingSkyscraper size={18} />,

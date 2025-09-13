@@ -28,7 +28,6 @@ import {
 } from "@tabler/icons-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { useReactToPrint } from "react-to-print";
 import {
   DeliveryChallanProvider,
   useDeliveryChallan,
@@ -61,16 +60,6 @@ function DeliveryChallansInner() {
   // Only one set of refs and handlers!
   const printRef = useRef<HTMLDivElement>(null);
   const modalPrintRef = useRef<HTMLDivElement>(null);
-
-  const handlePrint = useReactToPrint({
-    content: () => printRef.current,
-    documentTitle: "Delivery Challans List",
-  });
-
-  const handleModalPrint = useReactToPrint({
-    content: () => modalPrintRef.current,
-    documentTitle: "Delivery Challan",
-  });
 
   // Filtered Data
   const filteredData = useMemo(
@@ -617,6 +606,39 @@ function DeliveryChallansInner() {
     doc.save("delivery_challans.pdf");
   };
 
+  function PrintableChallanContent(challan: any) {
+    return `
+    <html>
+      <head>
+        <title>Delivery Challan ${challan.number}</title>
+        <style>
+          body { font-family: Arial; color: #222; padding: 24px; }
+          h2 { margin-bottom: 8px; }
+          p { margin: 4px 0; }
+        </style>
+      </head>
+      <body>
+        <h2>Delivery Challan #${challan.number}</h2>
+        <p>Date: ${challan.date}</p>
+        <p>Account: ${challan.accountTitle}</p>
+        <p>Amount: $${challan.amount?.toFixed(2)}</p>
+        <!-- Add more details as needed -->
+      </body>
+    </html>
+  `;
+  }
+
+  const printChallanWindow = (challan: any) => {
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(PrintableChallanContent(challan));
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 300);
+    }
+  };
+
   return (
     <div>
       <Group justify="space-between" mb="md">
@@ -713,7 +735,11 @@ function DeliveryChallansInner() {
             style={{ minWidth: 140 }}
           />
           <Group mt={24} gap="xs">
-            <Button variant="outline" color="#0A6802" onClick={handlePrint}>
+            <Button
+              variant="outline"
+              color="#0A6802"
+              onClick={printChallanWindow}
+            >
               Print
             </Button>
             <Button
@@ -936,75 +962,18 @@ function DeliveryChallansInner() {
                 <Table.Th>SR</Table.Th>
                 <Table.Th>Item Code</Table.Th>
                 <Table.Th style={{ minWidth: 180 }}>Particulars</Table.Th>
-                <Table.Th>Unit</Table.Th>
-                <Table.Th>Length</Table.Th>
-                <Table.Th>Width</Table.Th>
-                <Table.Th>Qty</Table.Th>
-                <Table.Th>Action</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {items.map((item, idx) => (
                 <Table.Tr key={idx}>
                   <Table.Td>{item.sr}</Table.Td>
-                  <Table.Td>
-                    <TextInput
-                      value={item.itemCode}
-                      onChange={(e) =>
-                        handleItemChange(idx, "itemCode", e.currentTarget.value)
-                      }
-                      size="xs"
-                    />
-                  </Table.Td>
-                  <Table.Td style={{ minWidth: 180 }}>
-                    <TextInput
-                      value={item.particulars}
-                      onChange={(e) =>
-                        handleItemChange(
-                          idx,
-                          "particulars",
-                          e.currentTarget.value
-                        )
-                      }
-                      size="xs"
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <TextInput
-                      value={item.unit}
-                      onChange={(e) =>
-                        handleItemChange(idx, "unit", e.currentTarget.value)
-                      }
-                      size="xs"
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <TextInput
-                      value={item.length}
-                      onChange={(e) =>
-                        handleItemChange(idx, "length", e.currentTarget.value)
-                      }
-                      size="xs"
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <TextInput
-                      value={item.width}
-                      onChange={(e) =>
-                        handleItemChange(idx, "width", e.currentTarget.value)
-                      }
-                      size="xs"
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <TextInput
-                      value={item.qty}
-                      onChange={(e) =>
-                        handleItemChange(idx, "qty", e.currentTarget.value)
-                      }
-                      size="xs"
-                    />
-                  </Table.Td>
+                  <Table.Td>{item.itemCode}</Table.Td>
+                  <Table.Td>{item.particulars}</Table.Td>
+                  <Table.Td>{item.unit}</Table.Td>
+                  <Table.Td>{item.length}</Table.Td>
+                  <Table.Td>{item.width}</Table.Td>
+                  <Table.Td>{item.qty}</Table.Td>
                   <Table.Td>
                     <ActionIcon
                       color="red"
@@ -1019,56 +988,7 @@ function DeliveryChallansInner() {
             </Table.Tbody>
           </Table>
         )}
-
-        <Group grow mb="md">
-          <Select
-            label="Status"
-            data={["Delivered", "In Transit", "Pending"]}
-            value={status}
-            onChange={(val) =>
-              setStatus((val || "Pending") as DeliveryChallan["status"])
-            }
-          />
-        </Group>
-        {/* Modal action buttons */}
-        <Group justify="flex-end" mt="md">
-          <Button variant="outline" color="#0A6802" onClick={handleModalPrint}>
-            Print
-          </Button>
-          <Button variant="default" onClick={() => setOpened(false)}>
-            Cancel
-          </Button>
-          <Button color="#0A6802" onClick={handleSave}>
-            {editData ? "Update Challan" : "Create Challan"}
-          </Button>
-        </Group>
-      </Modal>
-
-      <Modal
-        opened={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        title={<strong>Delete Delivery Challan</strong>}
-        centered
-      >
-        <Text mb="md">Are you sure you want to delete this record?</Text>
-        <Group justify="flex-end">
-          <Button variant="default" onClick={() => setDeleteId(null)}>
-            Cancel
-          </Button>
-          <Button color="red" onClick={confirmDelete}>
-            Delete
-          </Button>
-        </Group>
       </Modal>
     </div>
-  );
-}
-
-// Wrap with context provider
-export default function DeliveryChallans() {
-  return (
-    <DeliveryChallanProvider>
-      <DeliveryChallansInner />
-    </DeliveryChallanProvider>
   );
 }

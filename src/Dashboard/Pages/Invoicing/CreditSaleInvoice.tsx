@@ -20,7 +20,6 @@ import {
 import { useState, useRef } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { useReactToPrint } from "react-to-print";
 import {
   CreditSalesProvider,
   useCreditSales,
@@ -377,11 +376,38 @@ function CreditSaleInvoiceInner() {
     setItems([]);
   };
 
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useReactToPrint({
-    content: () => printRef.current,
-    documentTitle: invoiceNumber || "Credit Sale Invoice",
-  } as any);
+  const printCreditInvoiceWindow = (invoice: any) => {
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(PrintableCreditInvoiceContent(invoice));
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 300);
+    }
+  };
+
+  function PrintableCreditInvoiceContent(invoice: any) {
+    return `
+      <html>
+        <head>
+          <title>Credit Sale Invoice ${invoice.number}</title>
+          <style>
+            body { font-family: Arial; color: #222; padding: 24px; }
+            h2 { margin-bottom: 8px; }
+            p { margin: 4px 0; }
+          </style>
+        </head>
+        <body>
+          <h2>Credit Sale Invoice #${invoice.number}</h2>
+          <p>Date: ${invoice.date}</p>
+          <p>Account: ${invoice.accountTitle}</p>
+          <p>Amount: $${invoice.amount?.toFixed(2)}</p>
+          <!-- Add more details as needed -->
+        </body>
+      </html>
+    `;
+  }
 
   return (
     <div>
@@ -604,7 +630,7 @@ function CreditSaleInvoiceInner() {
         centered
         size="70%"
       >
-        <div ref={printRef}>
+        <div ref={useRef(null)}>
           <form>
             <Group grow mb="md" w={"50%"}>
               <TextInput
@@ -783,7 +809,7 @@ function CreditSaleInvoiceInner() {
           Add Item
         </Button>
         <Group justify="flex-end" mt="md">
-          <Button color="#0A6802" onClick={handlePrint}>
+          <Button color="#0A6802" onClick={printCreditInvoiceWindow}>
             Print
           </Button>
           <Button variant="default" onClick={() => setOpened(false)}>

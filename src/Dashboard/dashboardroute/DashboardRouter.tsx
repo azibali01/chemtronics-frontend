@@ -23,11 +23,16 @@ import TrialBalance from "../Pages/Ledger&Reports/TrialBalance";
 import JournalVouchers from "../Pages/Accounts/JournalVouchers";
 import GSTInvoices from "../Pages/Tax & Invoices/GstInvoices";
 import Analytics from "../Pages/Analytics/Analytics";
+import DashboardHome from "../Pages/DashboardHome";
 const routes: RouteObject[] = [
   {
     path: "/dashboard",
     element: <DashboardLayout />,
     children: [
+      {
+        path: "dashboard-home",
+        element: <DashboardHome />,
+      },
       {
         path: "manage-companies",
         element: <ManageCompanies />,
