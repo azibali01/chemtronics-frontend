@@ -7,6 +7,8 @@ type ReturnItem = {
   amount: number;
   code: string;
   unit: string;
+  discount?: number; // <-- Add this line
+  netAmount?: number; // <-- Add this line
 };
 
 type ReturnEntry = {

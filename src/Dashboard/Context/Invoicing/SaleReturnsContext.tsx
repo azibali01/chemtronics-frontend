@@ -4,14 +4,18 @@ export type SaleReturnItem = {
   code: string;
   productName: string;
   description: string;
-  unit: string; // Add if not present
+  unit: string;
   quantity: number;
   rate: number;
   amount: number;
-  reason: string;
+  discount?: number; // <-- Add this line
+  netAmount?: number; // <-- Add this line
 };
 
 export type SaleReturn = {
+  number: string;
+  accountTitle: string; // Replace 'any' with 'string' or a specific type
+  amount: number;
   id: string;
   date: string;
   customer: string;

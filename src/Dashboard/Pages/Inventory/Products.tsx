@@ -35,10 +35,9 @@ import { useMemo, useEffect } from "react";
 import { notifications } from "@mantine/notifications";
 import {
   ProductsProvider,
-  useProducts,
   type Product,
 } from "../../Context/Inventory/ProductsContext";
-
+import { useProducts } from "../../Context/Inventory/ProductsContext";
 const money = (n: number) =>
   `${n.toLocaleString(undefined, {
     minimumFractionDigits: 2,

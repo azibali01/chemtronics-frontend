@@ -26,12 +26,12 @@ import autoTable from "jspdf-autotable";
 import {
   SaleReturnsProvider,
   useSaleReturns,
+} from "../../Context/Invoicing/SaleReturnsContext";
+import {
   type SaleReturn,
   type SaleReturnItem,
 } from "../../Context/Invoicing/SaleReturnsContext";
-
-// Fix: Add missing 'unit' property to SaleReturnItem type if not present in context
-// If your context does not have 'unit', add it there as well.
+import { useProducts } from "../../Context/Inventory/ProductsContext";
 
 function SaleReturnsInner() {
   const { returns, addReturn, updateReturn, deleteReturn } = useSaleReturns();
@@ -55,6 +55,20 @@ function SaleReturnsInner() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
 
+  // Get products from inventory context
+  const { products = [] } = useProducts();
+
+  // Prepare dropdown options for code and product name
+  const productCodeOptions = products.map((p: { code: string }) => ({
+    value: p.code,
+    label: p.code,
+  }));
+
+  const productNameOptions = products.map((p: { name: string }) => ({
+    value: p.name,
+    label: p.name,
+  }));
+
   const filteredData = useMemo(() => {
     const q = search.trim().toLowerCase();
     return returns.filter((d) => {
@@ -71,7 +85,7 @@ function SaleReturnsInner() {
     return filteredData.slice(start, start + pageSize);
   }, [filteredData, page, pageSize]);
 
-  // PDF Export
+  // PDF Export: remove reason, add Discount and Net Amount columns
   const exportPDF = (row: SaleReturn) => {
     const doc = new jsPDF("p", "pt", "a4");
     const companyName = "Chemtronix Engineering Solutions";
@@ -105,7 +119,8 @@ function SaleReturnsInner() {
           "Quantity",
           "Rate",
           "Amount",
-          "Reason",
+          "Discount (%)",
+          "Net Amount",
         ],
       ],
       body:
@@ -114,13 +129,15 @@ function SaleReturnsInner() {
               item.code,
               item.productName,
               item.description,
-              item.unit ?? "-", // Fix: handle missing unit
+              item.unit ?? "-",
               item.quantity,
               item.rate,
               item.amount,
-              item.reason,
+              item.discount ?? 0,
+              (item.amount ?? 0) -
+                ((item.amount ?? 0) * (item.discount ?? 0)) / 100,
             ])
-          : [["-", "-", "-", "-", "-", "-", "-", "-"]],
+          : [["-", "-", "-", "-", "-", "-", "-", "-", "-"]],
       styles: { fontSize: 10 },
       headStyles: { fillColor: [10, 104, 2] },
       theme: "grid",
@@ -270,6 +287,8 @@ function SaleReturnsInner() {
   const openCreate = () => {
     setEditData(null);
     resetForm();
+    setInvoiceNumber(getNextInvoiceNumber(returns)); // auto-generate invoice #
+    setDate(new Date().toISOString().slice(0, 10)); // auto-set today's date
     setOpened(true);
   };
 
@@ -293,7 +312,10 @@ function SaleReturnsInner() {
     const normalized = items.map((i) => {
       const qty = Number(i.quantity) || 0;
       const rate = Number(i.rate) || 0;
-      return { ...i, quantity: qty, rate, amount: qty * rate };
+      const amount = qty * rate;
+      const discount = Number(i.discount) || 0;
+      const netAmount = amount - (amount * discount) / 100;
+      return { ...i, quantity: qty, rate, amount, discount, netAmount };
     });
 
     if (editData) {
@@ -320,6 +342,9 @@ function SaleReturnsInner() {
         date,
         items: normalized,
         notes,
+        number: "",
+        accountTitle: "",
+        amount: 0,
       };
       addReturn(newReturn);
     }
@@ -346,7 +371,7 @@ function SaleReturnsInner() {
     setNotes("");
   };
 
-  function PrintableInvoiceContent(invoice: any) {
+  function PrintableInvoiceContent(invoice: SaleReturn) {
     return `
     <html>
       <head>
@@ -368,7 +393,7 @@ function SaleReturnsInner() {
   `;
   }
 
-  const printInvoiceWindow = (invoice: any) => {
+  const printInvoiceWindow = (invoice: SaleReturn) => {
     const printWindow = window.open("", "_blank", "width=800,height=600");
     if (printWindow) {
       printWindow.document.open();
@@ -378,6 +403,14 @@ function SaleReturnsInner() {
       setTimeout(() => printWindow.print(), 300);
     }
   };
+
+  // Calculate net total for all items (sum of net amounts after discount)
+  const netTotal = items.reduce(
+    (sum, item) =>
+      sum +
+      ((item.amount ?? 0) - ((item.amount ?? 0) * (item.discount ?? 0)) / 100),
+    0
+  );
 
   return (
     <div>
@@ -504,6 +537,13 @@ function SaleReturnsInner() {
                     >
                       <IconDownload size={16} />
                     </ActionIcon>
+                    <ActionIcon
+                      variant="light"
+                      color="#819E00"
+                      onClick={() => printInvoiceWindow(row)}
+                    >
+                      <IconDownload size={16} />
+                    </ActionIcon>
                   </Group>
                 </Table.Td>
               </Table.Tr>
@@ -542,6 +582,7 @@ function SaleReturnsInner() {
               placeholder="Enter invoice number"
               value={invoiceNumber}
               onChange={(e) => setInvoiceNumber(e.currentTarget.value)}
+              readOnly
             />
             <TextInput
               label="Invoice Date"
@@ -563,17 +604,21 @@ function SaleReturnsInner() {
               value={customerTitle}
               onChange={(value) => setCustomerTitle(value || "")}
             />
-            <TextInput
-              label="Sale Account"
-              placeholder="Enter sale account"
-              value={saleAccount}
-              onChange={(e) => setSaleAccount(e.currentTarget.value)}
-            />
             <Select
+              label="Sale Account"
+              placeholder="Select sale account"
+              data={saleAccountOptions}
+              value={saleAccount}
+              onChange={(value) => {
+                setSaleAccount(value || "");
+                setSaleTitle(saleAccountTitleMap[value || ""] || "");
+              }}
+            />
+            <TextInput
               label="Sale Title"
-              placeholder="Enter sale title"
+              placeholder="Sale title"
               value={saleTitle}
-              onChange={(value) => setSaleTitle(value || "")}
+              readOnly
             />
             <Select
               label="Salesman"
@@ -583,29 +628,52 @@ function SaleReturnsInner() {
             />
           </Group>
           <Card withBorder mb="md" p="md">
-            <Text fw={600} mb="sm">
-              Return Items
-            </Text>
-
+            <Group justify="space-between" align="center" mb="sm">
+              <Text fw={600}>Return Items</Text>
+              <Button
+                color="#0A6802"
+                onClick={() =>
+                  setItems([
+                    ...items,
+                    {
+                      code: "",
+                      productName: "",
+                      description: "",
+                      unit: "",
+                      quantity: 0,
+                      rate: 0,
+                      amount: 0,
+                      discount: 0,
+                      netAmount: 0,
+                    },
+                  ])
+                }
+                style={{ minWidth: 20, padding: "0 10px" }}
+              >
+                + Add Item
+              </Button>
+            </Group>
             {items.map((item, idx) => (
               <Group key={idx} grow mb="xs" align="end">
-                <TextInput
+                <Select
                   label="Code"
-                  placeholder="Code"
+                  placeholder="Select product code"
+                  data={productCodeOptions}
                   value={item.code}
-                  onChange={(e) => {
+                  onChange={(val) => {
                     const next = [...items];
-                    next[idx].code = e.currentTarget.value;
+                    next[idx].code = val ?? "";
                     setItems(next);
                   }}
                 />
-                <TextInput
+                <Select
                   label="Product Name"
-                  placeholder="Product Name"
+                  placeholder="Select product name"
+                  data={productNameOptions}
                   value={item.productName}
-                  onChange={(e) => {
+                  onChange={(val) => {
                     const next = [...items];
-                    next[idx].productName = e.currentTarget.value;
+                    next[idx].productName = val ?? "";
                     setItems(next);
                   }}
                 />
@@ -637,6 +705,10 @@ function SaleReturnsInner() {
                     const next = [...items];
                     next[idx].quantity = Number(val) || 0;
                     next[idx].amount = next[idx].quantity * next[idx].rate;
+                    next[idx].netAmount =
+                      (next[idx].amount ?? 0) -
+                      ((next[idx].amount ?? 0) * (next[idx].discount ?? 0)) /
+                        100;
                     setItems(next);
                   }}
                   min={0}
@@ -649,6 +721,10 @@ function SaleReturnsInner() {
                     const next = [...items];
                     next[idx].rate = Number(val) || 0;
                     next[idx].amount = next[idx].quantity * next[idx].rate;
+                    next[idx].netAmount =
+                      (next[idx].amount ?? 0) -
+                      ((next[idx].amount ?? 0) * (next[idx].discount ?? 0)) /
+                        100;
                     setItems(next);
                   }}
                   min={0}
@@ -659,78 +735,95 @@ function SaleReturnsInner() {
                   value={item.amount}
                   readOnly
                 />
-                <TextInput
-                  label="Reason"
-                  placeholder="Reason"
-                  value={item.reason || ""}
-                  onChange={(e) => {
+                <NumberInput
+                  label="Discount (%)"
+                  placeholder="Discount %"
+                  value={item.discount ?? 0}
+                  onChange={(val) => {
                     const next = [...items];
-                    next[idx].reason = e.currentTarget.value;
+                    next[idx].discount = Number(val) || 0;
+                    next[idx].netAmount =
+                      (next[idx].amount ?? 0) -
+                      ((next[idx].amount ?? 0) * (next[idx].discount ?? 0)) /
+                        100;
                     setItems(next);
                   }}
+                  min={0}
+                  max={100}
+                />
+                <NumberInput
+                  label="Net Amount"
+                  placeholder="Net Amount"
+                  value={
+                    (item.amount ?? 0) -
+                    ((item.amount ?? 0) * (item.discount ?? 0)) / 100
+                  }
+                  readOnly
                 />
                 <Button
                   variant="light"
                   color="red"
                   onClick={() => setItems(items.filter((_, i) => i !== idx))}
                 >
-                  Remove
+                  <IconTrash size={16} />
                 </Button>
               </Group>
             ))}
-
-            <Button
-              w={"5%"}
-              mt="xs"
-              color="#0A6802"
-              onClick={() =>
-                setItems([
-                  ...items,
-                  {
-                    code: "",
-                    productName: "",
-                    description: "",
-                    unit: "",
-                    quantity: 0,
-                    rate: 0,
-                    amount: 0,
-                    reason: "",
-                  },
-                ])
-              }
-            >
-              + Add Item
-            </Button>
+            <Group mt="md" justify="flex-start">
+              <Text fw={600} size="md" c="#000000ff">
+                Net Total: {netTotal.toFixed(2)}
+              </Text>
+            </Group>
           </Card>
-
           <Textarea
             label="Notes"
             placeholder="Additional notes..."
             value={notes}
             onChange={(e) => setNotes(e.currentTarget.value)}
+            mt="md"
           />
+          <Group justify="flex-end" mt="md">
+            <Button color="#819E00" onClick={handleSave}>
+              {editData ? "Save Changes" : "Create"}
+            </Button>
+            <Button variant="default" onClick={() => setOpened(false)}>
+              Cancel
+            </Button>
+            <Button
+              color="#0A6802"
+              onClick={() =>
+                printInvoiceWindow({
+                  id: invoiceNumber,
+                  customer,
+                  customerTitle,
+                  saleAccount,
+                  saleTitle,
+                  salesman,
+                  date,
+                  items,
+                  notes,
+                  number: "",
+                  accountTitle: "",
+                  amount: netTotal,
+                })
+              }
+            >
+              Print
+            </Button>
+          </Group>
         </div>
-        <Group justify="flex-end" mt="md">
-          <Button color="#0A6802" onClick={() => printInvoiceWindow({})}>
-            Print
-          </Button>
-          <Button variant="default" onClick={() => setOpened(false)}>
-            Cancel
-          </Button>
-          <Button color="#0A6802" onClick={handleSave}>
-            {editData ? "Update Return" : "Create Return"}
-          </Button>
-        </Group>
       </Modal>
 
       <Modal
         opened={!!deleteId}
         onClose={() => setDeleteId(null)}
-        title={<strong>Delete Sale Return</strong>}
+        title="Confirm Delete"
         centered
       >
-        <Text mb="md">Are you sure you want to delete this record?</Text>
-        <Group justify="flex-end">
+        <Text>
+          Are you sure you want to delete sale return <b>{deleteId}</b>?
+        </Text>
+        <Group mt="md" justify="flex-end">
           <Button variant="default" onClick={() => setDeleteId(null)}>
             Cancel
           </Button>
@@ -743,10 +836,37 @@ function SaleReturnsInner() {
   );
 }
 
-export default function SaleReturns() {
+export default function SaleReturnsPage() {
   return (
     <SaleReturnsProvider>
       <SaleReturnsInner />
     </SaleReturnsProvider>
   );
 }
+
+function getNextInvoiceNumber(returns: SaleReturn[]) {
+  const numbers = returns
+    .map((r) => {
+      const match = r.id.match(/^SR-(\d+)$/);
+      return match ? parseInt(match[1], 10) : null;
+    })
+    .filter((n) => n !== null) as number[];
+  const max = numbers.length ? Math.max(...numbers) : 0;
+  const next = max + 1;
+  return `SR-${next.toString().padStart(3, "0")}`;
+}
+
+// Sale Account mapping
+const saleAccountTitleMap: Record<string, string> = {
+  "4111": "Sales Of Chemicals",
+  "4112": "Sale Of Equipments",
+  "4113": "Services",
+  "4114": "Sale Of Chemicals and Equipments",
+};
+
+const saleAccountOptions = Object.entries(saleAccountTitleMap).map(
+  ([code, title]) => ({
+    value: code,
+    label: `${code} - ${title}`,
+  })
+);

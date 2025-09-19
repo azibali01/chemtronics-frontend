@@ -40,6 +40,8 @@ interface ReturnItem {
   amount: number;
   code: string;
   unit: string;
+  discount?: number; // always a number, never undefined
+  netAmount?: number;
 }
 
 interface ReturnEntry {
@@ -91,7 +93,16 @@ export default function PurchaseReturnModal() {
   const [toDate, setToDate] = useState("");
 
   const [items, setItems] = useState<ReturnItem[]>([
-    { product: "", quantity: 0, rate: 0, amount: 0, code: "", unit: "" },
+    {
+      product: "",
+      quantity: 0,
+      rate: 0,
+      amount: 0,
+      code: "",
+      unit: "",
+      discount: 0,
+      netAmount: 0,
+    },
   ]);
 
   const [editingReturn, setEditingReturn] = useState<ReturnEntry | null>(null);
@@ -106,7 +117,16 @@ export default function PurchaseReturnModal() {
   const addItem = () => {
     setItems((prev) => [
       ...prev,
-      { product: "", quantity: 0, rate: 0, amount: 0, code: "", unit: "" },
+      {
+        product: "",
+        quantity: 0,
+        rate: 0,
+        amount: 0,
+        code: "",
+        unit: "",
+        discount: 0,
+        netAmount: 0,
+      },
     ]);
   };
 
@@ -123,23 +143,18 @@ export default function PurchaseReturnModal() {
       const newItems = [...prev];
       const item = { ...newItems[index] };
 
-      if (field === "product" && typeof value === "string") {
+      if (field === "product" && typeof value === "string")
         item.product = value;
-      }
-      if (field === "quantity" && typeof value === "number") {
+      if (field === "quantity" && typeof value === "number")
         item.quantity = value;
-      }
-      if (field === "rate" && typeof value === "number") {
-        item.rate = value;
-      }
-      if (field === "code" && typeof value === "string") {
-        item.code = value;
-      }
-      if (field === "unit" && typeof value === "string") {
-        item.unit = value;
-      }
+      if (field === "rate" && typeof value === "number") item.rate = value;
+      if (field === "code" && typeof value === "string") item.code = value;
+      if (field === "unit" && typeof value === "string") item.unit = value;
+      if (field === "discount" && typeof value === "number")
+        item.discount = value;
 
       item.amount = item.quantity * item.rate;
+      item.netAmount = item.amount - (item.amount * (item.discount ?? 0)) / 100;
 
       newItems[index] = item;
       return newItems;
@@ -186,6 +201,8 @@ export default function PurchaseReturnModal() {
       quantity: item.quantity || 0,
       rate: item.rate || 0,
       amount: item.amount || 0,
+      discount: typeof item.discount === "number" ? item.discount : 0,
+      netAmount: typeof item.netAmount === "number" ? item.netAmount : 0,
     }));
     setItems(itemsWithAllFields);
     setEditOpened(true);
@@ -393,7 +410,16 @@ export default function PurchaseReturnModal() {
     setPurchaseTitle("");
     setNotes("");
     setItems([
-      { product: "", quantity: 0, rate: 0, amount: 0, code: "", unit: "" },
+      {
+        product: "",
+        quantity: 0,
+        rate: 0,
+        amount: 0,
+        code: "",
+        unit: "",
+        discount: 0,
+        netAmount: 0,
+      },
     ]);
     setOpened(true);
   };
@@ -440,6 +466,8 @@ export default function PurchaseReturnModal() {
       setCurrentReturnForPrint(null);
     }, 100);
   };
+
+  const netTotal = items.reduce((sum, item) => sum + (item.netAmount ?? 0), 0);
 
   return (
     <div>
@@ -704,6 +732,7 @@ export default function PurchaseReturnModal() {
           removeItem={removeItem}
           productCodeOptions={productCodeOptions}
           productNameOptions={productNameOptions}
+          netTotal={netTotal} // <-- Add this line
         />
         <Group justify="flex-end" mt="lg">
           <Button
@@ -792,6 +821,7 @@ export default function PurchaseReturnModal() {
           removeItem={removeItem}
           productCodeOptions={productCodeOptions}
           productNameOptions={productNameOptions}
+          netTotal={0}
         />
 
         <Group justify="flex-end" mt="lg">
@@ -913,6 +943,7 @@ interface ReturnFormProps {
   removeItem: (index: number) => void;
   productCodeOptions: { value: string; label: string }[];
   productNameOptions: { value: string; label: string }[];
+  netTotal: number; // <-- Add this line
 }
 
 function ReturnForm({
@@ -924,6 +955,7 @@ function ReturnForm({
   removeItem,
   productCodeOptions,
   productNameOptions,
+  netTotal, // <-- Add this line
 }: ReturnFormProps) {
   return (
     <>
@@ -968,6 +1000,18 @@ function ReturnForm({
               value={item.amount}
               readOnly
             />
+            <NumberInput
+              label="Discount (%)"
+              placeholder="Discount"
+              value={item.discount}
+              onChange={(val) => updateItem(index, "discount", val ?? 0)}
+            />
+            <NumberInput
+              label="Net Amount"
+              placeholder="Net Amount"
+              value={item.netAmount}
+              readOnly
+            />
             <ActionIcon mt={20} color="#0A6802" onClick={addItem}>
               <IconPlus size={16} />
             </ActionIcon>
@@ -979,6 +1023,13 @@ function ReturnForm({
           </Group>
         ))}
       </div>
+
+      {/* Net Total above Notes */}
+      <Group mb="md">
+        <div style={{ fontWeight: "bold", fontSize: 16, color: "#0A6802" }}>
+          Net Total: {netTotal.toFixed(2)}
+        </div>
+      </Group>
 
       <Textarea
         label="Notes"
