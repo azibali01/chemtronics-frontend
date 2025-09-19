@@ -31,8 +31,9 @@ import {
   IconCategory2,
   IconDownload,
 } from "@tabler/icons-react";
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { notifications } from "@mantine/notifications";
+import axios from "axios";
 import {
   ProductsProvider,
   type Product,
@@ -173,7 +174,7 @@ function ProductsInner() {
     setOpened(true);
   };
 
-  const saveProduct = () => {
+  const handleSubmit = async () => {
     if (
       !name ||
       !code ||
@@ -182,14 +183,20 @@ function ProductsInner() {
       costPrice === "" ||
       stock === "" ||
       minStock === ""
-    )
+    ) {
+      notifications.show({
+        title: "Validation Error",
+        message: "Please fill in all required fields",
+        color: "red",
+      });
       return;
+    }
 
     const statusValue: "active" | "inactive" =
       status === "active" ? "active" : "inactive";
 
-    const payload: Product = {
-      id: editing ? editing.id : `p-${Math.random().toString(36).slice(2, 8)}`,
+    const payload = {
+      //change name to productname
       name,
       code,
       category,
@@ -201,16 +208,51 @@ function ProductsInner() {
       status: statusValue,
     };
 
-    if (editing) {
-      setProducts((prev) =>
-        prev.map((r) => (r.id === editing.id ? payload : r))
-      );
-    } else {
-      setProducts((prev) => [payload, ...prev]);
-    }
+    try {
+      if (editing) {
+        const updatedProduct: Product = {
+          id: editing.id,
+          ...payload,
+        };
+        setProducts((prev) =>
+          prev.map((r) => (r.id === editing.id ? updatedProduct : r))
+        );
+        notifications.show({
+          title: "Success",
+          message: "Product updated successfully",
+          color: "green",
+        });
+      } else {
+        const response = await axios.post(
+          "http://localhost:3000/Products/create-product",
+          payload
+        );
 
-    setOpened(false);
-    resetForm();
+        if (response.data) {
+          const newProduct: Product = {
+            id:
+              response.data.id || `p-${Math.random().toString(36).slice(2, 8)}`,
+            ...response.data,
+          };
+          setProducts((prev) => [newProduct, ...prev]);
+          notifications.show({
+            title: "Success",
+            message: "Product created successfully",
+            color: "green",
+          });
+        }
+      }
+
+      setOpened(false);
+      resetForm();
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message: error.response?.data?.message || "Failed to save product",
+        color: "red",
+      });
+      console.error("Error saving product:", error);
+    }
   };
 
   const toggleStatus = (id: string) => {
@@ -601,7 +643,7 @@ Status: ${p.status}`;
           <Button variant="default" onClick={() => setOpened(false)}>
             Cancel
           </Button>
-          <Button color="#0A6802" onClick={saveProduct}>
+          <Button color="#0A6802" onClick={handleSubmit}>
             {editing ? "Update Product" : "Create Product"}
           </Button>
         </Group>
