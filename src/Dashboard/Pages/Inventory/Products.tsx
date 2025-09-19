@@ -30,6 +30,8 @@ import {
   IconTrendingUp,
   IconCategory2,
   IconDownload,
+  IconSearch,
+  IconX,
 } from "@tabler/icons-react";
 import { useMemo, useEffect, useState } from "react";
 import { notifications } from "@mantine/notifications";
@@ -108,7 +110,69 @@ function ProductsInner() {
     setStatus,
     newCategory,
     setNewCategory,
+    loading,
+    setLoading,
   } = useProducts();
+
+  // Fetch products from backend
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get("http://localhost:3000/products");
+
+      if (response.data && Array.isArray(response.data)) {
+        // Transform backend data to match frontend Product type if needed
+        const transformedProducts: Product[] = response.data.map(
+          (product: any) => ({
+            id:
+              product.id ||
+              product._id ||
+              `p-${Math.random().toString(36).slice(2, 8)}`,
+            code: String(product.code || ""),
+            name: String(product.name || product.productname || ""),
+            category: String(product.category || ""),
+            description: String(product.description || ""),
+            stock: product.stock || 0,
+            minStock: product.minStock || product.min_stock || 0,
+            unitPrice: product.unitPrice || product.unit_price || 0,
+            costPrice: product.costPrice || product.cost_price || 0,
+            status:
+              product.status === "active" || product.status === "inactive"
+                ? product.status
+                : "active",
+          })
+        );
+
+        setProducts(transformedProducts);
+
+        // Extract unique categories from products
+        const uniqueCategories = Array.from(
+          new Set(transformedProducts.map((p) => p.category).filter(Boolean))
+        );
+        if (uniqueCategories.length > 0) {
+          setCategories((prev) => {
+            const merged = [...new Set([...prev, ...uniqueCategories])];
+            return merged;
+          });
+        }
+
+        notifications.show({
+          title: "Success",
+          message: `Loaded ${transformedProducts.length} products`,
+          color: "green",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error fetching products:", error);
+      notifications.show({
+        title: "Error",
+        message: error.response?.data?.message || "Failed to load products",
+        color: "red",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const pageSize = 5;
 
@@ -123,11 +187,21 @@ function ProductsInner() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return products.filter((r) => {
+      // Enhanced search: match product name, code, or category with null safety
       const matchQ =
         !q ||
-        r.name.toLowerCase().includes(q) ||
-        r.code.toLowerCase().includes(q) ||
-        r.category.toLowerCase().includes(q);
+        (r.name &&
+          typeof r.name === "string" &&
+          r.name.toLowerCase().includes(q)) ||
+        (r.code &&
+          typeof r.code === "string" &&
+          r.code.toLowerCase().includes(q)) ||
+        (r.category &&
+          typeof r.category === "string" &&
+          r.category.toLowerCase().includes(q)) ||
+        (r.description &&
+          typeof r.description === "string" &&
+          r.description.toLowerCase().includes(q));
       const matchC = cat ? r.category === cat : true;
       const matchS = statusFilter === "all" ? true : r.status === statusFilter;
       return matchQ && matchC && matchS;
@@ -298,6 +372,11 @@ Status: ${p.status}`;
     URL.revokeObjectURL(url);
   };
 
+  // Load products on component mount
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
   useEffect(() => {
     if (lowStockCount > 0) {
       notifications.show({
@@ -384,22 +463,51 @@ Status: ${p.status}`;
       </SimpleGrid>
 
       <Card withBorder radius="md" p="md" style={{ background: "#F1FCF0" }}>
-        <Text fw={600}>Products List</Text>
-        <Text c={"dimmed"} mb={10}>
-          Manage your product inventory and stock levels
-        </Text>
+        <Group justify="space-between" mb="sm">
+          <div>
+            <Text fw={600}>Products List</Text>
+            <Text c={"dimmed"} size="sm">
+              Manage your product inventory and stock levels
+              {query &&
+                ` • Found ${filtered.length} product(s) matching "${query}"`}
+            </Text>
+          </div>
+        </Group>
         <Group mb="md" grow>
           <TextInput
-            placeholder="Search products..."
+            placeholder="Search by product name, code, category, or description..."
             value={query}
-            onChange={(e) => setQuery(e.currentTarget.value)}
+            leftSection={<IconSearch size={16} />}
+            rightSection={
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                onClick={() => {
+                  setQuery("");
+                  setPage(1);
+                }}
+                style={{
+                  opacity: query ? 1 : 0,
+                  pointerEvents: query ? "auto" : "none",
+                }}
+              >
+                <IconX size={16} />
+              </ActionIcon>
+            }
+            onChange={(e) => {
+              setQuery(e.currentTarget.value);
+              setPage(1); // Reset to first page when searching
+            }}
           />
           <Select
             placeholder="All Categories"
             data={categories}
             clearable
             value={cat}
-            onChange={setCat}
+            onChange={(value) => {
+              setCat(value);
+              setPage(1); // Reset to first page when filtering by category
+            }}
           />
         </Group>
 
@@ -425,145 +533,159 @@ Status: ${p.status}`;
         </Group>
 
         {/* ---- Table ---- */}
-        <Table highlightOnHover withTableBorder>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Product Code</Table.Th>
-              <Table.Th>Product Name</Table.Th>
-              <Table.Th>Category</Table.Th>
-              <Table.Th>Stock</Table.Th>
-              <Table.Th>Unit Price</Table.Th>
-              <Table.Th>Status</Table.Th>
-              <Table.Th>Stock Status</Table.Th>
-              <Table.Th>Actions</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {pageData.map((p) => {
-              // Ensure stock and minStock are numbers for stockStatus
-              const ss = stockStatus({
-                stock: typeof p.stock === "number" ? p.stock : 0,
-                minStock: typeof p.minStock === "number" ? p.minStock : 0,
-              });
-              return (
-                <Table.Tr key={p.id}>
-                  <Table.Td>
-                    <Text fw={600} c="#819E00">
-                      {p.code}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text fw={500}>{p.name}</Text>
-                    <Text size="xs" c="dimmed">
-                      {p.description}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge variant="light" color="grape">
-                      {p.category}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text>{p.stock}</Text>
-                    <Text size="xs" c="dimmed">
-                      Min: {p.minStock}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    {money(p.unitPrice === "" ? 0 : p.unitPrice)}
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge
-                      color={p.status === "active" ? "#0A6802" : "gray"}
-                      variant="filled"
-                    >
-                      {p.status}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap={6}>
-                      <span
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 999,
-                          background:
-                            ss.color === "green"
-                              ? "#22c55e"
-                              : ss.color === "yellow"
-                              ? "#f59e0b"
-                              : "#ef4444",
-                          display: "inline-block",
-                        }}
-                      />
-                      <Text size="sm">{ss.label}</Text>
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>
-                    <Menu withinPortal shadow="sm" position="bottom-end">
-                      <Menu.Target>
-                        <ActionIcon variant="light" color="#0A6802">
-                          <IconDots size={16} />
-                        </ActionIcon>
-                      </Menu.Target>
-                      <Menu.Dropdown>
-                        <Menu.Item
-                          leftSection={<IconEdit size={16} />}
-                          onClick={() =>
-                            openEdit({
-                              ...p,
-                              unitPrice:
-                                typeof p.unitPrice === "number"
-                                  ? p.unitPrice
-                                  : 0,
-                              costPrice:
-                                typeof p.costPrice === "number"
-                                  ? p.costPrice
-                                  : 0,
-                              stock: typeof p.stock === "number" ? p.stock : 0,
-                              minStock:
-                                typeof p.minStock === "number" ? p.minStock : 0,
-                            })
-                          }
-                        >
-                          Edit
-                        </Menu.Item>
-                        <Menu.Item
-                          leftSection={
-                            p.status === "active" ? (
-                              <IconSquareX size={16} />
-                            ) : (
-                              <IconSquareCheck size={16} />
-                            )
-                          }
-                          onClick={() => toggleStatus(p.id)}
-                        >
-                          {p.status === "active"
-                            ? "Mark Inactive"
-                            : "Mark Active"}
-                        </Menu.Item>
-                        <Menu.Item
-                          leftSection={<IconDownload size={16} />}
-                          onClick={() => exportPDF(p)}
-                        >
-                          Download PDF
-                        </Menu.Item>
-                        <Menu.Divider />
-                        <Menu.Item
-                          color="red"
-                          leftSection={<IconTrash size={16} />}
-                          onClick={() => setDelId(p.id)}
-                        >
-                          Delete
-                        </Menu.Item>
-                      </Menu.Dropdown>
-                    </Menu>
-                  </Table.Td>
-                </Table.Tr>
-              );
-            })}
-          </Table.Tbody>
-        </Table>
+        {loading ? (
+          <Card withBorder p="xl" style={{ textAlign: "center" }}>
+            <Title order={4} c="dimmed">
+              Loading products...
+            </Title>
+            <Text size="sm" c="dimmed" mt="xs">
+              Please wait while we fetch your products
+            </Text>
+          </Card>
+        ) : (
+          <Table highlightOnHover withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Product Code</Table.Th>
+                <Table.Th>Product Name</Table.Th>
+                <Table.Th>Category</Table.Th>
+                <Table.Th>Stock</Table.Th>
+                <Table.Th>Unit Price</Table.Th>
+                <Table.Th>Status</Table.Th>
+                <Table.Th>Stock Status</Table.Th>
+                <Table.Th>Actions</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {pageData.map((p) => {
+                // Ensure stock and minStock are numbers for stockStatus
+                const ss = stockStatus({
+                  stock: typeof p.stock === "number" ? p.stock : 0,
+                  minStock: typeof p.minStock === "number" ? p.minStock : 0,
+                });
+                return (
+                  <Table.Tr key={p.id}>
+                    <Table.Td>
+                      <Text fw={600} c="#819E00">
+                        {p.code}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text fw={500}>{p.name}</Text>
+                      <Text size="xs" c="dimmed">
+                        {p.description}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge variant="light" color="grape">
+                        {p.category}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text>{p.stock}</Text>
+                      <Text size="xs" c="dimmed">
+                        Min: {p.minStock}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      {money(p.unitPrice === "" ? 0 : p.unitPrice)}
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge
+                        color={p.status === "active" ? "#0A6802" : "gray"}
+                        variant="filled"
+                      >
+                        {p.status}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap={6}>
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 999,
+                            background:
+                              ss.color === "green"
+                                ? "#22c55e"
+                                : ss.color === "yellow"
+                                ? "#f59e0b"
+                                : "#ef4444",
+                            display: "inline-block",
+                          }}
+                        />
+                        <Text size="sm">{ss.label}</Text>
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
+                      <Menu withinPortal shadow="sm" position="bottom-end">
+                        <Menu.Target>
+                          <ActionIcon variant="light" color="#0A6802">
+                            <IconDots size={16} />
+                          </ActionIcon>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          <Menu.Item
+                            leftSection={<IconEdit size={16} />}
+                            onClick={() =>
+                              openEdit({
+                                ...p,
+                                unitPrice:
+                                  typeof p.unitPrice === "number"
+                                    ? p.unitPrice
+                                    : 0,
+                                costPrice:
+                                  typeof p.costPrice === "number"
+                                    ? p.costPrice
+                                    : 0,
+                                stock:
+                                  typeof p.stock === "number" ? p.stock : 0,
+                                minStock:
+                                  typeof p.minStock === "number"
+                                    ? p.minStock
+                                    : 0,
+                              })
+                            }
+                          >
+                            Edit
+                          </Menu.Item>
+                          <Menu.Item
+                            leftSection={
+                              p.status === "active" ? (
+                                <IconSquareX size={16} />
+                              ) : (
+                                <IconSquareCheck size={16} />
+                              )
+                            }
+                            onClick={() => toggleStatus(p.id)}
+                          >
+                            {p.status === "active"
+                              ? "Mark Inactive"
+                              : "Mark Active"}
+                          </Menu.Item>
+                          <Menu.Item
+                            leftSection={<IconDownload size={16} />}
+                            onClick={() => exportPDF(p)}
+                          >
+                            Download PDF
+                          </Menu.Item>
+                          <Menu.Divider />
+                          <Menu.Item
+                            color="red"
+                            leftSection={<IconTrash size={16} />}
+                            onClick={() => setDelId(p.id)}
+                          >
+                            Delete
+                          </Menu.Item>
+                        </Menu.Dropdown>
+                      </Menu>
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        )}
 
         {/* ---- Pagination ---- */}
         {totalPages > 1 && (

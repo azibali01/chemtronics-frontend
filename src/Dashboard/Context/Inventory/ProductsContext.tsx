@@ -61,6 +61,8 @@ interface ProductsContextType {
   setStatus: (s: "active" | "inactive") => void;
   newCategory: string;
   setNewCategory: (c: string) => void;
+  loading: boolean;
+  setLoading: (l: boolean) => void;
 }
 
 const ProductsContext = createContext<ProductsContextType | undefined>(
@@ -95,6 +97,7 @@ export const ProductsProvider = ({ children }: { children: ReactNode }) => {
   const [minStock, setMinStock] = useState<number | "">("");
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [newCategory, setNewCategory] = useState("");
+  const [loading, setLoading] = useState(false);
 
   return (
     <ProductsContext.Provider
@@ -139,6 +142,8 @@ export const ProductsProvider = ({ children }: { children: ReactNode }) => {
         setStatus,
         newCategory,
         setNewCategory,
+        loading,
+        setLoading,
       }}
     >
       {children}
