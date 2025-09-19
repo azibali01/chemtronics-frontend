@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 type Item = {
   id: number;
   code: number;
+  hsCode: string; // <-- Add this line
   product: string;
   description: string;
   unit: string;
@@ -23,7 +24,9 @@ type Invoice = {
   notes?: string;
   gst?: boolean;
   amount?: number;
-  discount?: number;
+  ntnNo?: string; // <-- Add this line
+  partyBillNo?: string; // <-- Add this line
+  partyBillDate?: string; // <-- Add this line
 };
 
 type PurchaseInvoiceContextType = {

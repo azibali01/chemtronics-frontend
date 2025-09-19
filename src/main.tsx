@@ -12,10 +12,11 @@ import { PurchaseReturnsProvider } from "./Dashboard/Context/Invoicing/PurchaseR
 import { DeliveryChallanProvider } from "./Dashboard/Context/Invoicing/DeliveryChallanContext.tsx";
 import { CreditSalesProvider } from "./Dashboard/Context/Invoicing/CreditSalesContext.tsx";
 import { SaleReturnsProvider } from "./Dashboard/Context/Invoicing/SaleReturnsContext.tsx";
-import { JournalVouchersProvider } from "./Dashboard/Context/Accounts/JournalVouchersContext.tsx"; // <-- Add this import
+import { JournalVouchersProvider } from "./Dashboard/Context/Accounts/JournalVouchersContext.tsx";
 import { ChartOfAccountsProvider } from "./Dashboard/Context/ChartOfAccountsContext";
 import { DashboardHomeProvider } from "./Dashboard/Context/DashboardHomeContext";
-
+import { ProductsProvider } from "./Dashboard/Context/Inventory/ProductsContext";
+import { StockReportsProvider } from "./Dashboard/Context/Inventory/StockReportsContext";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
@@ -32,7 +33,11 @@ createRoot(document.getElementById("root")!).render(
                           <JournalVouchersProvider>
                             <ChartOfAccountsProvider>
                               <DashboardHomeProvider>
-                                <RouterProvider />
+                                <ProductsProvider>
+                                  <StockReportsProvider>
+                                    <RouterProvider />
+                                  </StockReportsProvider>
+                                </ProductsProvider>
                               </DashboardHomeProvider>
                             </ChartOfAccountsProvider>
                           </JournalVouchersProvider>

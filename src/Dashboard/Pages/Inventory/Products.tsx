@@ -31,128 +31,98 @@ import {
   IconCategory2,
   IconDownload,
 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
-
-type Product = {
-  id: string;
-  name: string;
-  code: string;
-  category: string;
-  description?: string;
-  stock: number;
-  minStock: number;
-  unitPrice: number;
-  costPrice: number;
-  status: "active" | "inactive";
-};
-
-const seed: Product[] = [
-  {
-    id: "p1",
-    name: "Wireless Headphones",
-    code: "PRD-001",
-    category: "Electronics",
-    description: "Noise-cancelling over-ear wireless headphones.",
-    stock: 45,
-    minStock: 10,
-    unitPrice: 199.99,
-    costPrice: 120,
-    status: "active",
-  },
-  {
-    id: "p2",
-    name: "Office Chair",
-    code: "PRD-002",
-    category: "Furniture",
-    description: "Ergonomic adjustable office chair.",
-    stock: 8,
-    minStock: 5,
-    unitPrice: 299.99,
-    costPrice: 180,
-    status: "active",
-  },
-  {
-    id: "p3",
-    name: "Laptop Stand",
-    code: "PRD-003",
-    category: "Accessories",
-    description: "Aluminium cooling laptop stand.",
-    stock: 3,
-    minStock: 10,
-    unitPrice: 79.99,
-    costPrice: 35,
-    status: "active",
-  },
-  {
-    id: "p4",
-    name: "Desk Lamp",
-    code: "PRD-004",
-    category: "Lighting",
-    description: "LED desk lamp with adjustable arm.",
-    stock: 25,
-    minStock: 8,
-    unitPrice: 89.99,
-    costPrice: 40,
-    status: "inactive",
-  },
-];
+import { useMemo, useEffect } from "react";
+import { notifications } from "@mantine/notifications";
+import {
+  ProductsProvider,
+  useProducts,
+  type Product,
+} from "../../Context/Inventory/ProductsContext";
 
 const money = (n: number) =>
-  `$${n.toLocaleString(undefined, {
+  `${n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 
-function stockStatus(p: Product) {
+function stockStatus(p: { stock: number; minStock: number }) {
   if (p.stock <= p.minStock) return { label: "Low", color: "red" as const };
   if (p.stock <= p.minStock * 2)
     return { label: "Medium", color: "yellow" as const };
   return { label: "Good", color: "green" as const };
 }
 
-export default function Products() {
-  const [rows, setRows] = useState<Product[]>(seed);
+// Helper to generate next product code (just number: 1, 2, 3, ...)
+function getNextProductCode(products: Array<{ code: string }>) {
+  if (!products.length) return "1";
+  const numbers = products
+    .map((p) => {
+      const match = p.code.match(/(\d+)/);
+      return match ? parseInt(match[1], 10) : 0;
+    })
+    .filter((n) => !isNaN(n));
+  const next = Math.max(...numbers, 0) + 1;
+  return next.toString();
+}
 
-  const [query, setQuery] = useState("");
-  const [cat, setCat] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "active" | "inactive"
-  >("all");
+function ProductsInner() {
+  // All state and setters come from context now!
+  const {
+    products,
+    setProducts,
+    categories,
+    setCategories,
+    query,
+    setQuery,
+    cat,
+    setCat,
+    statusFilter,
+    setStatusFilter,
+    page,
+    setPage,
+    opened,
+    setOpened,
+    editing,
+    setEditing,
+    delId,
+    setDelId,
+    catModal,
+    setCatModal,
+    name,
+    setName,
+    code,
+    setCode,
+    category,
+    setCategory,
+    description,
+    setDescription,
+    unitPrice,
+    setUnitPrice,
+    costPrice,
+    setCostPrice,
+    stock,
+    setStock,
+    minStock,
+    setMinStock,
+    status,
+    setStatus,
+    newCategory,
+    setNewCategory,
+  } = useProducts();
 
-  const [page, setPage] = useState(1);
   const pageSize = 5;
 
-  const [opened, setOpened] = useState(false);
-  const [editing, setEditing] = useState<Product | null>(null);
-  const [delId, setDelId] = useState<string | null>(null);
-  const [catModal, setCatModal] = useState(false);
-
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [category, setCategory] = useState<string | null>(null);
-  const [description, setDescription] = useState("");
-  const [unitPrice, setUnitPrice] = useState<number | "">("");
-  const [costPrice, setCostPrice] = useState<number | "">("");
-  const [stock, setStock] = useState<number | "">("");
-  const [minStock, setMinStock] = useState<number | "">("");
-  const [status, setStatus] = useState<"active" | "inactive">("active");
-
-  const [categories, setCategories] = useState([
-    "Electronics",
-    "Furniture",
-    "Accessories",
-    "Lighting",
-  ]);
-  const [newCategory, setNewCategory] = useState("");
-
-  const totalProducts = rows.length;
-  const activeCount = rows.filter((r) => r.status === "active").length;
-  const lowStockCount = rows.filter((r) => r.stock <= r.minStock).length;
-  const stockValue = rows.reduce((sum, r) => sum + r.stock * r.unitPrice, 0);
+  const totalProducts = products.length;
+  const activeCount = products.filter((r) => r.status === "active").length;
+  const lowStockCount = products.filter((r) => r.stock <= r.minStock).length;
+  const stockValue = products.reduce(
+    (sum, r) => sum + Number(r.stock) * Number(r.unitPrice),
+    0
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
+    return products.filter((r) => {
       const matchQ =
         !q ||
         r.name.toLowerCase().includes(q) ||
@@ -162,7 +132,7 @@ export default function Products() {
       const matchS = statusFilter === "all" ? true : r.status === statusFilter;
       return matchQ && matchC && matchS;
     });
-  }, [rows, query, cat, statusFilter]);
+  }, [products, query, cat, statusFilter]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const pageData = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -170,20 +140,37 @@ export default function Products() {
   const openCreate = () => {
     setEditing(null);
     resetForm();
+    setCode(getNextProductCode(products));
     setOpened(true);
   };
 
-  const openEdit = (p: Product) => {
-    setEditing(p);
+  // Fix: Always pass a string for description (never undefined)
+  const openEdit = (p: {
+    id: string;
+    name: string;
+    code: string;
+    category: string;
+    description?: string;
+    unitPrice: number;
+    costPrice: number;
+    stock: number;
+    minStock: number;
+    status: string;
+  }) => {
+    setEditing({
+      ...p,
+      description: p.description ?? "",
+      status: p.status === "active" ? "active" : "inactive",
+    });
     setName(p.name);
     setCode(p.code);
     setCategory(p.category);
-    setDescription(p.description || "");
+    setDescription(p.description ?? "");
     setUnitPrice(p.unitPrice);
     setCostPrice(p.costPrice);
     setStock(p.stock);
     setMinStock(p.minStock);
-    setStatus(p.status);
+    setStatus(p.status === "active" ? "active" : "inactive");
     setOpened(true);
   };
 
@@ -199,23 +186,28 @@ export default function Products() {
     )
       return;
 
+    const statusValue: "active" | "inactive" =
+      status === "active" ? "active" : "inactive";
+
     const payload: Product = {
       id: editing ? editing.id : `p-${Math.random().toString(36).slice(2, 8)}`,
       name,
       code,
       category,
-      description,
+      description: description ?? "",
       unitPrice: Number(unitPrice),
       costPrice: Number(costPrice),
       stock: Number(stock),
       minStock: Number(minStock),
-      status,
+      status: statusValue,
     };
 
     if (editing) {
-      setRows((prev) => prev.map((r) => (r.id === editing.id ? payload : r)));
+      setProducts((prev) =>
+        prev.map((r) => (r.id === editing.id ? payload : r))
+      );
     } else {
-      setRows((prev) => [payload, ...prev]);
+      setProducts((prev) => [payload, ...prev]);
     }
 
     setOpened(false);
@@ -223,7 +215,7 @@ export default function Products() {
   };
 
   const toggleStatus = (id: string) => {
-    setRows((prev) =>
+    setProducts((prev) =>
       prev.map((r) =>
         r.id === id
           ? { ...r, status: r.status === "active" ? "inactive" : "active" }
@@ -233,7 +225,7 @@ export default function Products() {
   };
 
   const confirmDelete = () => {
-    if (delId) setRows((prev) => prev.filter((r) => r.id !== delId));
+    if (delId) setProducts((prev) => prev.filter((r) => r.id !== delId));
     setDelId(null);
   };
 
@@ -253,8 +245,8 @@ export default function Products() {
     const content = `${p.name} (${p.code})
 Category: ${p.category}
 Stock: ${p.stock} | Min: ${p.minStock}
-Unit Price: ${money(p.unitPrice)}
-Cost Price: ${money(p.costPrice)}
+Unit Price: ${money(p.unitPrice === "" ? 0 : p.unitPrice)}
+Cost Price: ${money(p.costPrice === "" ? 0 : p.costPrice)}
 Status: ${p.status}`;
     const blob = new Blob([content], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
@@ -264,6 +256,18 @@ Status: ${p.status}`;
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  useEffect(() => {
+    if (lowStockCount > 0) {
+      notifications.show({
+        title: "Low Stock Alert",
+        message: `${lowStockCount} product(s) are low in stock!`,
+        color: "red",
+        icon: <IconAlertTriangle />,
+        autoClose: 5000,
+      });
+    }
+  }, [lowStockCount]);
 
   return (
     <div>
@@ -361,7 +365,11 @@ Status: ${p.status}`;
         <Group mb="md">
           <Chip.Group
             value={statusFilter}
-            onChange={(val: any) => setStatusFilter(val)}
+            onChange={(value) => {
+              if (typeof value === "string") {
+                setStatusFilter(value as "all" | "active" | "inactive");
+              }
+            }}
           >
             <Chip value="all" color="#819E00">
               All
@@ -379,7 +387,8 @@ Status: ${p.status}`;
         <Table highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Product</Table.Th>
+              <Table.Th>Product Code</Table.Th>
+              <Table.Th>Product Name</Table.Th>
               <Table.Th>Category</Table.Th>
               <Table.Th>Stock</Table.Th>
               <Table.Th>Unit Price</Table.Th>
@@ -390,13 +399,22 @@ Status: ${p.status}`;
           </Table.Thead>
           <Table.Tbody>
             {pageData.map((p) => {
-              const ss = stockStatus(p);
+              // Ensure stock and minStock are numbers for stockStatus
+              const ss = stockStatus({
+                stock: typeof p.stock === "number" ? p.stock : 0,
+                minStock: typeof p.minStock === "number" ? p.minStock : 0,
+              });
               return (
                 <Table.Tr key={p.id}>
                   <Table.Td>
+                    <Text fw={600} c="#819E00">
+                      {p.code}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>
                     <Text fw={500}>{p.name}</Text>
                     <Text size="xs" c="dimmed">
-                      {p.code}
+                      {p.description}
                     </Text>
                   </Table.Td>
                   <Table.Td>
@@ -410,7 +428,9 @@ Status: ${p.status}`;
                       Min: {p.minStock}
                     </Text>
                   </Table.Td>
-                  <Table.Td>{money(p.unitPrice)}</Table.Td>
+                  <Table.Td>
+                    {money(p.unitPrice === "" ? 0 : p.unitPrice)}
+                  </Table.Td>
                   <Table.Td>
                     <Badge
                       color={p.status === "active" ? "#0A6802" : "gray"}
@@ -448,7 +468,22 @@ Status: ${p.status}`;
                       <Menu.Dropdown>
                         <Menu.Item
                           leftSection={<IconEdit size={16} />}
-                          onClick={() => openEdit(p)}
+                          onClick={() =>
+                            openEdit({
+                              ...p,
+                              unitPrice:
+                                typeof p.unitPrice === "number"
+                                  ? p.unitPrice
+                                  : 0,
+                              costPrice:
+                                typeof p.costPrice === "number"
+                                  ? p.costPrice
+                                  : 0,
+                              stock: typeof p.stock === "number" ? p.stock : 0,
+                              minStock:
+                                typeof p.minStock === "number" ? p.minStock : 0,
+                            })
+                          }
                         >
                           Edit
                         </Menu.Item>
@@ -513,14 +548,14 @@ Status: ${p.status}`;
       >
         <SimpleGrid cols={2} mb="md">
           <TextInput
+            label="Product Code"
+            value={code}
+            onChange={(e) => setCode(e.currentTarget.value)}
+          />
+          <TextInput
             label="Product Name"
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
-          />
-          <TextInput
-            label="SKU"
-            value={code}
-            onChange={(e) => setCode(e.currentTarget.value)}
           />
         </SimpleGrid>
         <SimpleGrid cols={2} mb="md">
@@ -541,12 +576,12 @@ Status: ${p.status}`;
         />
         <SimpleGrid cols={2} mb="md">
           <NumberInput
-            label="Unit Price ($)"
+            label="Unit Price"
             value={unitPrice}
             onChange={(v) => setUnitPrice(v === "" ? "" : Number(v))}
           />
           <NumberInput
-            label="Cost Price ($)"
+            label="Cost Price"
             value={costPrice}
             onChange={(v) => setCostPrice(v === "" ? "" : Number(v))}
           />
@@ -632,5 +667,13 @@ Status: ${p.status}`;
         </Group>
       </Modal>
     </div>
+  );
+}
+
+export default function Products() {
+  return (
+    <ProductsProvider>
+      <ProductsInner />
+    </ProductsProvider>
   );
 }

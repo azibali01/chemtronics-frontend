@@ -24,8 +24,68 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useSalesInvoice } from "../../Context/Invoicing/SalesInvoiceContext";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 
-// Helper for header/footer
+// Types for Invoice and InvoiceItem
+export interface InvoiceItem {
+  id: number;
+  code: string;
+  product: string;
+  hsCode: string;
+  description: string;
+  qty: number;
+  rate: number;
+  exGSTRate: number;
+  exGSTAmount: number;
+}
+
+export interface Invoice {
+  id: number;
+  number: string;
+  date: string;
+  deliveryNo?: string;
+  deliveryDate?: string;
+  poNo?: string;
+  poDate?: string;
+  accountNo?: string;
+  accountTitle: string;
+  saleAccount?: string;
+  saleAccountTitle?: string;
+  ntnNo?: string;
+  amount: number;
+  netAmount?: number;
+  items?: InvoiceItem[];
+}
+
+// Sale Account mapping
+const saleAccountTitleMap: Record<string, string> = {
+  "4114": "Sale Of Chemicals and Equipments",
+  "4112": "Sale Of Equipments",
+  "4111": "Sales Of Chemicals",
+  "4113": "Services",
+};
+
+// HS Code mapping
+const hsCodeTypeMap: Record<
+  string,
+  "Chemicals" | "Equipments" | "Pumps" | "Services"
+> = {
+  "3824": "Chemicals",
+  "8421": "Equipments",
+  "8413": "Pumps",
+  "9833": "Services",
+};
+
+function getTaxRate(hsCode: string, province: "Punjab" | "Sindh") {
+  const type = hsCodeTypeMap[hsCode];
+  if (!type) return 0;
+  if (type === "Services") {
+    return province === "Punjab" ? 16 : 15;
+  }
+  // Chemicals, Equipments, Pumps
+  return 18;
+}
+
 function addHeaderFooter(doc: jsPDF, title: string) {
   doc.setFontSize(18);
   doc.text("CHEMTRONIX ENGINEERING SOLUTION", 14, 14);
@@ -52,7 +112,7 @@ function addHeaderFooter(doc: jsPDF, title: string) {
   );
 }
 
-function PrintableInvoice({ invoice }: { invoice: any }) {
+function PrintableInvoice({ invoice }: { invoice: Invoice | null }) {
   if (!invoice) return <div>No invoice to print</div>;
   return (
     <div
@@ -72,26 +132,17 @@ function PrintableInvoice({ invoice }: { invoice: any }) {
   );
 }
 
-function PrintableInvoiceContent(invoice: any) {
-  return `
-    <html>
-      <head>
-        <title>Invoice ${invoice.number}</title>
-        <style>
-          body { font-family: Arial; color: #222; padding: 24px; }
-          h2 { margin-bottom: 8px; }
-          p { margin: 4px 0; }
-        </style>
-      </head>
-      <body>
-        <h2>Invoice #${invoice.number}</h2>
-        <p>Date: ${invoice.date}</p>
-        <p>Account: ${invoice.accountTitle}</p>
-        <p>Amount: $${invoice.amount?.toFixed(2)}</p>
-        <!-- Add more invoice details as needed -->
-      </body>
-    </html>
-  `;
+// Helper to get next invoice number
+function getNextInvoiceNumber(invoices: Invoice[]) {
+  const numbers = invoices
+    .map((inv) => {
+      const match = inv.number?.match(/^INV-(\d+)$/);
+      return match ? parseInt(match[1], 10) : null;
+    })
+    .filter((n) => n !== null) as number[];
+  const max = numbers.length ? Math.max(...numbers) : 0;
+  const next = max + 1;
+  return `INV-${next.toString().padStart(3, "0")}`;
 }
 
 export default function SalesInvoicePage() {
@@ -99,18 +150,20 @@ export default function SalesInvoicePage() {
 
   // Use context for invoices
   const { invoices, setInvoices } = useSalesInvoice();
+  const { accounts } = useChartOfAccounts();
 
   // Local UI state
-  const [editInvoice, setEditInvoice] = useState<(typeof invoices)[0] | null>(
-    null
-  );
-  const [deleteInvoice, setDeleteInvoice] = useState<
-    (typeof invoices)[0] | null
-  >(null);
+  const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
+  const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
   const [search, setSearch] = useState("");
   const [createModal, setCreateModal] = useState(false);
-  const [newInvoiceNumber, setNewInvoiceNumber] = useState("INV-003");
-  const [newDate, setNewDate] = useState("");
+  const [newInvoiceNumber, setNewInvoiceNumber] = useState(
+    getNextInvoiceNumber(invoices)
+  );
+  const [newDate, setNewDate] = useState(() => {
+    const today = new Date();
+    return today.toISOString().slice(0, 10); // Format: YYYY-MM-DD
+  });
   const [newDeliveryNo, setNewDeliveryNo] = useState("");
   const [newDeliveryDate, setNewDeliveryDate] = useState("");
   const [newPoNo, setNewPoNo] = useState("");
@@ -121,29 +174,20 @@ export default function SalesInvoicePage() {
   const [newSaleAccountTitle, setNewSaleAccountTitle] = useState("");
   const [newNtnNo, setNewNtnNo] = useState("");
   const [includeGST, setIncludeGST] = useState(true);
-  interface InvoiceItem {
-    id: number;
-    code: number;
-    product: string;
-    hsCode: string;
-    description: string;
-    qty: number;
-    rate: number;
-    exGSTRate: string;
-    exGSTAmount: string;
-  }
+  const [province, setProvince] = useState<"Punjab" | "Sindh">("Punjab");
 
+  // Items state
   const [items, setItems] = useState<InvoiceItem[]>([
     {
       id: 1,
-      code: 1,
+      code: "",
       product: "",
       hsCode: "",
       description: "",
       qty: 0,
       rate: 0,
-      exGSTRate: "",
-      exGSTAmount: "",
+      exGSTRate: 0,
+      exGSTAmount: 0,
     },
   ]);
   const [notes, setNotes] = useState("");
@@ -153,7 +197,61 @@ export default function SalesInvoicePage() {
   const [page, setPage] = useState(1);
   // Add state to track current invoice for printing
   const [currentInvoiceForPrint, setCurrentInvoiceForPrint] =
-    useState<any>(null);
+    useState<Invoice | null>(null);
+
+  // Calculate subtotal from items
+  const subtotal = items.reduce(
+    (acc: number, i: InvoiceItem) => acc + i.qty * i.rate,
+    0
+  );
+  // GST calculation
+  const gstAmount = includeGST ? subtotal * 0.18 : 0;
+  // Calculate net total
+  const netTotal = subtotal + gstAmount;
+  // Calculate Ex Gst Amount and Total GST from items (auto-calculated)
+  const exGstAmount = items.reduce(
+    (acc: number, i: InvoiceItem) =>
+      acc + (i.qty * i.rate * getTaxRate(i.hsCode, province)) / 100,
+    0
+  );
+  const totalGst = items.reduce(
+    (acc: number, i: InvoiceItem) => acc + getTaxRate(i.hsCode, province),
+    0
+  );
+
+  // Print handler using hidden component
+  const handlePrintInvoice = (invoice: Invoice) => {
+    setCurrentInvoiceForPrint(invoice);
+    setTimeout(() => {
+      const printContent = document.getElementById(
+        "invoice-print-content"
+      )?.innerHTML;
+      if (printContent) {
+        const printWindow = window.open("", "_blank", "width=900,height=700");
+        if (printWindow) {
+          printWindow.document.open();
+          printWindow.document.write(`
+          <html>
+            <head>
+              <title>Sales Invoice</title>
+              <style>
+                body { font-family: Arial, sans-serif; padding: 24px; }
+                /* Add more print styles here if needed */
+              </style>
+            </head>
+            <body>
+              ${printContent}
+            </body>
+          </html>
+        `);
+          printWindow.document.close();
+          printWindow.focus();
+          setTimeout(() => printWindow.print(), 300);
+        }
+      }
+      setCurrentInvoiceForPrint(null);
+    }, 100);
+  };
 
   const filteredInvoices = invoices.filter((i) => {
     const matchesSearch = i.number.toLowerCase().includes(search.toLowerCase());
@@ -169,10 +267,6 @@ export default function SalesInvoicePage() {
 
   const start = (page - 1) * pageSize;
   const paginatedInvoices = filteredInvoices.slice(start, start + pageSize);
-
-  const subtotal = items.reduce((acc, i) => acc + i.qty * i.rate, 0);
-  const gstAmount = includeGST ? subtotal * 0.18 : 0;
-  const total = subtotal + gstAmount;
 
   const clearFilters = () => {
     setSearch("");
@@ -238,7 +332,7 @@ export default function SalesInvoicePage() {
     doc.save("sales_invoices.pdf");
   };
 
-  const exportSingleInvoicePDF = (invoice: (typeof invoices)[0]) => {
+  const exportSingleInvoicePDF = (invoice: Invoice) => {
     const doc = new jsPDF();
     addHeaderFooter(doc, `Invoice: ${invoice.number}`);
 
@@ -268,10 +362,13 @@ export default function SalesInvoicePage() {
 
     // Items table (after details table)
     if (invoice.items && invoice.items.length > 0) {
+      const lastAutoTable = (
+        doc as jsPDF & { lastAutoTable?: { finalY?: number } }
+      ).lastAutoTable;
+      const startY =
+        lastAutoTable?.finalY !== undefined ? lastAutoTable.finalY + 8 : 60;
       autoTable(doc, {
-        startY: (doc as any).lastAutoTable?.finalY
-          ? (doc as any).lastAutoTable.finalY + 8
-          : 60,
+        startY,
         head: [
           [
             "Code",
@@ -280,9 +377,9 @@ export default function SalesInvoicePage() {
             "Description",
             "Qty",
             "Rate",
+            "EX.GST Rate",
+            "EX.GST Amt",
             "Amount",
-            "Ex GST Rate",
-            "Ex GST Amount",
           ],
         ],
         body: (invoice.items ?? []).map((item) => [
@@ -292,9 +389,9 @@ export default function SalesInvoicePage() {
           item.description,
           item.qty,
           item.rate,
-          (item.qty * item.rate).toFixed(2),
           item.exGSTRate,
           item.exGSTAmount,
+          (item.qty * item.rate).toFixed(2),
         ]),
         styles: { fontSize: 10 },
         headStyles: { fillColor: [10, 104, 2] },
@@ -326,29 +423,69 @@ export default function SalesInvoicePage() {
 
   // Edit modal calculations
   const editSubtotal =
-    editInvoice?.items?.reduce((acc, i) => acc + i.qty * i.rate, 0) || 0;
+    editInvoice?.items?.reduce(
+      (acc: number, i: InvoiceItem) => acc + i.qty * i.rate,
+      0
+    ) || 0;
   const editGstAmount = includeGST ? editSubtotal * 0.18 : 0;
   const editTotal = editSubtotal + editGstAmount;
+  const editNetAmount = editTotal;
+  // Calculate Ex Gst Amount and Total GST for edit modal
+  const editExGstAmount =
+    editInvoice?.items?.reduce(
+      (acc: number, i: InvoiceItem) =>
+        acc + (i.qty * i.rate * getTaxRate(i.hsCode, province)) / 100,
+      0
+    ) || 0;
+  const editTotalGst =
+    editInvoice?.items?.reduce(
+      (acc: number, i: InvoiceItem) => acc + getTaxRate(i.hsCode, province),
+      0
+    ) || 0;
 
-  const printInvoiceWindow = (invoice: any) => {
-    const printWindow = window.open("", "_blank", "width=800,height=600");
-    if (printWindow) {
-      printWindow.document.open();
-      printWindow.document.write(PrintableInvoiceContent(invoice));
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => printWindow.print(), 300);
-    }
+  // Update invoice number when modal opens
+  const handleOpenCreateModal = () => {
+    setNewInvoiceNumber(getNextInvoiceNumber(invoices));
+    setCreateModal(true);
   };
+
+  // Helper to flatten accounts for dropdowns
+  function flattenAccounts(
+    nodes: AccountNode[]
+  ): { value: string; label: string }[] {
+    return nodes.flatMap((n) => [
+      { value: n.code, label: `${n.code} - ${n.name}` },
+      ...(n.children ? flattenAccounts(n.children) : []),
+    ]);
+  }
+
+  const accountNoOptions = flattenAccounts(accounts as AccountNode[]);
+  const accountTitleOptions = accountNoOptions.map((acc) => ({
+    value: acc.label.split(" - ")[1],
+    label: acc.label.split(" - ")[1],
+  }));
 
   return (
     <div className="p-6 space-y-6">
       {/* Printable invoice content (always rendered, hidden off-screen) */}
       <div
-        style={{ position: "fixed", left: "-9999px", top: 0, zIndex: -1 }}
+        style={{
+          position: "fixed",
+          left: "-9999px",
+          top: 0,
+          zIndex: -1,
+          width: "800px",
+        }}
         ref={printRef}
       >
-        <PrintableInvoice invoice={currentInvoiceForPrint} />
+        {currentInvoiceForPrint && (
+          <PrintableInvoice invoice={currentInvoiceForPrint} />
+        )}
+      </div>
+      <div id="invoice-print-content" style={{ display: "none" }}>
+        {currentInvoiceForPrint && (
+          <InvoicePrintTemplate invoice={currentInvoiceForPrint} />
+        )}
       </div>
 
       <Group justify="space-between" mb="lg">
@@ -357,7 +494,7 @@ export default function SalesInvoicePage() {
         </Text>
         <Button
           leftSection={<IconPlus size={16} />}
-          onClick={() => setCreateModal(true)}
+          onClick={handleOpenCreateModal}
           color="#0A6802"
         >
           Create Invoice
@@ -413,7 +550,6 @@ export default function SalesInvoicePage() {
             type="date"
             placeholder="From date"
             value={fromDate}
-            onChange={(e) => setFromDate(e.currentTarget.value)}
             w={150}
           />
           <TextInput
@@ -469,6 +605,7 @@ export default function SalesInvoicePage() {
               <Table.Th>Sale Account Title</Table.Th>
               <Table.Th>NTN No</Table.Th>
               <Table.Th>Amount</Table.Th>
+              <Table.Th>Net Amount</Table.Th>
               <Table.Th>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -487,6 +624,12 @@ export default function SalesInvoicePage() {
                 <Table.Td>{i.saleAccountTitle || ""}</Table.Td>
                 <Table.Td>{i.ntnNo || ""}</Table.Td>
                 <Table.Td>${i.amount.toFixed(2)}</Table.Td>
+                <Table.Td>
+                  $
+                  {i.netAmount !== undefined
+                    ? i.netAmount
+                    : i.amount.toFixed(2)}
+                </Table.Td>
                 <Table.Td>
                   <Group gap="xs">
                     <ActionIcon
@@ -519,7 +662,7 @@ export default function SalesInvoicePage() {
             ))}
             {paginatedInvoices.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={13} align="center">
+                <Table.Td colSpan={15} align="center">
                   No invoices found.
                 </Table.Td>
               </Table.Tr>
@@ -548,12 +691,7 @@ export default function SalesInvoicePage() {
         size="70%"
       >
         <Group grow mb="sm">
-          <TextInput
-            label="Invoice Number"
-            value={newInvoiceNumber}
-            onChange={(e) => setNewInvoiceNumber(e.currentTarget.value)}
-            mb="sm"
-          />
+          <TextInput label="Invoice Number" value={newInvoiceNumber} mb="sm" />
           <TextInput
             label="Invoice Date"
             type="date"
@@ -592,39 +730,39 @@ export default function SalesInvoicePage() {
           />
         </Group>
         <Group grow>
-          <TextInput
+          <Select
             label="Account No"
-            placeholder="Account No"
+            placeholder="Select Account No"
+            data={accountNoOptions}
             value={newAccountNo}
-            onChange={(e) => setNewAccountNo(e.currentTarget.value)}
+            onChange={(v) => setNewAccountNo(v || "")}
           />
           <Select
             label="Account Title"
-            placeholder="Select Account"
-            data={[
-              "Adv. Income Tax",
-              "Ahmad Fine Weaing Limited (Unit-I)",
-              "Ahmad Fine Weaing Limited (Unit-II)",
-            ]}
+            placeholder="Select Account Title"
+            data={accountTitleOptions}
             value={newAccountTitle}
             onChange={(v) => setNewAccountTitle(v || "")}
             mb="sm"
           />
-          <TextInput
-            label="Sale Account"
-            value={newSaleAccount}
-            onChange={(e) => setNewSaleAccount(e.currentTarget.value)}
-          />
           <Select
-            label="Sale Account Title"
+            label="Sale Account"
             data={[
-              "Sale of Chemicals and Equipments",
-              "Sale of Equipments",
-              "Sales of Chemicals",
-              "Services",
+              { value: "4114", label: "4114" },
+              { value: "4112", label: "4112" },
+              { value: "4111", label: "4111" },
+              { value: "4113", label: "4113" },
             ]}
+            value={newSaleAccount}
+            onChange={(v) => {
+              setNewSaleAccount(v || "");
+              setNewSaleAccountTitle(saleAccountTitleMap[v || ""] || "");
+            }}
+          />
+          <TextInput
+            label="Sale Account Title"
             value={newSaleAccountTitle}
-            onChange={(v) => setNewSaleAccountTitle(v || "")}
+            readOnly
           />
           <TextInput
             label="NTN No"
@@ -641,6 +779,16 @@ export default function SalesInvoicePage() {
           mb="md"
         />
 
+        <Select
+          label="Province"
+          data={[
+            { value: "Punjab", label: "Punjab" },
+            { value: "Sindh", label: "Sindh" },
+          ]}
+          value={province}
+          onChange={(v) => setProvince(v as "Punjab" | "Sindh")}
+        />
+
         <Table withColumnBorders highlightOnHover>
           <Table.Thead>
             <Table.Tr>
@@ -650,85 +798,115 @@ export default function SalesInvoicePage() {
               <Table.Th>Description</Table.Th>
               <Table.Th>Qty</Table.Th>
               <Table.Th>Rate</Table.Th>
+              <Table.Th>EX.GST Rate</Table.Th>
+              <Table.Th>EX.GST Amt</Table.Th>
               <Table.Th>Amount</Table.Th>
-              <Table.Th>Ex GST Rate</Table.Th>
-              <Table.Th>Ex GST Amount</Table.Th>
               <Table.Th>Remove</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {items.map((item, index) => (
-              <Table.Tr key={item.id}>
-                <Table.Td>
-                  <TextInput value={item.code} />
-                </Table.Td>
-                <Table.Td>
-                  <TextInput
-                    placeholder="Product"
-                    value={item.product}
-                    onChange={(e) => {
-                      const newItems = [...items];
-                      newItems[index].product = e.currentTarget.value;
-                      setItems(newItems);
-                    }}
-                  />
-                </Table.Td>
-                <Table.Td>
-                  <TextInput value={item.hsCode} />
-                </Table.Td>
-                <Table.Td>
-                  <TextInput
-                    placeholder="Description"
-                    value={item.description}
-                    onChange={(e) => {
-                      const newItems = [...items];
-                      newItems[index].description = e.currentTarget.value;
-                      setItems(newItems);
-                    }}
-                  />
-                </Table.Td>
-                <Table.Td>
-                  <NumberInput
-                    value={item.qty}
-                    min={1}
-                    onChange={(val) => {
-                      const newItems = [...items];
-                      newItems[index].qty = Number(val) || 0;
-                      setItems(newItems);
-                    }}
-                  />
-                </Table.Td>
-                <Table.Td>
-                  <NumberInput
-                    value={item.rate}
-                    min={0}
-                    onChange={(val) => {
-                      const newItems = [...items];
-                      newItems[index].rate = Number(val) || 0;
-                      setItems(newItems);
-                    }}
-                  />
-                </Table.Td>
-                <Table.Td>{item.qty * item.rate}</Table.Td>
-                <Table.Td>
-                  <TextInput value={item.exGSTRate} />
-                </Table.Td>
-                <Table.Td>
-                  <TextInput value={item.exGSTAmount} />
-                </Table.Td>
-                <Table.Td>
-                  <ActionIcon
-                    color="red"
-                    variant="light"
-                    onClick={() =>
-                      setItems((prev) => prev.filter((i) => i.id !== item.id))
-                    }
-                  >
-                    <IconTrash size={18} />
-                  </ActionIcon>
-                </Table.Td>
-              </Table.Tr>
-            ))}
+            {items.map((item, index) => {
+              // Auto-calculate GST rate and amount
+              const gstRate = getTaxRate(item.hsCode, province);
+              const gstAmount = (item.qty * item.rate * gstRate) / 100;
+              const amount = item.qty * item.rate;
+
+              return (
+                <Table.Tr key={item.id}>
+                  <Table.Td>
+                    <TextInput
+                      value={item.code}
+                      onChange={(e) => {
+                        const newItems = [...items];
+                        newItems[index].code = e.currentTarget.value;
+                        setItems(newItems);
+                      }}
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <TextInput
+                      placeholder="Product"
+                      value={item.product}
+                      onChange={(e) => {
+                        const newItems = [...items];
+                        newItems[index].product = e.currentTarget.value;
+                        setItems(newItems);
+                      }}
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <Select
+                      placeholder="HS Code"
+                      data={[
+                        { value: "3824", label: "3824 Chemicals" },
+                        { value: "8421", label: "8421 Equipment" },
+                        { value: "8413", label: "8413 Pumps" },
+                        { value: "9833", label: "9833 Service" },
+                      ]}
+                      value={item.hsCode}
+                      onChange={(v) => {
+                        const newItems = [...items];
+                        newItems[index].hsCode = v || "";
+                        setItems(newItems);
+                      }}
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <TextInput
+                      placeholder="Description"
+                      value={item.description}
+                      onChange={(e) => {
+                        const newItems = [...items];
+                        newItems[index].description = e.currentTarget.value;
+                        setItems(newItems);
+                      }}
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <NumberInput
+                      value={item.qty}
+                      min={1}
+                      onChange={(val) => {
+                        const newItems = [...items];
+                        newItems[index].qty = Number(val) || 0;
+                        setItems(newItems);
+                      }}
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <NumberInput
+                      value={item.rate}
+                      min={0}
+                      onChange={(val) => {
+                        const newItems = [...items];
+                        newItems[index].rate = Number(val) || 0;
+                        setItems(newItems);
+                      }}
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <NumberInput value={gstRate} disabled />
+                  </Table.Td>
+                  <Table.Td>
+                    <NumberInput value={gstAmount} disabled />
+                  </Table.Td>
+                  <Table.Td>
+                    <NumberInput value={amount} disabled />
+                  </Table.Td>
+                  <Table.Td>
+                    <ActionIcon
+                      color="red"
+                      variant="light"
+                      onClick={() =>
+                        setItems((prev) => prev.filter((i) => i.id !== item.id))
+                      }
+                    >
+                      <IconTrash size={18} />
+                    </ActionIcon>
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
           </Table.Tbody>
         </Table>
         <Button
@@ -740,14 +918,14 @@ export default function SalesInvoicePage() {
               ...prev,
               {
                 id: prev.length + 1,
-                code: 1,
+                code: "",
                 product: "",
                 hsCode: "",
                 description: "",
                 qty: 1,
                 rate: 0,
-                exGSTRate: "",
-                exGSTAmount: "",
+                exGSTRate: 0,
+                exGSTAmount: 0,
               },
             ])
           }
@@ -755,13 +933,10 @@ export default function SalesInvoicePage() {
           Add Item
         </Button>
 
-        <div className="mt-4 space-y-1">
-          <Text>Ex GST Amount:</Text>
-          <Text>Total GST:</Text>
-          <Text>Subtotal: {subtotal.toFixed(2)}</Text>
-          {includeGST && <Text>GST (18%): {gstAmount.toFixed(2)}</Text>}
-          <Text fw={700}>Total: {total.toFixed(2)}</Text>
-        </div>
+        <Text>Subtotal: {subtotal.toFixed(2)}</Text>
+        <Text>Ex Gst Amount: {exGstAmount.toFixed(2)}</Text>
+        <Text>Total GST: {totalGst.toFixed(2)}</Text>
+        <Text fw={700}>Net Total: {netTotal.toFixed(2)}</Text>
 
         <Textarea
           label="Notes (Optional)"
@@ -776,12 +951,14 @@ export default function SalesInvoicePage() {
             variant="outline"
             color="#819E00"
             onClick={() => {
-              printInvoiceWindow({
+              handlePrintInvoice({
+                id: invoices.length + 1,
                 number: newInvoiceNumber,
                 date: newDate,
                 accountTitle: newAccountTitle,
-                amount: total,
-                // Add other fields as needed
+                amount: netTotal,
+                netAmount: netTotal,
+                items,
               });
             }}
             mr={8}
@@ -809,14 +986,15 @@ export default function SalesInvoicePage() {
                   saleAccount: newSaleAccount,
                   saleAccountTitle: newSaleAccountTitle,
                   ntnNo: newNtnNo,
-                  amount: total,
+                  amount: netTotal,
+                  netAmount: netTotal,
                   items: items,
                 },
               ]);
               setCreateModal(false);
             }}
           >
-            Create & Send
+            Create
           </Button>
         </Group>
       </Modal>
@@ -905,53 +1083,46 @@ export default function SalesInvoicePage() {
               />
             </Group>
             <Group grow>
-              <TextInput
+              <Select
                 label="Account No"
-                placeholder="Account No"
+                placeholder="Select Account No"
+                data={accountNoOptions}
                 value={editInvoice.accountNo || ""}
-                onChange={(e) =>
-                  setEditInvoice({
-                    ...editInvoice,
-                    accountNo: e.currentTarget.value,
-                  })
+                onChange={(v) =>
+                  setEditInvoice({ ...editInvoice, accountNo: v || "" })
                 }
               />
               <Select
                 label="Account Title"
-                placeholder="Select Account"
-                data={[
-                  "Adv. Income Tax",
-                  "Ahmad Fine Weaing Limited (Unit-I)",
-                  "Ahmad Fine Weaing Limited (Unit-II)",
-                ]}
+                placeholder="Select Account Title"
+                data={accountTitleOptions}
                 value={editInvoice.accountTitle || ""}
                 onChange={(v) =>
                   setEditInvoice({ ...editInvoice, accountTitle: v || "" })
                 }
                 mb="sm"
               />
-              <TextInput
+              <Select
                 label="Sale Account"
+                data={[
+                  { value: "4114", label: "4114" },
+                  { value: "4112", label: "4112" },
+                  { value: "4111", label: "4111" },
+                  { value: "4113", label: "4113" },
+                ]}
                 value={editInvoice.saleAccount || ""}
-                onChange={(e) =>
+                onChange={(v) => {
                   setEditInvoice({
                     ...editInvoice,
-                    saleAccount: e.currentTarget.value,
-                  })
-                }
+                    saleAccount: v || "",
+                    saleAccountTitle: saleAccountTitleMap[v || ""] || "",
+                  });
+                }}
               />
-              <Select
+              <TextInput
                 label="Sale Account Title"
-                data={[
-                  "Sale of Chemicals and Equipments",
-                  "Sale of Equipments",
-                  "Sales of Chemicals",
-                  "Services",
-                ]}
                 value={editInvoice.saleAccountTitle || ""}
-                onChange={(v) =>
-                  setEditInvoice({ ...editInvoice, saleAccountTitle: v || "" })
-                }
+                readOnly
               />
               <TextInput
                 label="NTN No"
@@ -971,6 +1142,15 @@ export default function SalesInvoicePage() {
               onChange={(e) => setIncludeGST(e.currentTarget.checked)}
               mb="md"
             />
+            <Select
+              label="Province"
+              data={[
+                { value: "Punjab", label: "Punjab" },
+                { value: "Sindh", label: "Sindh" },
+              ]}
+              value={province}
+              onChange={(v) => setProvince(v as "Punjab" | "Sindh")}
+            />
             <Table withColumnBorders highlightOnHover>
               <Table.Thead>
                 <Table.Tr>
@@ -980,116 +1160,118 @@ export default function SalesInvoicePage() {
                   <Table.Th>Description</Table.Th>
                   <Table.Th>Qty</Table.Th>
                   <Table.Th>Rate</Table.Th>
+                  <Table.Th>EX.GST Rate</Table.Th>
+                  <Table.Th>EX.GST Amt</Table.Th>
                   <Table.Th>Amount</Table.Th>
-                  <Table.Th>Ex GST Rate</Table.Th>
-                  <Table.Th>Ex GST Amount</Table.Th>
                   <Table.Th>Remove</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {editInvoice.items?.map((item, index) => (
-                  <Table.Tr key={item.id}>
-                    <Table.Td>
-                      <TextInput
-                        value={item.code}
-                        onChange={(e) => {
-                          const newItems = [...(editInvoice.items || [])];
-                          newItems[index].code = Number(e.currentTarget.value);
-                          setEditInvoice({ ...editInvoice, items: newItems });
-                        }}
-                      />
-                    </Table.Td>
-                    <Table.Td>
-                      <TextInput
-                        placeholder="Product"
-                        value={item.product}
-                        onChange={(e) => {
-                          const newItems = [...(editInvoice.items || [])];
-                          newItems[index].product = e.currentTarget.value;
-                          setEditInvoice({ ...editInvoice, items: newItems });
-                        }}
-                      />
-                    </Table.Td>
-                    <Table.Td>
-                      <TextInput
-                        value={item.hsCode}
-                        onChange={(e) => {
-                          const newItems = [...(editInvoice.items || [])];
-                          newItems[index].hsCode = e.currentTarget.value;
-                          setEditInvoice({ ...editInvoice, items: newItems });
-                        }}
-                      />
-                    </Table.Td>
-                    <Table.Td>
-                      <TextInput
-                        placeholder="Description"
-                        value={item.description}
-                        onChange={(e) => {
-                          const newItems = [...(editInvoice.items || [])];
-                          newItems[index].description = e.currentTarget.value;
-                          setEditInvoice({ ...editInvoice, items: newItems });
-                        }}
-                      />
-                    </Table.Td>
-                    <Table.Td>
-                      <NumberInput
-                        value={item.qty}
-                        min={1}
-                        onChange={(val) => {
-                          const newItems = [...(editInvoice.items || [])];
-                          newItems[index].qty = Number(val) || 0;
-                          setEditInvoice({ ...editInvoice, items: newItems });
-                        }}
-                      />
-                    </Table.Td>
-                    <Table.Td>
-                      <NumberInput
-                        value={item.rate}
-                        min={0}
-                        onChange={(val) => {
-                          const newItems = [...(editInvoice.items || [])];
-                          newItems[index].rate = Number(val) || 0;
-                          setEditInvoice({ ...editInvoice, items: newItems });
-                        }}
-                      />
-                    </Table.Td>
-                    <Table.Td>${item.qty * item.rate}</Table.Td>
-                    <Table.Td>
-                      <TextInput
-                        value={item.exGSTRate}
-                        onChange={(e) => {
-                          const newItems = [...(editInvoice.items || [])];
-                          newItems[index].exGSTRate = e.currentTarget.value;
-                          setEditInvoice({ ...editInvoice, items: newItems });
-                        }}
-                      />
-                    </Table.Td>
-                    <Table.Td>
-                      <TextInput
-                        value={item.exGSTAmount}
-                        onChange={(e) => {
-                          const newItems = [...(editInvoice.items || [])];
-                          newItems[index].exGSTAmount = e.currentTarget.value;
-                          setEditInvoice({ ...editInvoice, items: newItems });
-                        }}
-                      />
-                    </Table.Td>
-                    <Table.Td>
-                      <ActionIcon
-                        color="red"
-                        variant="light"
-                        onClick={() => {
-                          const newItems = (editInvoice.items || []).filter(
-                            (i) => i.id !== item.id
-                          );
-                          setEditInvoice({ ...editInvoice, items: newItems });
-                        }}
-                      >
-                        <IconTrash size={18} />
-                      </ActionIcon>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
+                {editInvoice.items?.map((item, index) => {
+                  const amount = item.qty * item.rate;
+                  // Auto-calculate GST rate and amount
+                  const gstRate = getTaxRate(item.hsCode, province);
+                  const gstAmount = (item.qty * item.rate * gstRate) / 100;
+
+                  return (
+                    <Table.Tr key={item.id}>
+                      <Table.Td>
+                        <TextInput
+                          value={item.code}
+                          onChange={(e) => {
+                            const newItems = [...(editInvoice.items || [])];
+                            newItems[index].code = e.currentTarget.value;
+                            setEditInvoice({ ...editInvoice, items: newItems });
+                          }}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <TextInput
+                          placeholder="Product"
+                          value={item.product}
+                          onChange={(e) => {
+                            const newItems = [...(editInvoice.items || [])];
+                            newItems[index].product = e.currentTarget.value;
+                            setEditInvoice({ ...editInvoice, items: newItems });
+                          }}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <Select
+                          placeholder="HS Code"
+                          data={[
+                            { value: "3824", label: "3824 Chemicals" },
+                            { value: "8421", label: "8421 Equipment" },
+                            { value: "8413", label: "8413 Pumps" },
+                            { value: "9833", label: "9833 Service" },
+                          ]}
+                          value={item.hsCode}
+                          onChange={(v) => {
+                            const newItems = [...(editInvoice.items || [])];
+                            newItems[index].hsCode = v || "";
+                            setEditInvoice({ ...editInvoice, items: newItems });
+                          }}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <TextInput
+                          placeholder="Description"
+                          value={item.description}
+                          onChange={(e) => {
+                            const newItems = [...(editInvoice.items || [])];
+                            newItems[index].description = e.currentTarget.value;
+                            setEditInvoice({ ...editInvoice, items: newItems });
+                          }}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <NumberInput
+                          value={item.qty}
+                          min={1}
+                          onChange={(val) => {
+                            const newItems = [...(editInvoice.items || [])];
+                            newItems[index].qty = Number(val) || 0;
+                            setEditInvoice({ ...editInvoice, items: newItems });
+                          }}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <NumberInput
+                          value={item.rate}
+                          min={0}
+                          onChange={(val) => {
+                            const newItems = [...(editInvoice.items || [])];
+                            newItems[index].rate = Number(val) || 0;
+                            setEditInvoice({ ...editInvoice, items: newItems });
+                          }}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <NumberInput value={gstRate} disabled />
+                      </Table.Td>
+                      <Table.Td>
+                        <NumberInput value={gstAmount} disabled />
+                      </Table.Td>
+                      <Table.Td>
+                        <NumberInput value={amount} disabled />
+                      </Table.Td>
+                      <Table.Td>
+                        <ActionIcon
+                          color="red"
+                          variant="light"
+                          onClick={() => {
+                            const newItems = (editInvoice.items || []).filter(
+                              (i) => i.id !== item.id
+                            );
+                            setEditInvoice({ ...editInvoice, items: newItems });
+                          }}
+                        >
+                          <IconTrash size={18} />
+                        </ActionIcon>
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
               </Table.Tbody>
             </Table>
             <Button
@@ -1103,14 +1285,14 @@ export default function SalesInvoicePage() {
                     ...(editInvoice.items || []),
                     {
                       id: (editInvoice.items?.length || 0) + 1,
-                      code: 1,
+                      code: "",
                       product: "",
                       hsCode: "",
                       description: "",
                       qty: 1,
                       rate: 0,
-                      exGSTRate: "",
-                      exGSTAmount: "",
+                      exGSTRate: 0,
+                      exGSTAmount: 0,
                     },
                   ],
                 });
@@ -1119,18 +1301,20 @@ export default function SalesInvoicePage() {
               Add Item
             </Button>
             <div className="mt-4 space-y-1">
-              <Text>Subtotal: ${editSubtotal.toFixed(2)}</Text>
-              {includeGST && (
-                <Text>GST (18%): ${editGstAmount.toFixed(2)}</Text>
-              )}
-              <Text fw={700}>Total: ${editTotal.toFixed(2)}</Text>
+              <Text>Subtotal: {editSubtotal.toFixed(2)}</Text>
+              <Text>Ex Gst Amount: {editExGstAmount.toFixed(2)}</Text>
+              <Text>Total GST: {editTotalGst.toFixed(2)}</Text>
+              <Text fw={700}>Net Total: {editNetAmount.toFixed(2)}</Text>
             </div>
             <Group mt="md" justify="flex-end">
               <Button
                 variant="outline"
                 color="#819E00"
                 onClick={() => {
-                  printInvoiceWindow(editInvoice);
+                  handlePrintInvoice({
+                    ...editInvoice,
+                    netAmount: editNetAmount,
+                  });
                 }}
                 mr={8}
               >
@@ -1145,7 +1329,11 @@ export default function SalesInvoicePage() {
                     setInvoices((prev) =>
                       prev.map((i) =>
                         i.id === editInvoice.id
-                          ? { ...editInvoice, amount: editTotal }
+                          ? {
+                              ...editInvoice,
+                              amount: editTotal,
+                              netAmount: editNetAmount,
+                            }
                           : i
                       )
                     );
@@ -1189,6 +1377,121 @@ export default function SalesInvoicePage() {
           </Button>
         </Group>
       </Modal>
+
+      {/* Invoice Print Template (for direct printing, hidden) */}
+      <div style={{ display: "none" }}>
+        {invoices.map((invoice) => (
+          <InvoicePrintTemplate key={invoice.id} invoice={invoice} />
+        ))}
+      </div>
     </div>
   );
 }
+
+// Invoice print template component
+function InvoicePrintTemplate({ invoice }: { invoice: Invoice }) {
+  if (!invoice) return null;
+  return (
+    <div
+      style={{
+        fontFamily: "Arial, sans-serif",
+        background: "#fff",
+        padding: 24,
+        minWidth: 900,
+        position: "relative",
+      }}
+    >
+      <div style={{ textAlign: "center", marginBottom: 8 }}>
+        <img src="/CmLogo.png" alt="Logo" style={{ height: 60 }} />
+        <h2 style={{ color: "#819E00", margin: "8px 0", fontSize: 32 }}>
+          Sales Invoice
+        </h2>
+      </div>
+      <table style={{ width: "100%", fontSize: 14, marginBottom: 16 }}>
+        <tbody>
+          <tr>
+            <td style={{ fontWeight: "bold" }}>Invoice #</td>
+            <td>{invoice.number}</td>
+            <td style={{ fontWeight: "bold" }}>Date</td>
+            <td>{invoice.date}</td>
+          </tr>
+          <tr>
+            <td style={{ fontWeight: "bold" }}>Account Title</td>
+            <td>{invoice.accountTitle}</td>
+            <td style={{ fontWeight: "bold" }}>Amount</td>
+            <td>${invoice.amount?.toFixed(2)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontSize: 13,
+          marginBottom: 24,
+        }}
+      >
+        <thead>
+          <tr style={{ background: "#F8FFF6" }}>
+            <th style={{ border: "1px solid #222", padding: 4 }}>Code</th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>Product</th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>HS Code</th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>
+              Description
+            </th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>Qty</th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>Rate</th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>
+              EX.GST Rate
+            </th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>EX.GST Amt</th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {invoice.items?.map((item, idx) => (
+            <tr key={idx}>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.code}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.product}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.hsCode}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.description}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.qty}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.rate}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.exGSTRate}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.exGSTAmount}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {(item.qty * item.rate).toFixed(2)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ marginTop: 24, fontWeight: "bold", fontSize: 16 }}>
+        Total: ${invoice.amount?.toFixed(2)}
+      </div>
+      {/* Add footer, notes, etc. */}
+    </div>
+  );
+}
+
+type AccountNode = {
+  code: string;
+  name: string;
+  children?: AccountNode[];
+};

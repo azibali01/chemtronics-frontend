@@ -11,6 +11,7 @@ import {
   Modal,
   Select,
   TextInput,
+  NumberInput, // <-- Add this import
   Pagination,
   SimpleGrid,
   ThemeIcon,
@@ -35,6 +36,21 @@ import {
   type DeliveryChallan,
 } from "../../Context/Invoicing/DeliveryChallanContext";
 
+// Helper function to generate next challan number
+function getNextChallanNumber(challans: DeliveryChallan[]): string {
+  if (!challans.length) return "DC-0001";
+  // Extract numbers from existing IDs (assumes format DC-XXXX)
+  const numbers = challans
+    .map((c) => {
+      const match = c.id.match(/DC-(\d+)/);
+      return match ? parseInt(match[1], 10) : 0;
+    })
+    .filter((n) => !isNaN(n));
+  const max = Math.max(...numbers, 0);
+  const next = max + 1;
+  return `DC-${next.toString().padStart(4, "0")}`;
+}
+
 function DeliveryChallansInner() {
   const { challans, addChallan, updateChallan, deleteChallan } =
     useDeliveryChallan();
@@ -47,19 +63,24 @@ function DeliveryChallansInner() {
   const [toDate, setToDate] = useState("");
   const [opened, setOpened] = useState(false);
   const [editData, setEditData] = useState<DeliveryChallan | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteChallanId, setDeleteChallanId] = useState<string | null>(null);
 
   const [poNo, setPoNo] = useState<string>("");
   const [poDate, setPoDate] = useState<string>("");
   const [partyName, setPartyName] = useState<string>("");
   const [partyAddress, setPartyAddress] = useState<string>("");
-  const [deliveryDate, setDeliveryDate] = useState<string>("");
+  const [deliveryDate, setDeliveryDate] = useState<string>(
+    new Date().toISOString().slice(0, 10)
+  );
   const [status, setStatus] = useState<DeliveryChallan["status"]>("Pending");
   const [challanId, setChallanId] = useState<string>("");
 
+  // Always use today's date as default
+  const today = new Date().toISOString().slice(0, 10);
+
   // Only one set of refs and handlers!
   const printRef = useRef<HTMLDivElement>(null);
-  const modalPrintRef = useRef<HTMLDivElement>(null);
 
   // Filtered Data
   const filteredData = useMemo(
@@ -97,7 +118,7 @@ function DeliveryChallansInner() {
   const openCreate = () => {
     setEditData(null);
     resetForm();
-    setChallanId("");
+    setChallanId(getNextChallanNumber(challans)); // <-- Auto generate
     setOpened(true);
   };
 
@@ -146,52 +167,48 @@ function DeliveryChallansInner() {
     resetForm();
   };
 
-  const openDelete = (id: string) => setDeleteId(id);
-
-  const confirmDelete = () => {
-    if (deleteId) deleteChallan(deleteId);
-    setDeleteId(null);
-  };
-
   const resetForm = () => {
     setChallanId("");
     setPoNo("");
     setPoDate("");
     setPartyName("");
     setPartyAddress("");
-    setDeliveryDate("");
+    setDeliveryDate(today); // <-- always set to today
     setStatus("Pending");
     setItems([]);
   };
 
   // Items
   const handleAddItem = () => {
-    setItems((prev) => [
-      ...prev,
-      {
-        sr: prev.length + 1,
-        itemCode: "",
-        particulars: "",
-        unit: "",
-        length: "",
-        width: "",
-        qty: "",
-      },
-    ]);
-  };
-
-  const handleItemChange = (
-    idx: number,
-    field: keyof DeliveryItem,
-    value: string
-  ) => {
-    setItems((prev) =>
-      prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
-    );
+    setItems((prev) => {
+      const newItems = [
+        ...prev,
+        {
+          sr: prev.length + 1,
+          itemCode: "",
+          particulars: "",
+          unit: "",
+          length: "",
+          width: "",
+          qty: "",
+          amount: 0, // <-- Add this line to match DeliveryItem type
+        },
+      ];
+      // Recalculate SR for all items
+      return newItems.map((item, idx) => ({
+        ...item,
+        sr: idx + 1,
+        amount: item.amount ?? 0,
+      }));
+    });
   };
 
   const handleRemoveItem = (idx: number) => {
-    setItems((prev) => prev.filter((_, i) => i !== idx));
+    setItems((prev) => {
+      const filtered = prev.filter((_, i) => i !== idx);
+      // Recalculate SR for all items
+      return filtered.map((item, i) => ({ ...item, sr: i + 1 }));
+    });
   };
 
   function StatusBadge({ status }: { status: DeliveryChallan["status"] }) {
@@ -219,6 +236,9 @@ function DeliveryChallansInner() {
       contactPerson?: string;
       partyPhone?: string;
       other?: string;
+      vehicleNo?: string;
+      deliveredBy?: string;
+      driverCellNo?: string;
     };
     items: DeliveryItem[];
   }) {
@@ -229,36 +249,40 @@ function DeliveryChallansInner() {
           background: "#fff",
           padding: 24,
           minWidth: 900,
+          position: "relative",
         }}
       >
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: 8 }}>
-          <img src="/logo.png" alt="Logo" style={{ height: 60 }} />
-          <h2 style={{ color: "#819E00", margin: "8px 0" }}>
+          <img src="/CmLogo.png" alt="Logo" style={{ height: 60 }} />
+          <h2
+            style={{
+              color: "#819E00",
+              margin: "8px 0",
+              fontSize: 32,
+              fontWeight: "bold",
+              letterSpacing: 2,
+            }}
+          >
             Delivery Challan
           </h2>
         </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            marginBottom: 4,
-          }}
-        >
+        {/* Original/Duplicate/Triplicate */}
+        <div style={{ position: "absolute", top: 32, right: 32 }}>
           <table style={{ border: "1px solid #222", fontSize: 12 }}>
             <tbody>
               <tr>
-                <td style={{ border: "1px solid #222", padding: "2px 8px" }}>
+                <td style={{ border: "1px solid #222", padding: "2px 12px" }}>
                   Original
                 </td>
               </tr>
               <tr>
-                <td style={{ border: "1px solid #222", padding: "2px 8px" }}>
+                <td style={{ border: "1px solid #222", padding: "2px 12px" }}>
                   Duplicate
                 </td>
               </tr>
               <tr>
-                <td style={{ border: "1px solid #222", padding: "2px 8px" }}>
+                <td style={{ border: "1px solid #222", padding: "2px 12px" }}>
                   Triplicate
                 </td>
               </tr>
@@ -266,47 +290,183 @@ function DeliveryChallansInner() {
           </table>
         </div>
         {/* Party Info */}
-        <table style={{ width: "100%", fontSize: 14, marginBottom: 8 }}>
+        <table style={{ width: "100%", fontSize: 14, marginBottom: 16 }}>
           <tbody>
             <tr>
-              <td style={{ color: "#0A6802", fontWeight: "bold", width: 120 }}>
+              <td
+                style={{
+                  color: "#0A6802",
+                  fontWeight: "bold",
+                  width: 120,
+                  paddingBottom: 6,
+                }}
+              >
                 Party Name
               </td>
-              <td style={{ color: "#222" }}>{challan.partyName}</td>
-              <td style={{ color: "#0A6802", fontWeight: "bold", width: 120 }}>
+              <td
+                style={{ color: "#222", fontWeight: "bold", paddingBottom: 6 }}
+              >
+                {challan.partyName}
+              </td>
+              <td
+                style={{
+                  color: "#0A6802",
+                  fontWeight: "bold",
+                  width: 120,
+                  paddingBottom: 6,
+                }}
+              >
                 Delivery Date
               </td>
-              <td style={{ color: "#222" }}>{challan.deliveryDate}</td>
+              <td style={{ color: "#222", paddingBottom: 6 }}>
+                {challan.deliveryDate}
+              </td>
             </tr>
             <tr>
-              <td style={{ color: "#0A6802", fontWeight: "bold" }}>
+              <td
+                style={{
+                  color: "#0A6802",
+                  fontWeight: "bold",
+                  paddingBottom: 6,
+                }}
+              >
                 Party Address
               </td>
-              <td style={{ color: "#222" }}>{challan.partyAddress}</td>
-              <td style={{ color: "#0A6802", fontWeight: "bold" }}>DC No#</td>
-              <td style={{ color: "#222" }}>{challan.challanId}</td>
+              <td style={{ color: "#222", paddingBottom: 6 }}>
+                {challan.partyAddress}
+              </td>
+              <td
+                style={{
+                  color: "#0A6802",
+                  fontWeight: "bold",
+                  paddingBottom: 6,
+                }}
+              >
+                DC No#
+              </td>
+              <td style={{ color: "#222", paddingBottom: 6 }}>
+                {challan.challanId}
+              </td>
             </tr>
             <tr>
-              <td style={{ color: "#0A6802", fontWeight: "bold" }}>PO No#</td>
-              <td style={{ color: "#222" }}>{challan.poNo}</td>
-              <td style={{ color: "#0A6802", fontWeight: "bold" }}>PO Date</td>
-              <td style={{ color: "#222" }}>{challan.poDate}</td>
+              <td
+                style={{
+                  color: "#0A6802",
+                  fontWeight: "bold",
+                  paddingBottom: 6,
+                }}
+              >
+                PO No#
+              </td>
+              <td style={{ color: "#222", paddingBottom: 6 }}>
+                {challan.poNo}
+              </td>
+              <td
+                style={{
+                  color: "#0A6802",
+                  fontWeight: "bold",
+                  paddingBottom: 6,
+                }}
+              >
+                PO Date
+              </td>
+              <td style={{ color: "#222", paddingBottom: 6 }}>
+                {challan.poDate}
+              </td>
             </tr>
             <tr>
-              <td style={{ color: "#0A6802", fontWeight: "bold" }}>
+              <td
+                style={{
+                  color: "#0A6802",
+                  fontWeight: "bold",
+                  paddingBottom: 6,
+                }}
+              >
                 Contact Person
               </td>
-              <td style={{ color: "#222" }}>{challan.contactPerson || "-"}</td>
-              <td style={{ color: "#0A6802", fontWeight: "bold" }}>
+              <td style={{ color: "#222", paddingBottom: 6 }}>
+                {challan.contactPerson || "-"}
+              </td>
+              <td
+                style={{
+                  color: "#0A6802",
+                  fontWeight: "bold",
+                  paddingBottom: 6,
+                }}
+              >
                 Party Phone #
               </td>
-              <td style={{ color: "#222" }}>{challan.partyPhone || "-"}</td>
+              <td style={{ color: "#222", paddingBottom: 6 }}>
+                {challan.partyPhone || "-"}
+              </td>
             </tr>
             <tr>
-              <td style={{ color: "#0A6802", fontWeight: "bold" }}>Other</td>
-              <td style={{ color: "#222" }}>{challan.other || "-"}</td>
+              <td
+                style={{
+                  color: "#0A6802",
+                  fontWeight: "bold",
+                  paddingBottom: 6,
+                }}
+              >
+                Other
+              </td>
+              <td style={{ color: "#222", paddingBottom: 6 }}>
+                {challan.other || "-"}
+              </td>
               <td></td>
               <td></td>
+            </tr>
+          </tbody>
+        </table>
+        {/* Vehicle/Delivery Info */}
+        <table style={{ width: "100%", fontSize: 13, marginBottom: 16 }}>
+          <tbody>
+            <tr>
+              <td style={{ width: "33%", paddingBottom: 6 }}>
+                <span style={{ color: "#0A6802", fontWeight: "bold" }}>
+                  Vehicle No.
+                </span>{" "}
+                <span
+                  style={{
+                    borderBottom: "1px solid #222",
+                    minWidth: 80,
+                    display: "inline-block",
+                    marginLeft: 8,
+                  }}
+                >
+                  {challan.vehicleNo || ""}
+                </span>
+              </td>
+              <td style={{ width: "33%", paddingBottom: 6 }}>
+                <span style={{ color: "#0A6802", fontWeight: "bold" }}>
+                  Delivered By
+                </span>{" "}
+                <span
+                  style={{
+                    borderBottom: "1px solid #222",
+                    minWidth: 80,
+                    display: "inline-block",
+                    marginLeft: 8,
+                  }}
+                >
+                  {challan.deliveredBy || ""}
+                </span>
+              </td>
+              <td style={{ width: "33%", paddingBottom: 6 }}>
+                <span style={{ color: "#0A6802", fontWeight: "bold" }}>
+                  Driver Cell No.
+                </span>{" "}
+                <span
+                  style={{
+                    borderBottom: "1px solid #222",
+                    minWidth: 80,
+                    display: "inline-block",
+                    marginLeft: 8,
+                  }}
+                >
+                  {challan.driverCellNo || ""}
+                </span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -316,7 +476,7 @@ function DeliveryChallansInner() {
             width: "100%",
             borderCollapse: "collapse",
             fontSize: 13,
-            marginBottom: 12,
+            marginBottom: 24,
           }}
         >
           <thead>
@@ -372,16 +532,63 @@ function DeliveryChallansInner() {
         </table>
         {/* Footer */}
         <div style={{ marginTop: 24 }}>
-          <table style={{ width: "100%", fontSize: 13 }}>
+          <table style={{ width: "100%", fontSize: 13, marginBottom: 16 }}>
             <tbody>
               <tr>
-                <td style={{ width: "33%", textAlign: "center" }}>
-                  Prepared By
+                <td
+                  style={{
+                    width: "33%",
+                    textAlign: "center",
+                    paddingBottom: 12,
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "#0A6802",
+                      fontWeight: "bold",
+                      borderBottom: "1px solid #222",
+                      paddingBottom: 2,
+                    }}
+                  >
+                    Prepared By
+                  </span>
                 </td>
-                <td style={{ width: "33%", textAlign: "center" }}>
-                  Checked By
+                <td
+                  style={{
+                    width: "33%",
+                    textAlign: "center",
+                    paddingBottom: 12,
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "#0A6802",
+                      fontWeight: "bold",
+                      borderBottom: "1px solid #222",
+                      paddingBottom: 2,
+                    }}
+                  >
+                    Checked By
+                  </span>
                 </td>
-                <td style={{ width: "33%", textAlign: "center" }}>Manager</td>
+                <td
+                  style={{
+                    width: "33%",
+                    textAlign: "center",
+                    paddingBottom: 12,
+                  }}
+                >
+                  <span
+                    style={{
+                      color: "#0A6802",
+                      fontWeight: "bold",
+                      borderBottom: "1px solid #222",
+                      paddingBottom: 2,
+                    }}
+                  >
+                    Manager
+                  </span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -395,14 +602,44 @@ function DeliveryChallansInner() {
               fontWeight: "bold",
               color: "#0A6802",
               fontSize: 13,
+              marginTop: 16,
+              borderBottom: "1px solid #222",
+              paddingBottom: 2,
             }}
           >
             Receiver Signature
           </div>
-          <div style={{ marginTop: 8, fontSize: 11, color: "#222" }}>
+        </div>
+        {/* Footer Banner */}
+        <div
+          style={{
+            width: "100%",
+            marginTop: 24,
+            background: "#eaf6ff",
+            borderTop: "2px solid #819E00",
+            padding: "8px 0 8px 0",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "flex-start",
+              gap: 32,
+              fontSize: 12,
+              color: "#222",
+              padding: "8px 16px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ minWidth: 90, fontWeight: "bold" }}>Expertise</div>
             <div>
               <strong>HEAD OFFICE:</strong> 45-B, PECHS, 42-Faced Canal View
               Phase-II, Multan &nbsp; Tel: 922-345129-271-3
+            </div>
+            <div>
+              <strong>MULTAN:</strong> S-6, Rawat Plaza, Main Model Town, Tel:
+              051-609-1611
             </div>
             <div>
               <strong>RAWALPINDI:</strong> S-6, Rawat Plaza, Main Model Town,
@@ -497,9 +734,12 @@ function DeliveryChallansInner() {
 
     doc.setFontSize(12);
     doc.setTextColor("#0A6802");
+    // Define a type for jsPDF with lastAutoTable
+    type JsPDFWithAutoTable = jsPDF & { lastAutoTable?: { finalY?: number } };
+    const docWithAutoTable = doc as JsPDFWithAutoTable;
     const finalY =
-      (doc as any).lastAutoTable && (doc as any).lastAutoTable.finalY
-        ? (doc as any).lastAutoTable.finalY + 20
+      docWithAutoTable.lastAutoTable && docWithAutoTable.lastAutoTable.finalY
+        ? docWithAutoTable.lastAutoTable.finalY + 20
         : doc.internal.pageSize.height - 60;
     doc.text(`Total Qty: ${totalQty}`, 40, finalY);
 
@@ -595,10 +835,12 @@ function DeliveryChallansInner() {
 
     doc.setFontSize(12);
     doc.setTextColor("#0A6802");
-    // Fix: Use doc.lastAutoTable.finalY safely
+    // Define a type for jsPDF with lastAutoTable
+    type JsPDFWithAutoTable = jsPDF & { lastAutoTable?: { finalY?: number } };
+    const docWithAutoTable = doc as JsPDFWithAutoTable;
     const finalY =
-      (doc as any).lastAutoTable && (doc as any).lastAutoTable.finalY
-        ? (doc as any).lastAutoTable.finalY + 20
+      docWithAutoTable.lastAutoTable && docWithAutoTable.lastAutoTable.finalY
+        ? docWithAutoTable.lastAutoTable.finalY + 20
         : doc.internal.pageSize.height - 60;
     doc.text(`Total Challans: ${filteredData.length}`, 40, finalY);
     doc.text(`Total Qty: ${totalQty}`, 200, finalY);
@@ -606,37 +848,58 @@ function DeliveryChallansInner() {
     doc.save("delivery_challans.pdf");
   };
 
-  function PrintableChallanContent(challan: any) {
-    return `
+  // Add this function for modal print
+  // const handleModalPrint = useReactToPrint({
+  //   content: () => modalPrintRef.current,
+  //   documentTitle: challanId || "Delivery Challan",
+  // });
+
+  // Custom print function
+  const handleCustomPrint = () => {
+    // Render your ChallanPrintTemplate to a string
+    const printContent = `
     <html>
       <head>
-        <title>Delivery Challan ${challan.number}</title>
+        <title>Delivery Challan</title>
         <style>
-          body { font-family: Arial; color: #222; padding: 24px; }
-          h2 { margin-bottom: 8px; }
-          p { margin: 4px 0; }
+          body { font-family: Arial, sans-serif; padding: 24px; }
+          /* Add more print styles here if needed */
         </style>
       </head>
       <body>
-        <h2>Delivery Challan #${challan.number}</h2>
-        <p>Date: ${challan.date}</p>
-        <p>Account: ${challan.accountTitle}</p>
-        <p>Amount: $${challan.amount?.toFixed(2)}</p>
-        <!-- Add more details as needed -->
+        ${document.getElementById("challan-print-content")?.innerHTML}
       </body>
     </html>
   `;
-  }
-
-  const printChallanWindow = (challan: any) => {
-    const printWindow = window.open("", "_blank", "width=800,height=600");
+    const printWindow = window.open("", "_blank", "width=900,height=700");
     if (printWindow) {
       printWindow.document.open();
-      printWindow.document.write(PrintableChallanContent(challan));
+      printWindow.document.write(printContent);
       printWindow.document.close();
       printWindow.focus();
       setTimeout(() => printWindow.print(), 300);
     }
+  };
+
+  // Open delete modal
+  const openDeleteModal = (id: string) => {
+    setDeleteChallanId(id);
+    setDeleteModalOpen(true);
+  };
+
+  // Confirm delete
+  const confirmDeleteChallan = () => {
+    if (deleteChallanId) {
+      deleteChallan(deleteChallanId);
+      setDeleteChallanId(null);
+      setDeleteModalOpen(false);
+    }
+  };
+
+  // Cancel delete
+  const cancelDeleteChallan = () => {
+    setDeleteChallanId(null);
+    setDeleteModalOpen(false);
   };
 
   return (
@@ -735,13 +998,7 @@ function DeliveryChallansInner() {
             style={{ minWidth: 140 }}
           />
           <Group mt={24} gap="xs">
-            <Button
-              variant="outline"
-              color="#0A6802"
-              onClick={printChallanWindow}
-            >
-              Print
-            </Button>
+            {/* Print button removed from here */}
             <Button
               variant="outline"
               color="#0A6802"
@@ -763,7 +1020,6 @@ function DeliveryChallansInner() {
               Export
             </Button>
           </Group>
-
           <Select
             label="Rows per page"
             data={["5", "10", "20", "50"]}
@@ -835,7 +1091,7 @@ function DeliveryChallansInner() {
                       <ActionIcon
                         variant="light"
                         color="red"
-                        onClick={() => openDelete(row.id)}
+                        onClick={() => openDeleteModal(row.id)}
                       >
                         <IconTrash size={16} />
                       </ActionIcon>
@@ -885,30 +1141,7 @@ function DeliveryChallansInner() {
         size="70%"
       >
         {/* Only one print template block */}
-        <div
-          ref={modalPrintRef}
-          style={{
-            height: 0,
-            overflow: "hidden",
-            opacity: 0,
-            pointerEvents: "none",
-            position: "absolute",
-            zIndex: -1,
-          }}
-        >
-          <ChallanPrintTemplate
-            challan={{
-              challanId,
-              deliveryDate,
-              poNo,
-              poDate,
-              partyName,
-              partyAddress,
-            }}
-            items={items}
-          />
-        </div>
-        <Group mb="md" w="50%">
+        <Group mb="md" w="50%" grow>
           <TextInput
             label="Challan #"
             placeholder="Enter Challan Number"
@@ -955,40 +1188,203 @@ function DeliveryChallansInner() {
             Add Item
           </Button>
         </Group>
-        {items.length > 0 && (
-          <Table withTableBorder highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>SR</Table.Th>
-                <Table.Th>Item Code</Table.Th>
-                <Table.Th style={{ minWidth: 180 }}>Particulars</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {items.map((item, idx) => (
-                <Table.Tr key={idx}>
-                  <Table.Td>{item.sr}</Table.Td>
-                  <Table.Td>{item.itemCode}</Table.Td>
-                  <Table.Td>{item.particulars}</Table.Td>
-                  <Table.Td>{item.unit}</Table.Td>
-                  <Table.Td>{item.length}</Table.Td>
-                  <Table.Td>{item.width}</Table.Td>
-                  <Table.Td>{item.qty}</Table.Td>
-                  <Table.Td>
-                    <ActionIcon
-                      color="red"
-                      variant="light"
-                      onClick={() => handleRemoveItem(idx)}
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        )}
+        {items.length > 0 &&
+          (() => {
+            // REMOVE totalAmount calculation
+            // const totalAmount = items.reduce((sum, item) => {
+            //   return sum + (typeof item.amount === "number" ? item.amount : 0);
+            // }, 0);
+
+            return (
+              <Table withTableBorder highlightOnHover>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>SR</Table.Th>
+                    <Table.Th>Item Code</Table.Th>
+                    <Table.Th style={{ minWidth: 230 }}>Particulars</Table.Th>
+                    <Table.Th>Unit</Table.Th>
+                    <Table.Th>Length</Table.Th>
+                    <Table.Th>Width</Table.Th>
+                    <Table.Th>Qty</Table.Th>
+                    {/* <Table.Th>Amount</Table.Th> REMOVE this column */}
+                    <Table.Th>Actions</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {items.map((item, idx) => (
+                    <Table.Tr key={idx}>
+                      <Table.Td style={{ textAlign: "center" }}>
+                        {item.sr}
+                      </Table.Td>
+                      <Table.Td>
+                        <TextInput
+                          value={item.itemCode ?? ""}
+                          onChange={(e) => {
+                            const value = e?.currentTarget?.value ?? "";
+                            setItems((prev) =>
+                              prev.map((itm, i) =>
+                                i === idx ? { ...itm, itemCode: value } : itm
+                              )
+                            );
+                          }}
+                          placeholder="Item Code"
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <TextInput
+                          value={item.particulars ?? ""}
+                          onChange={(e) => {
+                            const value = e?.currentTarget?.value ?? "";
+                            setItems((prev) =>
+                              prev.map((itm, i) =>
+                                i === idx ? { ...itm, particulars: value } : itm
+                              )
+                            );
+                          }}
+                          placeholder="Particulars"
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <TextInput
+                          value={item.unit ?? ""}
+                          onChange={(e) => {
+                            const value = e?.currentTarget?.value ?? "";
+                            setItems((prev) =>
+                              prev.map((itm, i) =>
+                                i === idx ? { ...itm, unit: value } : itm
+                              )
+                            );
+                          }}
+                          placeholder="Unit"
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <NumberInput
+                          value={item.length ? Number(item.length) : undefined}
+                          onChange={(value) =>
+                            setItems((prev) =>
+                              prev.map((itm, i) =>
+                                i === idx
+                                  ? { ...itm, length: value?.toString() || "" }
+                                  : itm
+                              )
+                            )
+                          }
+                          placeholder="Length"
+                          min={0}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <NumberInput
+                          value={item.width ? Number(item.width) : undefined}
+                          onChange={(value) =>
+                            setItems((prev) =>
+                              prev.map((itm, i) =>
+                                i === idx
+                                  ? { ...itm, width: value?.toString() || "" }
+                                  : itm
+                              )
+                            )
+                          }
+                          placeholder="Width"
+                          min={0}
+                        />
+                      </Table.Td>
+                      <Table.Td>
+                        <NumberInput
+                          value={item.qty ? Number(item.qty) : undefined}
+                          onChange={(value) =>
+                            setItems((prev) =>
+                              prev.map((itm, i) =>
+                                i === idx
+                                  ? { ...itm, qty: value?.toString() || "" }
+                                  : itm
+                              )
+                            )
+                          }
+                          placeholder="Qty"
+                          min={0}
+                        />
+                      </Table.Td>
+                      {/* REMOVE Amount cell */}
+                      <Table.Td style={{ textAlign: "center" }}>
+                        <ActionIcon
+                          variant="light"
+                          color="red"
+                          onClick={() => handleRemoveItem(idx)}
+                        >
+                          <IconTrash size={16} />
+                        </ActionIcon>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                  {/* REMOVE total amount row */}
+                </Table.Tbody>
+              </Table>
+            );
+          })()}
+
+        <Group justify="right" mt="md">
+          <div id="challan-print-content" style={{ display: "none" }}>
+            <ChallanPrintTemplate
+              challan={{
+                challanId,
+                deliveryDate,
+                poNo,
+                poDate,
+                partyName,
+                partyAddress,
+              }}
+              items={items}
+            />
+          </div>
+          <Button color="#819E00" variant="outline" onClick={handleCustomPrint}>
+            Print
+          </Button>
+          <Button color="#0A6802" onClick={handleSave}>
+            {editData ? "Update Challan" : "Create Challan"}
+          </Button>
+          <Button
+            variant="outline"
+            color="#0A6802"
+            onClick={() => setOpened(false)}
+          >
+            Cancel
+          </Button>
+        </Group>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        opened={deleteModalOpen}
+        onClose={cancelDeleteChallan}
+        title={<strong>Delete Delivery Challan</strong>}
+        centered
+        size="sm"
+      >
+        <Text mb="md">
+          Are you sure you want to delete this delivery challan?
+        </Text>
+        <Group justify="right">
+          <Button variant="outline" color="gray" onClick={cancelDeleteChallan}>
+            Cancel
+          </Button>
+          <Button color="red" onClick={confirmDeleteChallan}>
+            Delete
+          </Button>
+        </Group>
       </Modal>
     </div>
   );
 }
+
+// At the end of the file, wrap your main component with DeliveryChallanProvider
+function DeliveryChallans() {
+  return (
+    <DeliveryChallanProvider>
+      <DeliveryChallansInner />
+    </DeliveryChallanProvider>
+  );
+}
+
+export default DeliveryChallans;

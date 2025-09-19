@@ -211,39 +211,6 @@ function JournalVoucherList() {
     setOpenedEdit(false);
   };
 
-  function PrintableVoucherContent(voucher: any) {
-    return `
-      <html>
-        <head>
-          <title>Journal Voucher ${voucher.number}</title>
-          <style>
-            body { font-family: Arial; color: #222; padding: 24px; }
-            h2 { margin-bottom: 8px; }
-            p { margin: 4px 0; }
-          </style>
-        </head>
-        <body>
-          <h2>Journal Voucher #${voucher.number}</h2>
-          <p>Date: ${voucher.date}</p>
-          <p>Account: ${voucher.accountTitle}</p>
-          <p>Amount: $${voucher.amount?.toFixed(2)}</p>
-          <!-- Add more details as needed -->
-        </body>
-      </html>
-    `;
-  }
-
-  const printVoucherWindow = (voucher: any) => {
-    const printWindow = window.open("", "_blank", "width=800,height=600");
-    if (printWindow) {
-      printWindow.document.open();
-      printWindow.document.write(PrintableVoucherContent(voucher));
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => printWindow.print(), 300);
-    }
-  };
-
   return (
     <div className="p-6">
       <Group justify="space-between" mb="md">
@@ -446,7 +413,7 @@ function VoucherForm({
     setVoucher((prev) => ({ ...prev, [field]: value }));
   };
 
-  function printVoucherWindow(voucher: JournalVoucher): void {
+  const printVoucherWindow = (voucher: JournalVoucher): void => {
     const printContent = `
       <html>
         <head>
@@ -477,7 +444,7 @@ function VoucherForm({
       printWindow.focus();
       setTimeout(() => printWindow.print(), 300);
     }
-  }
+  };
   return (
     <form
       onSubmit={(e) => {

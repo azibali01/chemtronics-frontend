@@ -1,15 +1,16 @@
 import React, { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
+
 type InvoiceItem = {
   id: number;
-  code: number;
+  code: string; // <-- string, not number
   product: string;
   hsCode: string;
   description: string;
   qty: number;
   rate: number;
-  exGSTRate: string;
-  exGSTAmount: string;
+  exGSTRate: number;
+  exGSTAmount: number;
 };
 
 type Invoice = {
@@ -21,11 +22,12 @@ type Invoice = {
   poNo?: string;
   poDate?: string;
   accountNo?: string;
-  accountTitle?: string;
+  accountTitle: string; // <-- required, not optional
   saleAccount?: string;
   saleAccountTitle?: string;
   ntnNo?: string;
   amount: number;
+  netAmount?: number;
   items?: InvoiceItem[];
 };
 

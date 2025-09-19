@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState } from "react";
 
 export type DeliveryItem = {
+  amount: number;
   sr: number;
   itemCode: string;
   particulars: string;

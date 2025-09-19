@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import {
   Modal,
   Button,
@@ -19,10 +19,12 @@ import {
   IconTrash,
   IconMinus,
   IconDownload,
+  IconPrinter,
 } from "@tabler/icons-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { usePurchaseReturns } from "../../Context/Invoicing/PurchaseReturnsContext";
+import { useProducts } from "../../Context/Inventory/ProductsContext";
 
 declare module "jspdf" {
   interface jsPDF {
@@ -53,9 +55,23 @@ interface ReturnEntry {
   purchaseTitle: string;
 }
 
+// Helper to get next invoice number
+function getNextReturnNumber(returns: ReturnEntry[]) {
+  const numbers = returns
+    .map((r) => {
+      const match = r.id.match(/^PR-(\d+)$/);
+      return match ? parseInt(match[1], 10) : null;
+    })
+    .filter((n) => n !== null) as number[];
+  const max = numbers.length ? Math.max(...numbers) : 0;
+  const next = max + 1;
+  return `PR-${next}`;
+}
+
 export default function PurchaseReturnModal() {
   // Use context for returns
   const { returns, setReturns } = usePurchaseReturns();
+  const { products } = useProducts();
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ReturnEntry | null>(null);
@@ -80,7 +96,9 @@ export default function PurchaseReturnModal() {
 
   const [editingReturn, setEditingReturn] = useState<ReturnEntry | null>(null);
 
-  const printRef = useRef<HTMLDivElement>(null);
+  // Print logic state
+  const [currentReturnForPrint, setCurrentReturnForPrint] =
+    useState<ReturnEntry | null>(null);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
@@ -114,6 +132,12 @@ export default function PurchaseReturnModal() {
       if (field === "rate" && typeof value === "number") {
         item.rate = value;
       }
+      if (field === "code" && typeof value === "string") {
+        item.code = value;
+      }
+      if (field === "unit" && typeof value === "string") {
+        item.unit = value;
+      }
 
       item.amount = item.quantity * item.rate;
 
@@ -124,7 +148,7 @@ export default function PurchaseReturnModal() {
 
   const handleSubmit = () => {
     const newReturn: ReturnEntry = {
-      id: `PR-${returns.length + 1}`,
+      id: getNextReturnNumber(returns),
       invoice,
       date: returnDate,
       notes,
@@ -359,8 +383,86 @@ export default function PurchaseReturnModal() {
     doc.save("purchase_returns.pdf");
   };
 
+  // When opening the modal, set invoice number and date automatically
+  const handleOpen = () => {
+    setInvoice(getNextReturnNumber(returns));
+    setReturnDate(new Date().toISOString().slice(0, 10)); // set today's date
+    setSupplierNumber("");
+    setSupplierTitle("");
+    setPurchaseAccount("");
+    setPurchaseTitle("");
+    setNotes("");
+    setItems([
+      { product: "", quantity: 0, rate: 0, amount: 0, code: "", unit: "" },
+    ]);
+    setOpened(true);
+  };
+
+  const productCodeOptions = products.map((p) => ({
+    value: p.code,
+    label: p.code,
+  }));
+
+  const productNameOptions = products.map((p) => ({
+    value: p.name,
+    label: p.name,
+  }));
+
+  // Print logic using hidden div and window.print()
+  const handlePrintReturn = (entry: ReturnEntry) => {
+    setCurrentReturnForPrint(entry);
+    setTimeout(() => {
+      const printContent = document.getElementById(
+        "return-print-content"
+      )?.innerHTML;
+      if (printContent) {
+        const printWindow = window.open("", "_blank", "width=900,height=700");
+        if (printWindow) {
+          printWindow.document.open();
+          printWindow.document.write(`
+            <html>
+              <head>
+                <title>Purchase Return</title>
+                <style>
+                  body { font-family: Arial, sans-serif; padding: 24px; }
+                </style>
+              </head>
+              <body>
+                ${printContent}
+              </body>
+            </html>
+          `);
+          printWindow.document.close();
+          printWindow.focus();
+          setTimeout(() => printWindow.print(), 300);
+        }
+      }
+      setCurrentReturnForPrint(null);
+    }, 100);
+  };
+
   return (
     <div>
+      {/* Printable return content (always rendered, hidden off-screen) */}
+      <div
+        style={{
+          position: "fixed",
+          left: "-9999px",
+          top: 0,
+          zIndex: -1,
+          width: "800px",
+        }}
+      >
+        {currentReturnForPrint && (
+          <PurchaseReturnPrintTemplate entry={currentReturnForPrint} />
+        )}
+      </div>
+      <div id="return-print-content" style={{ display: "none" }}>
+        {currentReturnForPrint && (
+          <PurchaseReturnPrintTemplate entry={currentReturnForPrint} />
+        )}
+      </div>
+
       <Card shadow="sm" p="lg" radius="md" withBorder mt={20} bg={"#F1FCF0"}>
         <Group justify="space-between" mb="md">
           <div>
@@ -369,7 +471,7 @@ export default function PurchaseReturnModal() {
           </div>
           <Button
             leftSection={<IconPlus size={16} />}
-            onClick={() => setOpened(true)}
+            onClick={handleOpen}
             color="#0A6802"
           >
             New Purchase Return
@@ -516,6 +618,14 @@ export default function PurchaseReturnModal() {
                     >
                       <IconDownload size={16} />
                     </ActionIcon>
+                    <ActionIcon
+                      variant="light"
+                      color="#819E00"
+                      onClick={() => handlePrintReturn(r)}
+                      title="Print"
+                    >
+                      <IconPrinter size={16} />
+                    </ActionIcon>
                   </Group>
                 </Table.Td>
               </Table.Tr>
@@ -549,6 +659,7 @@ export default function PurchaseReturnModal() {
             placeholder="Enter invoice number"
             value={invoice}
             onChange={(e) => setInvoice(e.currentTarget.value)}
+            readOnly
           />
           <TextInput
             label="Date"
@@ -584,18 +695,35 @@ export default function PurchaseReturnModal() {
             onChange={(e) => setPurchaseTitle(e.currentTarget.value)}
           />
         </Group>
-        <div ref={printRef}>
-          <ReturnForm
-            notes={notes}
-            setNotes={setNotes}
-            items={items}
-            updateItem={updateItem}
-            addItem={addItem}
-            removeItem={removeItem}
-          />
-        </div>
+        <ReturnForm
+          notes={notes}
+          setNotes={setNotes}
+          items={items}
+          updateItem={updateItem}
+          addItem={addItem}
+          removeItem={removeItem}
+          productCodeOptions={productCodeOptions}
+          productNameOptions={productNameOptions}
+        />
         <Group justify="flex-end" mt="lg">
-          <Button color="#819E00" onClick={() => window.print()}>
+          <Button
+            color="#819E00"
+            onClick={() =>
+              handlePrintReturn({
+                id: invoice,
+                invoice,
+                date: returnDate,
+                notes,
+                items,
+                amount: items.reduce((acc, i) => acc + i.amount, 0),
+                supplierNumber,
+                supplierTitle,
+                purchaseAccount,
+                purchaseTitle,
+              })
+            }
+            leftSection={<IconPrinter size={16} />}
+          >
             Print
           </Button>
           <Button variant="default" onClick={() => setOpened(false)}>
@@ -662,6 +790,8 @@ export default function PurchaseReturnModal() {
           updateItem={updateItem}
           addItem={addItem}
           removeItem={removeItem}
+          productCodeOptions={productCodeOptions}
+          productNameOptions={productNameOptions}
         />
 
         <Group justify="flex-end" mt="lg">
@@ -677,6 +807,99 @@ export default function PurchaseReturnModal() {
   );
 }
 
+function PurchaseReturnPrintTemplate({ entry }: { entry: ReturnEntry }) {
+  if (!entry) return null;
+  return (
+    <div
+      style={{
+        fontFamily: "Arial, sans-serif",
+        background: "#fff",
+        padding: 24,
+        minWidth: 900,
+        position: "relative",
+      }}
+    >
+      <div style={{ textAlign: "center", marginBottom: 8 }}>
+        <h2 style={{ color: "#819E00", margin: "8px 0", fontSize: 32 }}>
+          Purchase Return
+        </h2>
+      </div>
+      <table style={{ width: "100%", fontSize: 14, marginBottom: 16 }}>
+        <tbody>
+          <tr>
+            <td style={{ fontWeight: "bold" }}>Invoice #</td>
+            <td>{entry.invoice}</td>
+            <td style={{ fontWeight: "bold" }}>Date</td>
+            <td>{entry.date}</td>
+          </tr>
+          <tr>
+            <td style={{ fontWeight: "bold" }}>Supplier Number</td>
+            <td>{entry.supplierNumber}</td>
+            <td style={{ fontWeight: "bold" }}>Supplier Title</td>
+            <td>{entry.supplierTitle}</td>
+          </tr>
+          <tr>
+            <td style={{ fontWeight: "bold" }}>Purchase Account</td>
+            <td>{entry.purchaseAccount}</td>
+            <td style={{ fontWeight: "bold" }}>Purchase Title</td>
+            <td>{entry.purchaseTitle}</td>
+          </tr>
+        </tbody>
+      </table>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontSize: 13,
+          marginBottom: 24,
+        }}
+      >
+        <thead>
+          <tr style={{ background: "#F8FFF6" }}>
+            <th style={{ border: "1px solid #222", padding: 4 }}>Code</th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>Product</th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>Unit</th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>Quantity</th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>Rate</th>
+            <th style={{ border: "1px solid #222", padding: 4 }}>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entry.items.map((item, idx) => (
+            <tr key={idx}>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.code}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.product}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.unit}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.quantity}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.rate}
+              </td>
+              <td style={{ border: "1px solid #222", padding: 4 }}>
+                {item.amount}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ marginTop: 24, fontWeight: "bold", fontSize: 16 }}>
+        Total: {entry.amount?.toFixed(2)}
+      </div>
+      <div>
+        <b>Notes:</b> {entry.notes}
+      </div>
+      {/* Add footer, notes, etc. */}
+    </div>
+  );
+}
+
 interface ReturnFormProps {
   notes: string;
   setNotes: (notes: string) => void;
@@ -688,6 +911,8 @@ interface ReturnFormProps {
   ) => void;
   addItem: () => void;
   removeItem: (index: number) => void;
+  productCodeOptions: { value: string; label: string }[];
+  productNameOptions: { value: string; label: string }[];
 }
 
 function ReturnForm({
@@ -697,6 +922,8 @@ function ReturnForm({
   updateItem,
   addItem,
   removeItem,
+  productCodeOptions,
+  productNameOptions,
 }: ReturnFormProps) {
   return (
     <>
@@ -704,15 +931,17 @@ function ReturnForm({
         <p className="font-medium mb-2">Return Items</p>
         {items.map((item: ReturnItem, index: number) => (
           <Group key={index} grow mb="xs">
-            <TextInput
+            <Select
               label="Code"
-              value={item.code || ""}
-              onChange={(e) => updateItem(index, "code", e.currentTarget.value)}
+              placeholder="Select product code"
+              data={productCodeOptions}
+              value={item.code}
+              onChange={(val) => updateItem(index, "code", val ?? "")}
             />
             <Select
               label="Product"
               placeholder="Select product"
-              data={["Product 1", "Product 2"]}
+              data={productNameOptions}
               value={item.product}
               onChange={(val) => updateItem(index, "product", val ?? "")}
             />
