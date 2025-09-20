@@ -9,11 +9,11 @@ import React, {
 export type Product = {
   id: string;
   code: string;
-  name: string;
+  productName: string;
   category: string;
-  description: string;
-  stock: number | "";
-  minStock: number | "";
+  productDescription: string;
+  quantity: number | "";
+  minimumStockLevel: number | "";
   unitPrice: number | "";
   costPrice: number | "";
   status: "active" | "inactive";
@@ -41,22 +41,22 @@ interface ProductsContextType {
   setDelId: (id: string | null) => void;
   catModal: boolean;
   setCatModal: (b: boolean) => void;
-  name: string;
-  setName: (n: string) => void;
+  productName: string;
+  setProductName: (n: string) => void;
   code: string;
   setCode: (c: string) => void;
   category: string | null;
   setCategory: (c: string | null) => void;
-  description: string;
-  setDescription: (d: string) => void;
+  productDescription: string;
+  setProductDescription: (d: string) => void;
   unitPrice: number | "";
   setUnitPrice: (v: number | "") => void;
   costPrice: number | "";
   setCostPrice: (v: number | "") => void;
-  stock: number | "";
-  setStock: (v: number | "") => void;
-  minStock: number | "";
-  setMinStock: (v: number | "") => void;
+  quantity: number | "";
+  setQuantity: (v: number | "") => void;
+  minimumStockLevel: number | "";
+  setMinimumStockLevel: (v: number | "") => void;
   status: "active" | "inactive";
   setStatus: (s: "active" | "inactive") => void;
   newCategory: string;
@@ -87,14 +87,14 @@ export const ProductsProvider = ({ children }: { children: ReactNode }) => {
   const [editing, setEditing] = useState<Product | null>(null);
   const [delId, setDelId] = useState<string | null>(null);
   const [catModal, setCatModal] = useState(false);
-  const [name, setName] = useState("");
+  const [productName, setProductName] = useState("");
   const [code, setCode] = useState("");
   const [category, setCategory] = useState<string | null>(null);
-  const [description, setDescription] = useState("");
+  const [productDescription, setProductDescription] = useState("");
   const [unitPrice, setUnitPrice] = useState<number | "">("");
   const [costPrice, setCostPrice] = useState<number | "">("");
-  const [stock, setStock] = useState<number | "">("");
-  const [minStock, setMinStock] = useState<number | "">("");
+  const [quantity, setQuantity] = useState<number | "">("");
+  const [minimumStockLevel, setMinimumStockLevel] = useState<number | "">("");
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [newCategory, setNewCategory] = useState("");
   const [loading, setLoading] = useState(false);
@@ -122,22 +122,22 @@ export const ProductsProvider = ({ children }: { children: ReactNode }) => {
         setDelId,
         catModal,
         setCatModal,
-        name,
-        setName,
+        productName,
+        setProductName,
         code,
         setCode,
         category,
         setCategory,
-        description,
-        setDescription,
+        productDescription,
+        setProductDescription,
         unitPrice,
         setUnitPrice,
         costPrice,
         setCostPrice,
-        stock,
-        setStock,
-        minStock,
-        setMinStock,
+        quantity,
+        setQuantity,
+        minimumStockLevel,
+        setMinimumStockLevel,
         status,
         setStatus,
         newCategory,

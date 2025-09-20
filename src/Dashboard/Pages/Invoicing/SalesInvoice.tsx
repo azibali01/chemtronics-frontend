@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Card,
   Text,
@@ -25,6 +25,8 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useSalesInvoice } from "../../Context/Invoicing/SalesInvoiceContext";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import axios from "axios";
+import { notifications } from "@mantine/notifications";
 
 // Types for Invoice and InvoiceItem
 export interface InvoiceItem {
@@ -56,6 +58,13 @@ export interface Invoice {
   netAmount?: number;
   items?: InvoiceItem[];
 }
+
+// Add AccountNode type
+type AccountNode = {
+  code: string;
+  name: string;
+  children?: AccountNode[];
+};
 
 // Sale Account mapping
 const saleAccountTitleMap: Record<string, string> = {
@@ -195,6 +204,7 @@ export default function SalesInvoicePage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
+
   // Add state to track current invoice for printing
   const [currentInvoiceForPrint, setCurrentInvoiceForPrint] =
     useState<Invoice | null>(null);
@@ -204,20 +214,202 @@ export default function SalesInvoicePage() {
     (acc: number, i: InvoiceItem) => acc + i.qty * i.rate,
     0
   );
+
   // GST calculation
   const gstAmount = includeGST ? subtotal * 0.18 : 0;
+
   // Calculate net total
   const netTotal = subtotal + gstAmount;
+
   // Calculate Ex Gst Amount and Total GST from items (auto-calculated)
   const exGstAmount = items.reduce(
     (acc: number, i: InvoiceItem) =>
       acc + (i.qty * i.rate * getTaxRate(i.hsCode, province)) / 100,
     0
   );
+
   const totalGst = items.reduce(
     (acc: number, i: InvoiceItem) => acc + getTaxRate(i.hsCode, province),
     0
   );
+
+  // Add useEffect to fetch invoices from backend on component mount
+  useEffect(() => {
+    fetchSalesInvoices();
+  }, []);
+
+  // Function to fetch all sales invoices from backend
+  const fetchSalesInvoices = async () => {
+    try {
+      const response = await axios.get("http://localhost:3000/sales-invoices");
+      setInvoices(response.data);
+    } catch (error) {
+      console.error("Error fetching sales invoices:", error);
+      notifications.show({
+        title: "Error",
+        message: "Failed to fetch sales invoices",
+        color: "red",
+      });
+    }
+  };
+
+  // Function to create sales invoice in backend
+  const createSalesInvoice = async () => {
+    try {
+      // Validation
+      if (!newInvoiceNumber || !newDate || !newAccountTitle) {
+        notifications.show({
+          title: "Validation Error",
+          message: "Please fill in all required fields",
+          color: "red",
+        });
+        return;
+      }
+
+      const payload = {
+        number: newInvoiceNumber,
+        date: newDate,
+        deliveryNo: newDeliveryNo,
+        deliveryDate: newDeliveryDate,
+        poNo: newPoNo,
+        poDate: newPoDate,
+        accountNo: newAccountNo,
+        accountTitle: newAccountTitle,
+        saleAccount: newSaleAccount,
+        saleAccountTitle: newSaleAccountTitle,
+        ntnNo: newNtnNo,
+        amount: netTotal,
+        netAmount: netTotal,
+        items: items,
+      };
+
+      const response = await axios.post(
+        "http://localhost:3000/sales-invoices/create",
+        payload
+      );
+
+      if (response.data) {
+        // Add to local state after successful backend save
+        setInvoices((prev) => [response.data, ...prev]);
+
+        // Show success notification
+        notifications.show({
+          title: "Success",
+          message: "Sales invoice created successfully",
+          color: "green",
+        });
+
+        // Close modal and reset form
+        setCreateModal(false);
+        resetForm();
+      }
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message:
+          error.response?.data?.message || "Failed to create sales invoice",
+        color: "red",
+      });
+      console.error("Error creating sales invoice:", error);
+    }
+  };
+
+  // Function to update sales invoice
+  const updateSalesInvoice = async (invoiceData: Invoice) => {
+    try {
+      const payload = {
+        ...invoiceData,
+        amount: editTotal,
+        netAmount: editNetAmount,
+      };
+
+      const response = await axios.put(
+        `http://localhost:3000/sales-invoices/${editInvoice?.id}`,
+        payload
+      );
+
+      if (response.data) {
+        // Update local state after successful backend update
+        setInvoices((prev) =>
+          prev.map((i) => (i.id === editInvoice?.id ? response.data : i))
+        );
+
+        notifications.show({
+          title: "Success",
+          message: "Sales invoice updated successfully",
+          color: "green",
+        });
+
+        setEditInvoice(null);
+      }
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message:
+          error.response?.data?.message || "Failed to update sales invoice",
+        color: "red",
+      });
+      console.error("Error updating sales invoice:", error);
+    }
+  };
+
+  // Function to delete sales invoice
+  const deleteSalesInvoice = async (invoiceId: number) => {
+    try {
+      await axios.delete(`http://localhost:3000/sales-invoices/${invoiceId}`);
+
+      // Remove from local state after successful backend deletion
+      setInvoices((prev) => prev.filter((i) => i.id !== invoiceId));
+
+      notifications.show({
+        title: "Success",
+        message: "Sales invoice deleted successfully",
+        color: "green",
+      });
+
+      setDeleteInvoice(null);
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message:
+          error.response?.data?.message || "Failed to delete sales invoice",
+        color: "red",
+      });
+      console.error("Error deleting sales invoice:", error);
+    }
+  };
+
+  // Add reset form function
+  const resetForm = () => {
+    setNewInvoiceNumber(getNextInvoiceNumber(invoices));
+    setNewDate(() => {
+      const today = new Date();
+      return today.toISOString().slice(0, 10);
+    });
+    setNewDeliveryNo("");
+    setNewDeliveryDate("");
+    setNewPoNo("");
+    setNewPoDate("");
+    setNewAccountNo("");
+    setNewAccountTitle("");
+    setNewSaleAccount("");
+    setNewSaleAccountTitle("");
+    setNewNtnNo("");
+    setItems([
+      {
+        id: 1,
+        code: "",
+        product: "",
+        hsCode: "",
+        description: "",
+        qty: 0,
+        rate: 0,
+        exGSTRate: 0,
+        exGSTAmount: 0,
+      },
+    ]);
+    setNotes("");
+  };
 
   // Print handler using hidden component
   const handlePrintInvoice = (invoice: Invoice) => {
@@ -430,6 +622,7 @@ export default function SalesInvoicePage() {
   const editGstAmount = includeGST ? editSubtotal * 0.18 : 0;
   const editTotal = editSubtotal + editGstAmount;
   const editNetAmount = editTotal;
+
   // Calculate Ex Gst Amount and Total GST for edit modal
   const editExGstAmount =
     editInvoice?.items?.reduce(
@@ -688,7 +881,7 @@ export default function SalesInvoicePage() {
         opened={createModal}
         onClose={() => setCreateModal(false)}
         title="Create Invoice"
-        size="70%"
+        size="100%"
       >
         <Group grow mb="sm">
           <TextInput label="Invoice Number" value={newInvoiceNumber} mb="sm" />
@@ -970,29 +1163,7 @@ export default function SalesInvoicePage() {
           </Button>
           <Button
             color="#0A6802"
-            onClick={() => {
-              setInvoices((prev) => [
-                ...prev,
-                {
-                  id: prev.length + 1,
-                  number: newInvoiceNumber,
-                  date: newDate,
-                  deliveryNo: newDeliveryNo,
-                  deliveryDate: newDeliveryDate,
-                  poNo: newPoNo,
-                  poDate: newPoDate,
-                  accountNo: newAccountNo,
-                  accountTitle: newAccountTitle,
-                  saleAccount: newSaleAccount,
-                  saleAccountTitle: newSaleAccountTitle,
-                  ntnNo: newNtnNo,
-                  amount: netTotal,
-                  netAmount: netTotal,
-                  items: items,
-                },
-              ]);
-              setCreateModal(false);
-            }}
+            onClick={createSalesInvoice} // Change this to call backend function
           >
             Create
           </Button>
@@ -1326,18 +1497,7 @@ export default function SalesInvoicePage() {
               <Button
                 onClick={() => {
                   if (editInvoice) {
-                    setInvoices((prev) =>
-                      prev.map((i) =>
-                        i.id === editInvoice.id
-                          ? {
-                              ...editInvoice,
-                              amount: editTotal,
-                              netAmount: editNetAmount,
-                            }
-                          : i
-                      )
-                    );
-                    setEditInvoice(null);
+                    updateSalesInvoice(editInvoice); // Change this to call backend function
                   }
                 }}
               >
@@ -1366,10 +1526,7 @@ export default function SalesInvoicePage() {
             color="red"
             onClick={() => {
               if (deleteInvoice) {
-                setInvoices((prev) =>
-                  prev.filter((i) => i.id !== deleteInvoice.id)
-                );
-                setDeleteInvoice(null);
+                deleteSalesInvoice(deleteInvoice.id); // Change this to call backend function
               }
             }}
           >
@@ -1489,9 +1646,3 @@ function InvoicePrintTemplate({ invoice }: { invoice: Invoice }) {
     </div>
   );
 }
-
-type AccountNode = {
-  code: string;
-  name: string;
-  children?: AccountNode[];
-};

@@ -33,7 +33,7 @@ import {
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect } from "react";
 import { notifications } from "@mantine/notifications";
 import axios from "axios";
 import {
@@ -47,9 +47,10 @@ const money = (n: number) =>
     maximumFractionDigits: 2,
   })}`;
 
-function stockStatus(p: { stock: number; minStock: number }) {
-  if (p.stock <= p.minStock) return { label: "Low", color: "red" as const };
-  if (p.stock <= p.minStock * 2)
+function stockStatus(p: { quantity: number; minimumStockLevel: number }) {
+  if (p.quantity <= p.minimumStockLevel)
+    return { label: "Low", color: "red" as const };
+  if (p.quantity <= p.minimumStockLevel * 2)
     return { label: "Medium", color: "yellow" as const };
   return { label: "Good", color: "green" as const };
 }
@@ -90,22 +91,22 @@ function ProductsInner() {
     setDelId,
     catModal,
     setCatModal,
-    name,
-    setName,
+    productName,
+    setProductName,
     code,
     setCode,
     category,
     setCategory,
-    description,
-    setDescription,
+    productDescription,
+    setProductDescription,
     unitPrice,
     setUnitPrice,
     costPrice,
     setCostPrice,
-    stock,
-    setStock,
-    minStock,
-    setMinStock,
+    quantity,
+    setQuantity,
+    minimumStockLevel,
+    setMinimumStockLevel,
     status,
     setStatus,
     newCategory,
@@ -129,11 +130,19 @@ function ProductsInner() {
               product._id ||
               `p-${Math.random().toString(36).slice(2, 8)}`,
             code: String(product.code || ""),
-            name: String(product.name || product.productname || ""),
+            productName: String(
+              product.name || product.productname || product.productName || ""
+            ),
             category: String(product.category || ""),
-            description: String(product.description || ""),
-            stock: product.stock || 0,
-            minStock: product.minStock || product.min_stock || 0,
+            productDescription: String(
+              product.description || product.productDescription || ""
+            ),
+            quantity: product.stock || product.quantity || 0,
+            minimumStockLevel:
+              product.minStock ||
+              product.min_stock ||
+              product.minimumStockLevel ||
+              0,
             unitPrice: product.unitPrice || product.unit_price || 0,
             costPrice: product.costPrice || product.cost_price || 0,
             status:
@@ -178,9 +187,11 @@ function ProductsInner() {
 
   const totalProducts = products.length;
   const activeCount = products.filter((r) => r.status === "active").length;
-  const lowStockCount = products.filter((r) => r.stock <= r.minStock).length;
+  const lowStockCount = products.filter(
+    (r) => r.quantity <= r.minimumStockLevel
+  ).length;
   const stockValue = products.reduce(
-    (sum, r) => sum + Number(r.stock) * Number(r.unitPrice),
+    (sum, r) => sum + Number(r.quantity) * Number(r.unitPrice),
     0
   );
 
@@ -190,18 +201,18 @@ function ProductsInner() {
       // Enhanced search: match product name, code, or category with null safety
       const matchQ =
         !q ||
-        (r.name &&
-          typeof r.name === "string" &&
-          r.name.toLowerCase().includes(q)) ||
+        (r.productName &&
+          typeof r.productName === "string" &&
+          r.productName.toLowerCase().includes(q)) ||
         (r.code &&
           typeof r.code === "string" &&
           r.code.toLowerCase().includes(q)) ||
         (r.category &&
           typeof r.category === "string" &&
           r.category.toLowerCase().includes(q)) ||
-        (r.description &&
-          typeof r.description === "string" &&
-          r.description.toLowerCase().includes(q));
+        (r.productDescription &&
+          typeof r.productDescription === "string" &&
+          r.productDescription.toLowerCase().includes(q));
       const matchC = cat ? r.category === cat : true;
       const matchS = statusFilter === "all" ? true : r.status === statusFilter;
       return matchQ && matchC && matchS;
@@ -221,42 +232,42 @@ function ProductsInner() {
   // Fix: Always pass a string for description (never undefined)
   const openEdit = (p: {
     id: string;
-    name: string;
+    productName: string;
     code: string;
     category: string;
-    description?: string;
+    productDescription?: string;
     unitPrice: number;
     costPrice: number;
-    stock: number;
-    minStock: number;
+    quantity: number;
+    minimumStockLevel: number;
     status: string;
   }) => {
     setEditing({
       ...p,
-      description: p.description ?? "",
+      productDescription: p.productDescription ?? "",
       status: p.status === "active" ? "active" : "inactive",
     });
-    setName(p.name);
+    setProductName(p.productName);
     setCode(p.code);
     setCategory(p.category);
-    setDescription(p.description ?? "");
+    setProductDescription(p.productDescription ?? "");
     setUnitPrice(p.unitPrice);
     setCostPrice(p.costPrice);
-    setStock(p.stock);
-    setMinStock(p.minStock);
+    setQuantity(p.quantity);
+    setMinimumStockLevel(p.minimumStockLevel);
     setStatus(p.status === "active" ? "active" : "inactive");
     setOpened(true);
   };
 
   const handleSubmit = async () => {
     if (
-      !name ||
+      !productName ||
       !code ||
       !category ||
       unitPrice === "" ||
       costPrice === "" ||
-      stock === "" ||
-      minStock === ""
+      quantity === "" ||
+      minimumStockLevel === ""
     ) {
       notifications.show({
         title: "Validation Error",
@@ -271,14 +282,14 @@ function ProductsInner() {
 
     const payload = {
       //change name to productname
-      name,
+      productName: productName,
       code,
       category,
-      description: description ?? "",
+      productDescription: productDescription ?? "",
       unitPrice: Number(unitPrice),
       costPrice: Number(costPrice),
-      stock: Number(stock),
-      minStock: Number(minStock),
+      quantity: Number(quantity),
+      minimumStockLevel: Number(minimumStockLevel),
       status: statusValue,
     };
 
@@ -345,21 +356,21 @@ function ProductsInner() {
   };
 
   const resetForm = () => {
-    setName("");
+    setProductName("");
     setCode("");
     setCategory(null);
-    setDescription("");
+    setProductDescription("");
     setUnitPrice("");
     setCostPrice("");
-    setStock("");
-    setMinStock("");
+    setQuantity("");
+    setMinimumStockLevel("");
     setStatus("active");
   };
 
   const exportPDF = (p: Product) => {
-    const content = `${p.name} (${p.code})
+    const content = `${p.productName} (${p.code})
 Category: ${p.category}
-Stock: ${p.stock} | Min: ${p.minStock}
+Stock: ${p.quantity} | Min: ${p.minimumStockLevel}
 Unit Price: ${money(p.unitPrice === "" ? 0 : p.unitPrice)}
 Cost Price: ${money(p.costPrice === "" ? 0 : p.costPrice)}
 Status: ${p.status}`;
@@ -367,7 +378,7 @@ Status: ${p.status}`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${p.name}.pdf`;
+    a.download = `${p.productName}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -558,10 +569,13 @@ Status: ${p.status}`;
             </Table.Thead>
             <Table.Tbody>
               {pageData.map((p) => {
-                // Ensure stock and minStock are numbers for stockStatus
+                // Ensure quantity and minimumStockLevel are numbers for stockStatus
                 const ss = stockStatus({
-                  stock: typeof p.stock === "number" ? p.stock : 0,
-                  minStock: typeof p.minStock === "number" ? p.minStock : 0,
+                  quantity: typeof p.quantity === "number" ? p.quantity : 0,
+                  minimumStockLevel:
+                    typeof p.minimumStockLevel === "number"
+                      ? p.minimumStockLevel
+                      : 0,
                 });
                 return (
                   <Table.Tr key={p.id}>
@@ -571,9 +585,9 @@ Status: ${p.status}`;
                       </Text>
                     </Table.Td>
                     <Table.Td>
-                      <Text fw={500}>{p.name}</Text>
+                      <Text fw={500}>{p.productName}</Text>
                       <Text size="xs" c="dimmed">
-                        {p.description}
+                        {p.productDescription}
                       </Text>
                     </Table.Td>
                     <Table.Td>
@@ -582,9 +596,9 @@ Status: ${p.status}`;
                       </Badge>
                     </Table.Td>
                     <Table.Td>
-                      <Text>{p.stock}</Text>
+                      <Text>{p.quantity}</Text>
                       <Text size="xs" c="dimmed">
-                        Min: {p.minStock}
+                        Min: {p.minimumStockLevel}
                       </Text>
                     </Table.Td>
                     <Table.Td>
@@ -638,11 +652,13 @@ Status: ${p.status}`;
                                   typeof p.costPrice === "number"
                                     ? p.costPrice
                                     : 0,
-                                stock:
-                                  typeof p.stock === "number" ? p.stock : 0,
-                                minStock:
-                                  typeof p.minStock === "number"
-                                    ? p.minStock
+                                quantity:
+                                  typeof p.quantity === "number"
+                                    ? p.quantity
+                                    : 0,
+                                minimumStockLevel:
+                                  typeof p.minimumStockLevel === "number"
+                                    ? p.minimumStockLevel
                                     : 0,
                               })
                             }
@@ -717,8 +733,8 @@ Status: ${p.status}`;
           />
           <TextInput
             label="Product Name"
-            value={name}
-            onChange={(e) => setName(e.currentTarget.value)}
+            value={productName}
+            onChange={(e) => setProductName(e.currentTarget.value)}
           />
         </SimpleGrid>
         <SimpleGrid cols={2} mb="md">
@@ -733,8 +749,8 @@ Status: ${p.status}`;
         </SimpleGrid>
         <Textarea
           label="Description"
-          value={description}
-          onChange={(e) => setDescription(e.currentTarget.value)}
+          value={productDescription}
+          onChange={(e) => setProductDescription(e.currentTarget.value)}
           mb="md"
         />
         <SimpleGrid cols={2} mb="md">
@@ -752,13 +768,13 @@ Status: ${p.status}`;
         <SimpleGrid cols={2} mb="md">
           <NumberInput
             label="Stock Quantity"
-            value={stock}
-            onChange={(v) => setStock(v === "" ? "" : Number(v))}
+            value={quantity}
+            onChange={(v) => setQuantity(v === "" ? "" : Number(v))}
           />
           <NumberInput
             label="Min Stock Level"
-            value={minStock}
-            onChange={(v) => setMinStock(v === "" ? "" : Number(v))}
+            value={minimumStockLevel}
+            onChange={(v) => setMinimumStockLevel(v === "" ? "" : Number(v))}
           />
         </SimpleGrid>
         <Group justify="flex-end">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Card,
   Text,
@@ -24,6 +24,8 @@ import {
   IconDownload,
   IconShoppingCart,
 } from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
+import axios from "axios";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { usePurchaseInvoice } from "../../Context/Invoicing/PurchaseInvoiceContext";
@@ -82,6 +84,29 @@ export default function PurchaseInvoice() {
   const { invoices, setInvoices } = usePurchaseInvoice();
   const { products } = useProducts();
 
+  // Fetch invoices from backend on component mount
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      try {
+        const response = await axios.get(
+          "http://localhost:3000/purchase-invoices"
+        );
+        if (response.data && Array.isArray(response.data)) {
+          setInvoices(response.data);
+        }
+      } catch (error) {
+        console.error("Error fetching invoices:", error);
+        notifications.show({
+          title: "Error",
+          message: "Failed to fetch purchase invoices",
+          color: "red",
+        });
+      }
+    };
+
+    fetchInvoices();
+  }, [setInvoices]);
+
   // Prepare dropdown data for product code and name
   const productCodeOptions = products.map((p) => ({
     value: p.code,
@@ -89,8 +114,8 @@ export default function PurchaseInvoice() {
   }));
 
   const productNameOptions = products.map((p) => ({
-    value: p.name,
-    label: p.name,
+    value: p.productName,
+    label: p.productName,
   }));
 
   // Helper for header/footer
@@ -798,44 +823,73 @@ export default function PurchaseInvoice() {
         <Group justify="flex-end" mt="lg">
           <Button
             color="#0A6802"
-            onClick={() => {
-              if (editInvoice) {
-                setInvoices((prev) =>
-                  prev.map((i) =>
-                    i.id === editInvoice.id
-                      ? {
-                          ...i,
-                          number: invoiceNumber,
-                          vendor,
-                          date,
-                          partyBillNo,
-                          partyBillDate,
-                          dueDate,
-                          amount: total,
-                          items,
-                          notes,
-                          gst: includeGST,
-                          ntnNo, // <-- add this line
-                        }
-                      : i
-                  )
-                );
-                setEditInvoice(null);
-              } else {
-                const newInvoice: Invoice = {
-                  id: Date.now(),
-                  number: invoiceNumber,
-                  date,
+            onClick={async () => {
+              try {
+                const payload = {
+                  invoiceNumber: invoiceNumber,
+                  invoiceDate: date,
                   partyBillNo,
                   partyBillDate,
+                  supplierNo,
+                  supplierTitle,
+                  purchaseAccount,
+                  purchaseTitle,
+                  ntnNo,
                   amount: total,
                   items,
                   notes,
                   gst: includeGST,
-                  ntnNo, // <-- add this line
                 };
-                setInvoices((prev) => [...prev, newInvoice]);
-                setCreateOpen(false);
+
+                if (editInvoice) {
+                  // Update existing invoice
+                  const response = await axios.put(
+                    `http://localhost:3000/purchase-invoices/${editInvoice.id}`,
+                    payload
+                  );
+
+                  if (response.data) {
+                    setInvoices((prev) =>
+                      prev.map((i) =>
+                        i.id === editInvoice.id ? { ...i, ...payload } : i
+                      )
+                    );
+                    notifications.show({
+                      title: "Success",
+                      message: "Purchase Invoice updated successfully",
+                      color: "green",
+                    });
+                  }
+                  setEditInvoice(null);
+                } else {
+                  // Create new invoice
+                  const response = await axios.post(
+                    "http://localhost:3000/purchase-invoices/create",
+                    payload
+                  );
+
+                  if (response.data) {
+                    const newInvoice: Invoice = {
+                      id: response.data.id || Date.now(),
+                      ...response.data,
+                    };
+                    setInvoices((prev) => [...prev, newInvoice]);
+                    notifications.show({
+                      title: "Success",
+                      message: "Purchase Invoice created successfully",
+                      color: "green",
+                    });
+                  }
+                  setCreateOpen(false);
+                }
+              } catch (error: any) {
+                notifications.show({
+                  title: "Error",
+                  message:
+                    error.response?.data?.message || "Failed to save invoice",
+                  color: "red",
+                });
+                console.error("Error saving invoice:", error);
               }
             }}
           >
@@ -860,12 +914,34 @@ export default function PurchaseInvoice() {
           </Button>
           <Button
             color="red"
-            onClick={() => {
+            onClick={async () => {
               if (deleteInvoice) {
-                setInvoices((prev) =>
-                  prev.filter((i) => i.id !== deleteInvoice.id)
-                );
-                setDeleteInvoice(null);
+                try {
+                  await axios.delete(
+                    `http://localhost:3000/purchase-invoices/${deleteInvoice.id}`
+                  );
+
+                  setInvoices((prev) =>
+                    prev.filter((i) => i.id !== deleteInvoice.id)
+                  );
+
+                  notifications.show({
+                    title: "Success",
+                    message: "Purchase Invoice deleted successfully",
+                    color: "green",
+                  });
+
+                  setDeleteInvoice(null);
+                } catch (error: any) {
+                  notifications.show({
+                    title: "Error",
+                    message:
+                      error.response?.data?.message ||
+                      "Failed to delete invoice",
+                    color: "red",
+                  });
+                  console.error("Error deleting invoice:", error);
+                }
               }
             }}
           >
