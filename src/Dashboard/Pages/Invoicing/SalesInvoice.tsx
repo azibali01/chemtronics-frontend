@@ -43,19 +43,20 @@ export interface InvoiceItem {
 
 export interface Invoice {
   id: number;
-  number: string;
-  date: string;
-  deliveryNo?: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  deliveryNumber?: string; // <-- changed
   deliveryDate?: string;
-  poNo?: string;
+  poNumber?: string; // <-- changed
   poDate?: string;
-  accountNo?: string;
+  accountNumber?: string; // <-- changed
   accountTitle: string;
   saleAccount?: string;
   saleAccountTitle?: string;
-  ntnNo?: string;
+  ntnNumber?: string; // <-- changed
   amount: number;
   netAmount?: number;
+  province?: "Punjab" | "Sindh";
   items?: InvoiceItem[];
 }
 
@@ -132,8 +133,8 @@ function PrintableInvoice({ invoice }: { invoice: Invoice | null }) {
         color: "#222",
       }}
     >
-      <h2>Invoice #{invoice.number}</h2>
-      <p>Date: {invoice.date}</p>
+      <h2>Invoice #{invoice.invoiceNumber}</h2>
+      <p>Date: {invoice.invoiceDate}</p>
       <p>Account: {invoice.accountTitle}</p>
       <p>Amount: ${invoice.amount?.toFixed(2)}</p>
       {/* Add more invoice details as needed */}
@@ -145,7 +146,7 @@ function PrintableInvoice({ invoice }: { invoice: Invoice | null }) {
 function getNextInvoiceNumber(invoices: Invoice[]) {
   const numbers = invoices
     .map((inv) => {
-      const match = inv.number?.match(/^INV-(\d+)$/);
+      const match = inv.invoiceNumber?.match(/^INV-(\d+)$/);
       return match ? parseInt(match[1], 10) : null;
     })
     .filter((n) => n !== null) as number[];
@@ -169,19 +170,19 @@ export default function SalesInvoicePage() {
   const [newInvoiceNumber, setNewInvoiceNumber] = useState(
     getNextInvoiceNumber(invoices)
   );
-  const [newDate, setNewDate] = useState(() => {
+  const [newInvoiceDate, setNewInvoiceDate] = useState(() => {
     const today = new Date();
     return today.toISOString().slice(0, 10); // Format: YYYY-MM-DD
   });
-  const [newDeliveryNo, setNewDeliveryNo] = useState("");
+  const [newDeliveryNumber, setNewDeliveryNumber] = useState("");
   const [newDeliveryDate, setNewDeliveryDate] = useState("");
-  const [newPoNo, setNewPoNo] = useState("");
+  const [newPoNumber, setNewPoNumber] = useState("");
   const [newPoDate, setNewPoDate] = useState("");
-  const [newAccountNo, setNewAccountNo] = useState("");
+  const [newAccountNumber, setNewAccountNumber] = useState("");
   const [newAccountTitle, setNewAccountTitle] = useState("");
   const [newSaleAccount, setNewSaleAccount] = useState("");
   const [newSaleAccountTitle, setNewSaleAccountTitle] = useState("");
-  const [newNtnNo, setNewNtnNo] = useState("");
+  const [newNtnNumber, setNewNtnNumber] = useState("");
   const [includeGST, setIncludeGST] = useState(true);
   const [province, setProvince] = useState<"Punjab" | "Sindh">("Punjab");
 
@@ -257,7 +258,7 @@ export default function SalesInvoicePage() {
   const createSalesInvoice = async () => {
     try {
       // Validation
-      if (!newInvoiceNumber || !newDate || !newAccountTitle) {
+      if (!newInvoiceNumber || !newInvoiceDate || !newAccountTitle) {
         notifications.show({
           title: "Validation Error",
           message: "Please fill in all required fields",
@@ -267,19 +268,20 @@ export default function SalesInvoicePage() {
       }
 
       const payload = {
-        number: newInvoiceNumber,
-        date: newDate,
-        deliveryNo: newDeliveryNo,
+        invoiceNumber: newInvoiceNumber,
+        invoiceDate: newInvoiceDate,
+        deliveryNumber: newDeliveryNumber,
         deliveryDate: newDeliveryDate,
-        poNo: newPoNo,
+        poNumber: newPoNumber,
         poDate: newPoDate,
-        accountNo: newAccountNo,
+        accountNumber: newAccountNumber,
         accountTitle: newAccountTitle,
         saleAccount: newSaleAccount,
         saleAccountTitle: newSaleAccountTitle,
-        ntnNo: newNtnNo,
+        ntnNumber: newNtnNumber,
         amount: netTotal,
         netAmount: netTotal,
+        province,
         items: items,
       };
 
@@ -303,11 +305,22 @@ export default function SalesInvoicePage() {
         setCreateModal(false);
         resetForm();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      let message = "Failed to create sales invoice";
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { message?: string } } })
+          .response?.data?.message === "string"
+      ) {
+        message =
+          (error as { response?: { data?: { message?: string } } }).response
+            ?.data?.message ?? message;
+      }
       notifications.show({
         title: "Error",
-        message:
-          error.response?.data?.message || "Failed to create sales invoice",
+        message,
         color: "red",
       });
       console.error("Error creating sales invoice:", error);
@@ -321,6 +334,7 @@ export default function SalesInvoicePage() {
         ...invoiceData,
         amount: editTotal,
         netAmount: editNetAmount,
+        province, // <-- Add province here as well
       };
 
       const response = await axios.put(
@@ -342,11 +356,22 @@ export default function SalesInvoicePage() {
 
         setEditInvoice(null);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      let message = "Failed to update sales invoice";
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { message?: string } } })
+          .response?.data?.message === "string"
+      ) {
+        message =
+          (error as { response?: { data?: { message?: string } } }).response
+            ?.data?.message ?? message;
+      }
       notifications.show({
         title: "Error",
-        message:
-          error.response?.data?.message || "Failed to update sales invoice",
+        message,
         color: "red",
       });
       console.error("Error updating sales invoice:", error);
@@ -368,11 +393,22 @@ export default function SalesInvoicePage() {
       });
 
       setDeleteInvoice(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      let message = "Failed to delete sales invoice";
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as { response?: { data?: { message?: string } } })
+          .response?.data?.message === "string"
+      ) {
+        message =
+          (error as { response?: { data?: { message?: string } } }).response
+            ?.data?.message ?? message;
+      }
       notifications.show({
         title: "Error",
-        message:
-          error.response?.data?.message || "Failed to delete sales invoice",
+        message,
         color: "red",
       });
       console.error("Error deleting sales invoice:", error);
@@ -382,19 +418,19 @@ export default function SalesInvoicePage() {
   // Add reset form function
   const resetForm = () => {
     setNewInvoiceNumber(getNextInvoiceNumber(invoices));
-    setNewDate(() => {
+    setNewInvoiceDate(() => {
       const today = new Date();
       return today.toISOString().slice(0, 10);
     });
-    setNewDeliveryNo("");
+    setNewDeliveryNumber("");
     setNewDeliveryDate("");
-    setNewPoNo("");
+    setNewPoNumber("");
     setNewPoDate("");
-    setNewAccountNo("");
+    setNewAccountNumber("");
     setNewAccountTitle("");
     setNewSaleAccount("");
     setNewSaleAccountTitle("");
-    setNewNtnNo("");
+    setNewNtnNumber("");
     setItems([
       {
         id: 1,
@@ -446,8 +482,10 @@ export default function SalesInvoicePage() {
   };
 
   const filteredInvoices = invoices.filter((i) => {
-    const matchesSearch = i.number.toLowerCase().includes(search.toLowerCase());
-    const invoiceDate = new Date(i.date + "T00:00:00").getTime();
+    const matchesSearch = i.invoiceNumber
+      .toLowerCase()
+      .includes(search.toLowerCase());
+    const invoiceDate = new Date(i.invoiceDate + "T00:00:00").getTime();
     const fromOk = fromDate
       ? invoiceDate >= new Date(fromDate + "T00:00:00").getTime()
       : true;
@@ -490,17 +528,17 @@ export default function SalesInvoicePage() {
         ],
       ],
       body: filteredInvoices.map((i) => [
-        i.number,
-        i.date,
-        i.deliveryNo || "",
+        i.invoiceNumber,
+        i.invoiceDate,
+        i.deliveryNumber || "",
         i.deliveryDate || "",
-        i.poNo || "",
+        i.poNumber || "",
         i.poDate || "",
-        i.accountNo || "",
+        i.accountNumber || "",
         i.accountTitle || "",
         i.saleAccount || "",
         i.saleAccountTitle || "",
-        i.ntnNo || "",
+        i.ntnNumber || "",
         i.amount.toFixed(2),
       ]),
       styles: { fontSize: 10 },
@@ -526,24 +564,24 @@ export default function SalesInvoicePage() {
 
   const exportSingleInvoicePDF = (invoice: Invoice) => {
     const doc = new jsPDF();
-    addHeaderFooter(doc, `Invoice: ${invoice.number}`);
+    addHeaderFooter(doc, `Invoice: ${invoice.invoiceNumber}`);
 
     // Details table
     autoTable(doc, {
       startY: 32,
       head: [["Field", "Value"]],
       body: [
-        ["Invoice #", invoice.number],
-        ["Invoice Date", invoice.date],
-        ["Delivery No", invoice.deliveryNo || ""],
+        ["Invoice #", invoice.invoiceNumber],
+        ["Invoice Date", invoice.invoiceDate],
+        ["Delivery No", invoice.deliveryNumber || ""],
         ["Delivery Date", invoice.deliveryDate || ""],
-        ["PO No", invoice.poNo || ""],
+        ["PO No", invoice.poNumber || ""],
         ["PO Date", invoice.poDate || ""],
-        ["Account No", invoice.accountNo || ""],
+        ["Account No", invoice.accountNumber || ""],
         ["Account Title", invoice.accountTitle || ""],
         ["Sale Account", invoice.saleAccount || ""],
         ["Sale Account Title", invoice.saleAccountTitle || ""],
-        ["NTN No", invoice.ntnNo || ""],
+        ["NTN No", invoice.ntnNumber || ""],
         ["Amount", `$${invoice.amount.toFixed(2)}`],
       ],
       styles: { fontSize: 10 },
@@ -610,7 +648,7 @@ export default function SalesInvoicePage() {
       });
     }
 
-    doc.save(`invoice_${invoice.number}.pdf`);
+    doc.save(`invoice_${invoice.invoiceNumber}.pdf`);
   };
 
   // Edit modal calculations
@@ -788,15 +826,15 @@ export default function SalesInvoicePage() {
             <Table.Tr>
               <Table.Th>Invoice #</Table.Th>
               <Table.Th>Invoice Date</Table.Th>
-              <Table.Th>Delivery No</Table.Th>
+              <Table.Th>Delivery Number</Table.Th>
               <Table.Th>Delivery Date</Table.Th>
-              <Table.Th>PO No</Table.Th>
+              <Table.Th>PO Number</Table.Th>
               <Table.Th>PO Date</Table.Th>
-              <Table.Th>Account No</Table.Th>
+              <Table.Th>Account Number</Table.Th>
               <Table.Th>Account Title</Table.Th>
               <Table.Th>Sale Account</Table.Th>
               <Table.Th>Sale Account Title</Table.Th>
-              <Table.Th>NTN No</Table.Th>
+              <Table.Th>NTN Number</Table.Th>
               <Table.Th>Amount</Table.Th>
               <Table.Th>Net Amount</Table.Th>
               <Table.Th>Actions</Table.Th>
@@ -805,17 +843,17 @@ export default function SalesInvoicePage() {
           <Table.Tbody>
             {paginatedInvoices.map((i) => (
               <Table.Tr key={i.id}>
-                <Table.Td>{i.number}</Table.Td>
-                <Table.Td>{i.date}</Table.Td>
-                <Table.Td>{i.deliveryNo || ""}</Table.Td>
+                <Table.Td>{i.invoiceNumber}</Table.Td>
+                <Table.Td>{i.invoiceDate}</Table.Td>
+                <Table.Td>{i.deliveryNumber || ""}</Table.Td>
                 <Table.Td>{i.deliveryDate || ""}</Table.Td>
-                <Table.Td>{i.poNo || ""}</Table.Td>
+                <Table.Td>{i.poNumber || ""}</Table.Td>
                 <Table.Td>{i.poDate || ""}</Table.Td>
-                <Table.Td>{i.accountNo || ""}</Table.Td>
+                <Table.Td>{i.accountNumber || ""}</Table.Td>
                 <Table.Td>{i.accountTitle || ""}</Table.Td>
                 <Table.Td>{i.saleAccount || ""}</Table.Td>
                 <Table.Td>{i.saleAccountTitle || ""}</Table.Td>
-                <Table.Td>{i.ntnNo || ""}</Table.Td>
+                <Table.Td>{i.ntnNumber || ""}</Table.Td>
                 <Table.Td>${i.amount.toFixed(2)}</Table.Td>
                 <Table.Td>
                   $
@@ -889,15 +927,15 @@ export default function SalesInvoicePage() {
             label="Invoice Date"
             type="date"
             placeholder="mm/dd/yyyy"
-            value={newDate}
-            onChange={(e) => setNewDate(e.currentTarget.value)}
+            value={newInvoiceDate}
+            onChange={(e) => setNewInvoiceDate(e.currentTarget.value)}
           />
           <TextInput
-            label="Delivery No"
+            label="Delivery Number"
             type="number"
-            placeholder="Delivery No"
-            value={newDeliveryNo}
-            onChange={(e) => setNewDeliveryNo(e.currentTarget.value)}
+            placeholder="Delivery Number"
+            value={newDeliveryNumber}
+            onChange={(e) => setNewDeliveryNumber(e.currentTarget.value)}
           />
           <TextInput
             label="Delivery Date"
@@ -909,26 +947,26 @@ export default function SalesInvoicePage() {
         </Group>
         <Group grow mb="sm" w={"50%"}>
           <TextInput
-            label="Po No"
-            placeholder="Po No"
-            value={newPoNo}
-            onChange={(e) => setNewPoNo(e.currentTarget.value)}
+            label="PO Number"
+            placeholder="PO Number"
+            value={newPoNumber}
+            onChange={(e) => setNewPoNumber(e.currentTarget.value)}
           />
           <TextInput
-            label="Po Date"
+            label="PO Date"
             type="date"
-            placeholder="Po Date"
+            placeholder="PO Date"
             value={newPoDate}
             onChange={(e) => setNewPoDate(e.currentTarget.value)}
           />
         </Group>
         <Group grow>
           <Select
-            label="Account No"
-            placeholder="Select Account No"
+            label="Account Number"
+            placeholder="Select Account Number"
             data={accountNoOptions}
-            value={newAccountNo}
-            onChange={(v) => setNewAccountNo(v || "")}
+            value={newAccountNumber}
+            onChange={(v) => setNewAccountNumber(v || "")}
           />
           <Select
             label="Account Title"
@@ -958,9 +996,9 @@ export default function SalesInvoicePage() {
             readOnly
           />
           <TextInput
-            label="NTN No"
-            value={newNtnNo}
-            onChange={(e) => setNewNtnNo(e.currentTarget.value)}
+            label="NTN Number"
+            value={newNtnNumber}
+            onChange={(e) => setNewNtnNumber(e.currentTarget.value)}
           />
         </Group>
 
@@ -1146,8 +1184,8 @@ export default function SalesInvoicePage() {
             onClick={() => {
               handlePrintInvoice({
                 id: invoices.length + 1,
-                number: newInvoiceNumber,
-                date: newDate,
+                invoiceNumber: newInvoiceNumber,
+                invoiceDate: newInvoiceDate,
                 accountTitle: newAccountTitle,
                 amount: netTotal,
                 netAmount: netTotal,
@@ -1182,11 +1220,11 @@ export default function SalesInvoicePage() {
             <Group grow mb="sm">
               <TextInput
                 label="Invoice Number"
-                value={editInvoice.number}
+                value={editInvoice.invoiceNumber}
                 onChange={(e) =>
                   setEditInvoice({
                     ...editInvoice,
-                    number: e.currentTarget.value,
+                    invoiceNumber: e.currentTarget.value,
                   })
                 }
                 mb="sm"
@@ -1195,23 +1233,23 @@ export default function SalesInvoicePage() {
                 label="Invoice Date"
                 type="date"
                 placeholder="mm/dd/yyyy"
-                value={editInvoice.date}
+                value={editInvoice.invoiceDate}
                 onChange={(e) =>
                   setEditInvoice({
                     ...editInvoice,
-                    date: e.currentTarget.value,
+                    invoiceDate: e.currentTarget.value,
                   })
                 }
               />
               <TextInput
-                label="Delivery No"
+                label="Delivery Number"
                 type="number"
-                placeholder="Delivery No"
-                value={editInvoice.deliveryNo || ""}
+                placeholder="Delivery Number"
+                value={editInvoice.deliveryNumber || ""}
                 onChange={(e) =>
                   setEditInvoice({
                     ...editInvoice,
-                    deliveryNo: e.currentTarget.value,
+                    deliveryNumber: e.currentTarget.value,
                   })
                 }
               />
@@ -1230,20 +1268,20 @@ export default function SalesInvoicePage() {
             </Group>
             <Group grow mb="sm" w={"50%"}>
               <TextInput
-                label="Po No"
-                placeholder="Po No"
-                value={editInvoice.poNo || ""}
+                label="PO Number"
+                placeholder="PO Number"
+                value={editInvoice.poNumber || ""}
                 onChange={(e) =>
                   setEditInvoice({
                     ...editInvoice,
-                    poNo: e.currentTarget.value,
+                    poNumber: e.currentTarget.value,
                   })
                 }
               />
               <TextInput
-                label="Po Date"
+                label="PO Date"
                 type="date"
-                placeholder="Po Date"
+                placeholder="PO Date"
                 value={editInvoice.poDate || ""}
                 onChange={(e) =>
                   setEditInvoice({
@@ -1255,12 +1293,12 @@ export default function SalesInvoicePage() {
             </Group>
             <Group grow>
               <Select
-                label="Account No"
-                placeholder="Select Account No"
+                label="Account Number"
+                placeholder="Select Account Number"
                 data={accountNoOptions}
-                value={editInvoice.accountNo || ""}
+                value={editInvoice.accountNumber || ""}
                 onChange={(v) =>
-                  setEditInvoice({ ...editInvoice, accountNo: v || "" })
+                  setEditInvoice({ ...editInvoice, accountNumber: v || "" })
                 }
               />
               <Select
@@ -1296,12 +1334,12 @@ export default function SalesInvoicePage() {
                 readOnly
               />
               <TextInput
-                label="NTN No"
-                value={editInvoice.ntnNo || ""}
+                label="NTN Number"
+                value={editInvoice.ntnNumber || ""}
                 onChange={(e) =>
                   setEditInvoice({
                     ...editInvoice,
-                    ntnNo: e.currentTarget.value,
+                    ntnNumber: e.currentTarget.value,
                   })
                 }
               />
@@ -1515,8 +1553,8 @@ export default function SalesInvoicePage() {
         title="Confirm Delete"
       >
         <Text>
-          Are you sure you want to delete invoice <b>{deleteInvoice?.number}</b>
-          ?
+          Are you sure you want to delete invoice{" "}
+          <b>{deleteInvoice?.invoiceNumber}</b>?
         </Text>
         <Group mt="md" justify="flex-end">
           <Button variant="default" onClick={() => setDeleteInvoice(null)}>
@@ -1568,15 +1606,31 @@ function InvoicePrintTemplate({ invoice }: { invoice: Invoice }) {
         <tbody>
           <tr>
             <td style={{ fontWeight: "bold" }}>Invoice #</td>
-            <td>{invoice.number}</td>
+            <td>{invoice.invoiceNumber}</td>
             <td style={{ fontWeight: "bold" }}>Date</td>
-            <td>{invoice.date}</td>
+            <td>{invoice.invoiceDate}</td>
           </tr>
           <tr>
+            <td style={{ fontWeight: "bold" }}>Province</td>
+            <td>{invoice.province || ""}</td>
             <td style={{ fontWeight: "bold" }}>Account Title</td>
             <td>{invoice.accountTitle}</td>
+          </tr>
+          <tr>
             <td style={{ fontWeight: "bold" }}>Amount</td>
             <td>${invoice.amount?.toFixed(2)}</td>
+          </tr>
+          <tr>
+            <td style={{ fontWeight: "bold" }}>Delivery Number</td>
+            <td>{invoice.deliveryNumber || ""}</td>
+            <td style={{ fontWeight: "bold" }}>PO Number</td>
+            <td>{invoice.poNumber || ""}</td>
+          </tr>
+          <tr>
+            <td style={{ fontWeight: "bold" }}>Account Number</td>
+            <td>{invoice.accountNumber || ""}</td>
+            <td style={{ fontWeight: "bold" }}>NTN Number</td>
+            <td>{invoice.ntnNumber || ""}</td>
           </tr>
         </tbody>
       </table>

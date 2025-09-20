@@ -15,17 +15,17 @@ type InvoiceItem = {
 
 type Invoice = {
   id: number;
-  number: string;
-  date: string;
-  deliveryNo?: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  deliveryNumber?: string; // <-- changed
   deliveryDate?: string;
-  poNo?: string;
+  poNumber?: string; // <-- changed
   poDate?: string;
-  accountNo?: string;
-  accountTitle: string; // <-- required, not optional
+  accountNumber?: string; // <-- changed
+  accountTitle: string;
   saleAccount?: string;
   saleAccountTitle?: string;
-  ntnNo?: string;
+  ntnNumber?: string; // <-- changed
   amount: number;
   netAmount?: number;
   items?: InvoiceItem[];
