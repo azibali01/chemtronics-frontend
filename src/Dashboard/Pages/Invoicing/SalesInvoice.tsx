@@ -14,6 +14,7 @@ import {
   Switch,
   Pagination,
 } from "@mantine/core";
+import { useProducts } from "../../Context/Inventory/ProductsContext";
 import {
   IconPlus,
   IconTrash,
@@ -694,7 +695,26 @@ export default function SalesInvoicePage() {
   const accountTitleOptions = accountNoOptions.map((acc) => ({
     value: acc.label.split(" - ")[1],
     label: acc.label.split(" - ")[1],
+    code: acc.value,
   }));
+
+  // Fetch products from backend for code dropdown
+  const [fetchedProducts, setFetchedProducts] = useState<any[]>([]);
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await axios.get("http://localhost:3000/products");
+        setFetchedProducts(Array.isArray(response.data) ? response.data : []);
+      } catch (err) {
+        notifications.show({
+          title: "Error",
+          message: "Failed to fetch products",
+          color: "red",
+        });
+      }
+    };
+    fetchProducts();
+  }, []);
 
   return (
     <div className="p-6 space-y-6">
@@ -966,14 +986,34 @@ export default function SalesInvoicePage() {
             placeholder="Select Account Number"
             data={accountNoOptions}
             value={newAccountNumber}
-            onChange={(v) => setNewAccountNumber(v || "")}
+            // no disabled prop, always enabled
+            onChange={(v) => {
+              setNewAccountNumber(v || "");
+              // Auto-set account title
+              const found = accountNoOptions.find((opt) => opt.value === v);
+              if (found) {
+                setNewAccountTitle(found.label.split(" - ")[1]);
+              } else {
+                setNewAccountTitle("");
+              }
+            }}
           />
           <Select
             label="Account Title"
             placeholder="Select Account Title"
             data={accountTitleOptions}
             value={newAccountTitle}
-            onChange={(v) => setNewAccountTitle(v || "")}
+            // no disabled prop, always enabled
+            onChange={(v) => {
+              setNewAccountTitle(v || "");
+              // Auto-set account number
+              const found = accountTitleOptions.find((opt) => opt.value === v);
+              if (found) {
+                setNewAccountNumber(found.code);
+              } else {
+                setNewAccountNumber("");
+              }
+            }}
             mb="sm"
           />
           <Select
@@ -1042,14 +1082,54 @@ export default function SalesInvoicePage() {
               const gstAmount = (item.qty * item.rate * gstRate) / 100;
               const amount = item.qty * item.rate;
 
+              // Prepare product code options
+
+              // Only unique codes
+              const seenCodes = new Set<string>();
+              const codeOptions = (fetchedProducts || [])
+                .map((p: any) => ({
+                  value: String(p.code),
+                  label: String(p.code),
+                }))
+                .filter((opt) => {
+                  if (seenCodes.has(opt.value)) return false;
+                  seenCodes.add(opt.value);
+                  return true;
+                });
+
               return (
                 <Table.Tr key={item.id}>
                   <Table.Td>
-                    <TextInput
+                    <Select
+                      searchable
+                      placeholder="Select Code"
+                      data={codeOptions}
                       value={item.code}
-                      onChange={(e) => {
+                      onChange={(v) => {
                         const newItems = [...items];
-                        newItems[index].code = e.currentTarget.value;
+                        newItems[index].code = v || "";
+                        // Auto-fill other fields based on selected code
+                        const selectedProduct = (fetchedProducts || []).find(
+                          (p: any) => String(p.code) === v
+                        );
+                        if (selectedProduct) {
+                          newItems[index].product =
+                            selectedProduct.productName ||
+                            selectedProduct.name ||
+                            "";
+                          newItems[index].hsCode =
+                            selectedProduct.hsCode ||
+                            selectedProduct.hs_code ||
+                            "";
+                          newItems[index].description =
+                            selectedProduct.productDescription ||
+                            selectedProduct.description ||
+                            "";
+                          newItems[index].rate =
+                            selectedProduct.unitPrice ||
+                            selectedProduct.unit_price ||
+                            0;
+                        }
                         setItems(newItems);
                       }}
                     />
