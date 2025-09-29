@@ -30,6 +30,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { usePurchaseInvoice } from "../../Context/Invoicing/PurchaseInvoiceContext";
 import { useProducts } from "../../Context/Inventory/ProductsContext";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 
 type Invoice = {
   id: number;
@@ -83,13 +84,114 @@ function getTaxRate(hsCode: string, province: "Punjab" | "Sindh") {
 export default function PurchaseInvoice() {
   const { invoices, setInvoices } = usePurchaseInvoice();
   const { products } = useProducts();
+  const { accounts } = useChartOfAccounts(); // Add this line
+
+  // Remove hardcoded data and add state for dynamic data
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [purchaseAccounts, setPurchaseAccounts] = useState<any[]>([]);
+
+  // Fetch all required data from backend on component mount
+  useEffect(() => {
+    const fetchAllData = async () => {
+      try {
+        // Fetch Purchase Invoices
+        const invoicesResponse = await axios.get(
+          "http://localhost:3000/purchase-invoice/all-purchase-invoices"
+        );
+        if (invoicesResponse.data && Array.isArray(invoicesResponse.data)) {
+          setInvoices(invoicesResponse.data);
+        }
+
+        // Fetch Suppliers from backend
+        const suppliersResponse = await axios.get(
+          "http://localhost:3000/suppliers"
+        );
+        if (suppliersResponse.data && Array.isArray(suppliersResponse.data)) {
+          setSuppliers(suppliersResponse.data);
+        }
+
+        // Extract Purchase Accounts from Chart of Accounts
+        if (accounts && accounts.length > 0) {
+          const purchaseAccountsList = flattenAccounts(accounts).filter(
+            (account) =>
+              account.code.startsWith("5") || // Expense accounts
+              account.code.startsWith("131") || // Stock accounts
+              account.name.toLowerCase().includes("purchase") ||
+              account.name.toLowerCase().includes("stock")
+          );
+          setPurchaseAccounts(purchaseAccountsList);
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        notifications.show({
+          title: "Error",
+          message: "Failed to fetch required data",
+          color: "red",
+        });
+      }
+    };
+
+    fetchAllData();
+  }, [setInvoices, accounts]);
+
+  // Helper function to flatten Chart of Accounts
+  const flattenAccounts = (nodes: any[]): any[] => {
+    let result: any[] = [];
+    nodes.forEach((node) => {
+      result.push({
+        code: node.code,
+        name: node.name,
+      });
+      if (node.children && node.children.length > 0) {
+        result = result.concat(flattenAccounts(node.children));
+      }
+    });
+    return result;
+  };
+
+  // Create dropdown options from backend data
+  const supplierOptions = suppliers.map((supplier) => ({
+    value: supplier.id || supplier.supplierNo,
+    label: `${supplier.supplierNo || supplier.id} - ${
+      supplier.supplierTitle || supplier.name
+    }`,
+    data: supplier,
+  }));
+
+  const purchaseAccountOptions = purchaseAccounts.map((account) => ({
+    value: account.code,
+    label: `${account.code} - ${account.name}`,
+  }));
+
+  // Function to handle supplier selection
+  const handleSupplierSelect = (selectedValue: string) => {
+    const selectedSupplier = suppliers.find(
+      (s) => (s.id || s.supplierNo) === selectedValue
+    );
+    if (selectedSupplier) {
+      setSupplierNo(selectedSupplier.supplierNo || selectedSupplier.id);
+      setSupplierTitle(selectedSupplier.supplierTitle || selectedSupplier.name);
+      setNtnNo(selectedSupplier.ntnNo || "");
+    }
+  };
+
+  // Function to handle purchase account selection
+  const handlePurchaseAccountSelect = (selectedCode: string) => {
+    const selectedAccount = purchaseAccounts.find(
+      (account) => account.code === selectedCode
+    );
+    if (selectedAccount) {
+      setPurchaseAccount(selectedCode);
+      setPurchaseTitle(selectedAccount.name);
+    }
+  };
 
   // Fetch invoices from backend on component mount
   useEffect(() => {
     const fetchInvoices = async () => {
       try {
         const response = await axios.get(
-          "http://localhost:3000/purchase-invoices"
+          "http://localhost:3000/purchase-invoice/all-purchase-invoices" // Changed path
         );
         if (response.data && Array.isArray(response.data)) {
           setInvoices(response.data);
@@ -107,16 +209,53 @@ export default function PurchaseInvoice() {
     fetchInvoices();
   }, [setInvoices]);
 
-  // Prepare dropdown data for product code and name
+  // Prepare dropdown data for product code and name with proper mapping
   const productCodeOptions = products.map((p) => ({
     value: p.code,
-    label: p.code,
+    label: `${p.code} - ${p.productName}`, // Shows both code and name
   }));
 
   const productNameOptions = products.map((p) => ({
     value: p.productName,
     label: p.productName,
   }));
+
+  // Function to get product details by code
+  const getProductByCode = (code: string) => {
+    return products.find((p) => p.code === code);
+  };
+
+  // Function to get product details by name
+  const getProductByName = (name: string) => {
+    return products.find((p) => p.productName === name);
+  };
+
+  // Update item with product details when code is selected
+  const handleProductCodeChange = (itemId: number, selectedCode: string) => {
+    const product = getProductByCode(selectedCode);
+    if (product) {
+      // Auto-populate all related fields
+      updateItem(itemId, "code", selectedCode);
+      updateItem(itemId, "product", product.productName);
+      updateItem(itemId, "description", product.productDescription);
+      updateItem(itemId, "rate", product.unitPrice);
+    }
+  };
+
+  // Update item with product details when name is selected
+  const handleProductNameChange = (itemId: number, selectedName: string) => {
+    const product = getProductByName(selectedName);
+    if (product) {
+      // Auto-fill product details when name is selected
+      updateItem(itemId, "product", selectedName);
+      updateItem(itemId, "code", product.code);
+      updateItem(itemId, "description", product.productDescription);
+      updateItem(itemId, "rate", product.unitPrice || 0);
+      updateItem(itemId, "unit", "Piece"); // You can set default unit or get from product
+    } else {
+      updateItem(itemId, "product", selectedName);
+    }
+  };
 
   // Helper for header/footer
   function addHeaderFooter(doc: jsPDF, title: string) {
@@ -596,7 +735,7 @@ export default function PurchaseInvoice() {
           setEditInvoice(null);
         }}
         title={editInvoice ? "Edit Invoice" : "Create Purchase Invoice"}
-        size="70%"
+        size="100%"
         centered
       >
         <Grid>
@@ -630,40 +769,73 @@ export default function PurchaseInvoice() {
               onChange={(e) => setPartyBillDate(e.currentTarget.value)}
             />
           </Grid.Col>
-          <Grid.Col span={2}>
+
+          {/* Updated Supplier Selection with backend data */}
+          <Grid.Col span={6}>
+            <Select
+              label="Select Supplier"
+              placeholder="Choose supplier from list"
+              data={supplierOptions}
+              value={supplierNo}
+              onChange={(selectedValue) => {
+                if (selectedValue) {
+                  handleSupplierSelect(selectedValue);
+                }
+              }}
+              searchable
+              clearable
+              maxDropdownHeight={200}
+            />
+          </Grid.Col>
+
+          {/* Manual supplier fields (if not in backend) */}
+          <Grid.Col span={3}>
             <TextInput
-              label="Supplier No"
+              label="Supplier No (Manual)"
+              placeholder="Enter manually if not in list"
               value={supplierNo}
               onChange={(e) => setSupplierNo(e.currentTarget.value)}
             />
           </Grid.Col>
           <Grid.Col span={3}>
             <TextInput
-              label="Supplier Title"
+              label="Supplier Title (Manual)"
+              placeholder="Enter manually if not in list"
               value={supplierTitle}
               onChange={(e) => setSupplierTitle(e.currentTarget.value)}
             />
           </Grid.Col>
-          <Grid.Col span={2}>
+
+          {/* Updated Purchase Account with Chart of Accounts data */}
+          <Grid.Col span={4}>
             <Select
-              label="Purchase A/C"
-              data={Object.keys(purchaseAccountMap).map((code) => ({
-                value: code,
-                label: code,
-              }))}
+              label="Purchase Account"
+              placeholder="Select purchase account"
+              data={purchaseAccountOptions}
               value={purchaseAccount}
-              onChange={(v) => {
-                setPurchaseAccount(v || "");
-                setPurchaseTitle(purchaseAccountMap[v || ""] || "");
+              onChange={(selectedCode) => {
+                if (selectedCode) {
+                  handlePurchaseAccountSelect(selectedCode);
+                }
+              }}
+              searchable
+              clearable
+              maxDropdownHeight={200}
+            />
+          </Grid.Col>
+          <Grid.Col span={4}>
+            <TextInput
+              label="Purchase Title"
+              value={purchaseTitle}
+              readOnly
+              styles={{
+                input: { backgroundColor: "#f8f9fa" },
               }}
             />
           </Grid.Col>
-          <Grid.Col span={3}>
-            <TextInput label="Purchase Title" value={purchaseTitle} readOnly />
-          </Grid.Col>
-          <Grid.Col span={2}>
+          <Grid.Col span={4}>
             <TextInput
-              label="NTN No:"
+              label="NTN No"
               value={ntnNo}
               onChange={(e) => setNtnNo(e.currentTarget.value)}
             />
@@ -721,31 +893,53 @@ export default function PurchaseInvoice() {
                 <Table.Tr key={item.id}>
                   <Table.Td>
                     <Select
-                      placeholder="Product Code"
+                      placeholder="Select Product Code"
                       data={productCodeOptions}
                       value={item.code?.toString() || ""}
-                      onChange={(v) => updateItem(item.id, "code", v ? v : "")}
+                      onChange={(selectedCode) => {
+                        if (selectedCode) {
+                          handleProductCodeChange(item.id, selectedCode);
+                        }
+                      }}
+                      searchable
+                      clearable
+                      maxDropdownHeight={200}
+                      styles={{
+                        dropdown: { zIndex: 1000 },
+                      }}
                     />
                   </Table.Td>
                   <Table.Td>
                     <Select
-                      placeholder="Product Name"
+                      placeholder="Select Product Name"
                       data={productNameOptions}
                       value={item.product}
-                      onChange={(v) => updateItem(item.id, "product", v || "")}
+                      onChange={(selectedName) => {
+                        if (selectedName) {
+                          handleProductNameChange(item.id, selectedName);
+                        }
+                      }}
+                      searchable
+                      clearable
+                      maxDropdownHeight={200}
+                      styles={{
+                        dropdown: { zIndex: 1000 },
+                      }}
                     />
                   </Table.Td>
                   <Table.Td>
                     <Select
                       placeholder="HS Code"
                       data={[
-                        { value: "3824", label: "3824 Chemicals" },
-                        { value: "8421", label: "8421 Equipment" },
-                        { value: "8413", label: "8413 Pumps" },
-                        { value: "9833", label: "9833 Service" },
+                        { value: "3824", label: "3824 - Chemicals" },
+                        { value: "8421", label: "8421 - Equipment" },
+                        { value: "8413", label: "8413 - Pumps" },
+                        { value: "9833", label: "9833 - Service" },
                       ]}
                       value={item.hsCode ?? ""}
                       onChange={(v) => updateItem(item.id, "hsCode", v || "")}
+                      searchable
+                      clearable
                     />
                   </Table.Td>
                   <Table.Td>
@@ -759,40 +953,64 @@ export default function PurchaseInvoice() {
                           e.currentTarget.value
                         )
                       }
+                      readOnly={!!getProductByCode(item.code?.toString() || "")} // Read-only if auto-filled
+                      styles={{
+                        input: {
+                          backgroundColor: getProductByCode(
+                            item.code?.toString() || ""
+                          )
+                            ? "#f8f9fa"
+                            : "white",
+                        },
+                      }}
                     />
                   </Table.Td>
                   <Table.Td>
-                    <TextInput value={item.unit} />
+                    <TextInput
+                      value={item.unit}
+                      onChange={(e) =>
+                        updateItem(item.id, "unit", e.currentTarget.value)
+                      }
+                      placeholder="Unit"
+                    />
                   </Table.Td>
                   <Table.Td>
                     <NumberInput
                       min={1}
                       value={item.qty}
                       onChange={(val) =>
-                        updateItem(item.id, "qty", Number(val))
+                        updateItem(item.id, "qty", Number(val) || 0)
                       }
+                      placeholder="Qty"
                     />
                   </Table.Td>
                   <Table.Td>
                     <NumberInput
                       min={0}
+                      step={0.01}
+                      decimalScale={2}
                       value={item.rate}
                       onChange={(val) =>
-                        updateItem(item.id, "rate", Number(val))
+                        updateItem(item.id, "rate", Number(val) || 0)
                       }
+                      placeholder="Rate"
                     />
                   </Table.Td>
                   <Table.Td>
                     <NumberInput value={gstRate} disabled />
                   </Table.Td>
                   <Table.Td>
-                    <NumberInput value={gstAmount} disabled />
+                    <NumberInput value={gstAmount.toFixed(2)} disabled />
                   </Table.Td>
                   <Table.Td>
-                    <NumberInput value={amount} disabled />
+                    <NumberInput value={amount.toFixed(2)} disabled />
                   </Table.Td>
                   <Table.Td>
-                    <ActionIcon color="red" onClick={() => removeItem(item.id)}>
+                    <ActionIcon
+                      color="red"
+                      onClick={() => removeItem(item.id)}
+                      variant="light"
+                    >
                       <IconTrash size={16} />
                     </ActionIcon>
                   </Table.Td>
@@ -844,7 +1062,7 @@ export default function PurchaseInvoice() {
                 if (editInvoice) {
                   // Update existing invoice
                   const response = await axios.put(
-                    `http://localhost:3000/purchase-invoices/${editInvoice.id}`,
+                    `http://localhost:3000/purchase-invoice/update-purchase-invoice/${editInvoice.id}`, // Changed path
                     payload
                   );
 
@@ -864,7 +1082,7 @@ export default function PurchaseInvoice() {
                 } else {
                   // Create new invoice
                   const response = await axios.post(
-                    "http://localhost:3000/purchase-invoices/create",
+                    "http://localhost:3000/purchase-invoice/create-purchase-invoice", // Changed path
                     payload
                   );
 
@@ -918,7 +1136,7 @@ export default function PurchaseInvoice() {
               if (deleteInvoice) {
                 try {
                   await axios.delete(
-                    `http://localhost:3000/purchase-invoices/${deleteInvoice.id}`
+                    `http://localhost:3000/purchase-invoice/delete-purchase-invoice/${deleteInvoice.id}` // Changed path
                   );
 
                   setInvoices((prev) =>

@@ -636,7 +636,7 @@ export default function ChartOfAccounts() {
           <Group grow>
             <TextInput label="Level" placeholder="Level" />
             <TextInput
-              label="Account Name"
+              label="Account Title"
               placeholder="Title"
               value={accName}
               onChange={(e) => setAccName(e.currentTarget.value)}

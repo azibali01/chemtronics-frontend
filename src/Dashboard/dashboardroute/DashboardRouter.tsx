@@ -24,6 +24,7 @@ import JournalVouchers from "../Pages/Accounts/JournalVouchers";
 import GSTInvoices from "../Pages/Tax & Invoices/GstInvoices";
 import Analytics from "../Pages/Analytics/Analytics";
 import DashboardHome from "../Pages/DashboardHome";
+import AccountsOpeningBalances from "../Pages/Chart of Accounts/AccountsOpeningBalances";
 const routes: RouteObject[] = [
   {
     path: "/dashboard",
@@ -45,10 +46,16 @@ const routes: RouteObject[] = [
         path: "permissions",
         element: <Permissions />,
       },
+      // -------------Chart of Accounts------------------
       {
         path: "chart-of-accounts",
         element: <ChartOfAccounts />,
       },
+      {
+        path: "accounts-opening-balances",
+        element: <AccountsOpeningBalances />,
+      },
+      // -------------Invoicing------------------
       {
         path: "sales-invoice",
         element: <SalesInvoice />,
@@ -124,6 +131,7 @@ const routes: RouteObject[] = [
         path: "gst-invoices",
         element: <GSTInvoices />,
       },
+      // --------------Analytics--------------
       {
         path: "analytics",
         element: <Analytics />,

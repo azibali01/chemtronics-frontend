@@ -83,6 +83,11 @@ const menuItems: MenuItem[] = [
         icon: <IconBook size={18} />,
         path: "/dashboard/chart-of-accounts",
       },
+      {
+        label: "Accounts Opening Balances",
+        icon: <IconBook size={18} />,
+        path: "/dashboard/accounts-opening-balances",
+      },
     ],
   },
   {

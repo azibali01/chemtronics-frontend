@@ -1,0 +1,164 @@
+[1mdiff --git a/src/Dashboard/Pages/Chart of Accounts/ChartOfAccounts.tsx b/src/Dashboard/Pages/Chart of Accounts/ChartOfAccounts.tsx[m
+[1mindex 77a5b0b..ee45f67 100644[m
+[1m--- a/src/Dashboard/Pages/Chart of Accounts/ChartOfAccounts.tsx[m	
+[1m+++ b/src/Dashboard/Pages/Chart of Accounts/ChartOfAccounts.tsx[m	
+[36m@@ -636,7 +636,7 @@[m [mexport default function ChartOfAccounts() {[m
+           <Group grow>[m
+             <TextInput label="Level" placeholder="Level" />[m
+             <TextInput[m
+[31m-              label="Account Name"[m
+[32m+[m[32m              label="Account Title"[m
+               placeholder="Title"[m
+               value={accName}[m
+               onChange={(e) => setAccName(e.currentTarget.value)}[m
+[1mdiff --git a/src/Dashboard/Pages/Invoicing/PurchaseInvoice.tsx b/src/Dashboard/Pages/Invoicing/PurchaseInvoice.tsx[m
+[1mindex f61d2ec..6bad337 100644[m
+[1m--- a/src/Dashboard/Pages/Invoicing/PurchaseInvoice.tsx[m
+[1m+++ b/src/Dashboard/Pages/Invoicing/PurchaseInvoice.tsx[m
+[36m@@ -30,6 +30,7 @@[m [mimport jsPDF from "jspdf";[m
+ import autoTable from "jspdf-autotable";[m
+ import { usePurchaseInvoice } from "../../Context/Invoicing/PurchaseInvoiceContext";[m
+ import { useProducts } from "../../Context/Inventory/ProductsContext";[m
+[32m+[m[32mimport { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";[m
+ [m
+ type Invoice = {[m
+   id: number;[m
+[36m@@ -83,13 +84,114 @@[m [mfunction getTaxRate(hsCode: string, province: "Punjab" | "Sindh") {[m
+ export default function PurchaseInvoice() {[m
+   const { invoices, setInvoices } = usePurchaseInvoice();[m
+   const { products } = useProducts();[m
+[32m+[m[32m  const { accounts } = useChartOfAccounts(); // Add this line[m
+[32m+[m
+[32m+[m[32m  // Remove hardcoded data and add state for dynamic data[m
+[32m+[m[32m  const [suppliers, setSuppliers] = useState<any[]>([]);[m
+[32m+[m[32m  const [purchaseAccounts, setPurchaseAccounts] = useState<any[]>([]);[m
+[32m+[m
+[32m+[m[32m  // Fetch all required data from backend on component mount[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    const fetchAllData = async () => {[m
+[32m+[m[32m      try {[m
+[32m+[m[32m        // Fetch Purchase Invoices[m
+[32m+[m[32m        const invoicesResponse = await axios.get([m
+[32m+[m[32m          "http://localhost:3000/purchase-invoice/all-purchase-invoices"[m
+[32m+[m[32m        );[m
+[32m+[m[32m        if (invoicesResponse.data && Array.isArray(invoicesResponse.data)) {[m
+[32m+[m[32m          setInvoices(invoicesResponse.data);[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        // Fetch Suppliers from backend[m
+[32m+[m[32m        const suppliersResponse = await axios.get([m
+[32m+[m[32m          "http://localhost:3000/suppliers"[m
+[32m+[m[32m        );[m
+[32m+[m[32m        if (suppliersResponse.data && Array.isArray(suppliersResponse.data)) {[m
+[32m+[m[32m          setSuppliers(suppliersResponse.data);[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        // Extract Purchase Accounts from Chart of Accounts[m
+[32m+[m[32m        if (accounts && accounts.length > 0) {[m
+[32m+[m[32m          const purchaseAccountsList = flattenAccounts(accounts).filter([m
+[32m+[m[32m            (account) =>[m
+[32m+[m[32m              account.code.startsWith("5") || // Expense accounts[m
+[32m+[m[32m              account.code.startsWith("131") || // Stock accounts[m
+[32m+[m[32m              account.name.toLowerCase().includes("purchase") ||[m
+[32m+[m[32m              account.name.toLowerCase().includes("stock")[m
+[32m+[m[32m          );[m
+[32m+[m[32m          setPurchaseAccounts(purchaseAccountsList);[m
+[32m+[m[32m        }[m
+[32m+[m[32m      } catch (error) {[m
+[32m+[m[32m        console.error("Error fetching data:", error);[m
+[32m+[m[32m        notifications.show({[m
+[32m+[m[32m          title: "Error",[m
+[32m+[m[32m          message: "Failed to fetch required data",[m
+[32m+[m[32m          color: "red",[m
+[32m+[m[32m        });[m
+[32m+[m[32m      }[m
+[32m+[m[32m    };[m
+[32m+[m
+[32m+[m[32m    fetchAllData();[m
+[32m+[m[32m  }, [setInvoices, accounts]);[m
+[32m+[m
+[32m+[m[32m  // Helper function to flatten Chart of Accounts[m
+[32m+[m[32m  const flattenAccounts = (nodes: any[]): any[] => {[m
+[32m+[m[32m    let result: any[] = [];[m
+[32m+[m[32m    nodes.forEach((node) => {[m
+[32m+[m[32m      result.push({[m
+[32m+[m[32m        code: node.code,[m
+[32m+[m[32m        name: node.name,[m
+[32m+[m[32m      });[m
+[32m+[m[32m      if (node.children && node.children.length > 0) {[m
+[32m+[m[32m        result = result.concat(flattenAccounts(node.children));[m
+[32m+[m[32m      }[m
+[32m+[m[32m    });[m
+[32m+[m[32m    return result;[m
+[32m+[m[32m  };[m
+[32m+[m
+[32m+[m[32m  // Create dropdown options from backend data[m
+[32m+[m[32m  const supplierOptions = suppliers.map((supplier) => ({[m
+[32m+[m[32m    value: supplier.id || supplier.supplierNo,[m
+[32m+[m[32m    label: `${supplier.supplierNo || supplier.id} - ${[m
+[32m+[m[32m      supplier.supplierTitle || supplier.name[m
+[32m+[m[32m    }`,[m
+[32m+[m[32m    data: supplier,[m
+[32m+[m[32m  }));[m
+[32m+[m
+[32m+[m[32m  const purchaseAccountOptions = purchaseAccounts.map((account) => ({[m
+[32m+[m[32m    value: account.code,[m
+[32m+[m[32m    label: `${account.code} - ${account.name}`,[m
+[32m+[m[32m  }));[m
+[32m+[m
+[32m+[m[32m  // Function to handle supplier selection[m
+[32m+[m[32m  const handleSupplierSelect = (selectedValue: string) => {[m
+[32m+[m[32m    const selectedSupplier = suppliers.find([m
+[32m+[m[32m      (s) => (s.id || s.supplierNo) === selectedValue[m
+[32m+[m[32m    );[m
+[32m+[m[32m    if (selectedSupplier) {[m
+[32m+[m[32m      setSupplierNo(selectedSupplier.supplierNo || selectedSupplier.id);[m
+[32m+[m[32m      setSupplierTitle(selectedSupplier.supplierTitle || selectedSupplier.name);[m
+[32m+[m[32m      setNtnNo(selectedSupplier.ntnNo || "");[m
+[32m+[m[32m    }[m
+[32m+[m[32m  };[m
+[32m+[m
+[32m+[m[32m  // Function to handle purchase account selection[m
+[32m+[m[32m  const handlePurchaseAccountSelect = (selectedCode: string) => {[m
+[32m+[m[32m    const selectedAccount = purchaseAccounts.find([m
+[32m+[m[32m      (account) => account.code === selectedCode[m
+[32m+[m[32m    );[m
+[32m+[m[32m    if (selectedAccount) {[m
+[32m+[m[32m      setPurchaseAccount(selectedCode);[m
+[32m+[m[32m      setPurchaseTitle(selectedAccount.name);[m
+[32m+[m[32m    }[m
+[32m+[m[32m  };[m
+ [m
+   // Fetch invoices from backend on component mount[m
+   useEffect(() => {[m
+     const fetchInvoices = async () => {[m
+       try {[m
+         const response = await axios.get([m
+[31m-          "http://localhost:3000/purchase-invoices"[m
+[32m+[m[32m          "http://localhost:3000/purchase-invoice/all-purchase-invoices" // Changed path[m
+         );[m
+         if (response.data && Array.isArray(response.data)) {[m
+           setInvoices(response.data);[m
+[36m@@ -107,10 +209,10 @@[m [mexport default function PurchaseInvoice() {[m
+     fetchInvoices();[m
+   }, [setInvoices]);[m
+ [m
+[31m-  // Prepare dropdown data for product code and name[m
+[32m+[m[32m  // Prepare dropdown data for product code and name with proper mapping[m
+   const productCodeOptions = products.map((p) => ({[m
+     value: p.code,[m
+[31m-    label: p.code,[m
+[32m+[m[32m    label: `${p.code} - ${p.productName}`, // Shows both code and name[m
+   }));[m
+ [m
+   const productNameOptions = products.map((p) => ({[m
+[36m@@ -118,6 +220,43 @@[m [mexport default function PurchaseInvoice() {[m
+     label: p.productName,[m
+   }));[m
+ [m
+[32m+[m[32m  // Function to get product details by code[m
+[32m+[m[32m  const getProductByCode = (code: string) => {[m
+[32m+[m[32m    return products.find((p) => p.code === code);[m
+[32m+[m[32m  };[m
+[32m+[m
+[32m+[m[32m  // Function to get produc

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Modal,
   Button,
@@ -25,6 +25,8 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { usePurchaseReturns } from "../../Context/Invoicing/PurchaseReturnsContext";
 import { useProducts } from "../../Context/Inventory/ProductsContext";
+import axios from "axios";
+import { notifications } from "@mantine/notifications";
 
 declare module "jspdf" {
   interface jsPDF {
@@ -114,6 +116,166 @@ export default function PurchaseReturnModal() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
 
+  // Add useEffect to fetch purchase returns from backend on component mount
+  useEffect(() => {
+    fetchPurchaseReturns();
+  }, []);
+
+  // Function to fetch all purchase returns from backend
+  const fetchPurchaseReturns = async () => {
+    try {
+      const response = await axios.get("http://localhost:3000/purchase-return"); // Changed path
+      setReturns(response.data);
+    } catch (error) {
+      console.error("Error fetching purchase returns:", error);
+      notifications.show({
+        title: "Error",
+        message: "Failed to fetch purchase returns",
+        color: "red",
+      });
+    }
+  };
+
+  // Function to create purchase return in backend
+  const createPurchaseReturn = async (returnData: ReturnEntry) => {
+    try {
+      const payload = {
+        invoice: returnData.invoice,
+        date: returnData.date,
+        supplierNumber: returnData.supplierNumber,
+        supplierTitle: returnData.supplierTitle,
+        purchaseAccount: returnData.purchaseAccount,
+        purchaseTitle: returnData.purchaseTitle,
+        amount: returnData.amount,
+        notes: returnData.notes,
+        items: returnData.items,
+      };
+
+      const response = await axios.post(
+        "http://localhost:3000/purchase-return", // Changed path
+        payload
+      );
+
+      if (response.data) {
+        // Add to local state after successful backend save
+        setReturns((prev) => [response.data, ...prev]);
+
+        notifications.show({
+          title: "Success",
+          message: "Purchase return created successfully",
+          color: "green",
+        });
+
+        setOpened(false);
+        resetForm();
+      }
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message:
+          error.response?.data?.message || "Failed to create purchase return",
+        color: "red",
+      });
+      console.error("Error creating purchase return:", error);
+    }
+  };
+
+  // Function to update purchase return
+  const updatePurchaseReturn = async (returnData: ReturnEntry) => {
+    try {
+      const payload = {
+        invoice: returnData.invoice,
+        date: returnData.date,
+        supplierNumber: returnData.supplierNumber,
+        supplierTitle: returnData.supplierTitle,
+        purchaseAccount: returnData.purchaseAccount,
+        purchaseTitle: returnData.purchaseTitle,
+        amount: returnData.amount,
+        notes: returnData.notes,
+        items: returnData.items,
+      };
+
+      const response = await axios.put(
+        `http://localhost:3000/purchase-return/${returnData.id}`, // Changed path
+        payload
+      );
+
+      if (response.data) {
+        // Update local state after successful backend update
+        setReturns((prev) =>
+          prev.map((r) => (r.id === returnData.id ? response.data : r))
+        );
+
+        notifications.show({
+          title: "Success",
+          message: "Purchase return updated successfully",
+          color: "green",
+        });
+
+        setEditOpened(false);
+        setEditingReturn(null);
+      }
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message:
+          error.response?.data?.message || "Failed to update purchase return",
+        color: "red",
+      });
+      console.error("Error updating purchase return:", error);
+    }
+  };
+
+  // Function to delete purchase return
+  const deletePurchaseReturn = async (returnId: string) => {
+    try {
+      await axios.delete(`http://localhost:3000/purchase-return/${returnId}`); // Changed path
+
+      // Remove from local state after successful backend deletion
+      setReturns((prev) => prev.filter((r) => r.id !== returnId));
+
+      notifications.show({
+        title: "Success",
+        message: "Purchase return deleted successfully",
+        color: "green",
+      });
+
+      setDeleteModalOpen(false);
+      setDeleteTarget(null);
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message:
+          error.response?.data?.message || "Failed to delete purchase return",
+        color: "red",
+      });
+      console.error("Error deleting purchase return:", error);
+    }
+  };
+
+  // Add reset form function
+  const resetForm = () => {
+    setInvoice(getNextReturnNumber(returns));
+    setReturnDate(new Date().toISOString().slice(0, 10));
+    setSupplierNumber("");
+    setSupplierTitle("");
+    setPurchaseAccount("");
+    setPurchaseTitle("");
+    setNotes("");
+    setItems([
+      {
+        product: "",
+        quantity: 0,
+        rate: 0,
+        amount: 0,
+        code: "",
+        unit: "",
+        discount: 0,
+        netAmount: 0,
+      },
+    ]);
+  };
+
   const addItem = () => {
     setItems((prev) => [
       ...prev,
@@ -161,72 +323,69 @@ export default function PurchaseReturnModal() {
     });
   };
 
-  const handleSubmit = () => {
-    const newReturn: ReturnEntry = {
-      id: getNextReturnNumber(returns),
-      invoice,
-      date: returnDate,
-      notes,
-      items,
-      amount: items.reduce((acc, i) => acc + i.amount, 0),
-      supplierNumber,
-      supplierTitle,
-      purchaseAccount,
-      purchaseTitle,
-    };
+  // Updated handleSubmit function to use backend
+  const handleSubmit = async () => {
+    try {
+      // Validation
+      if (!invoice || !returnDate || !supplierTitle) {
+        notifications.show({
+          title: "Validation Error",
+          message: "Please fill in all required fields",
+          color: "red",
+        });
+        return;
+      }
 
-    setReturns((prev) => [...prev, newReturn]);
-    setOpened(false);
+      const newReturn: ReturnEntry = {
+        id: getNextReturnNumber(returns),
+        invoice,
+        date: returnDate,
+        notes,
+        items,
+        amount: items.reduce((acc, i) => acc + i.amount, 0),
+        supplierNumber,
+        supplierTitle,
+        purchaseAccount,
+        purchaseTitle,
+      };
+
+      await createPurchaseReturn(newReturn);
+    } catch (error) {
+      console.error("Error in handleSubmit:", error);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setReturns((prev) => prev.filter((r) => r.id !== id));
-    setDeleteModalOpen(false);
-    setDeleteTarget(null);
-  };
-
-  const handleEdit = (entry: ReturnEntry) => {
-    setEditingReturn(entry);
-    setInvoice(entry.invoice);
-    setReturnDate(entry.date);
-    setSupplierNumber(entry.supplierNumber);
-    setSupplierTitle(entry.supplierTitle);
-    setPurchaseAccount(entry.purchaseAccount);
-    setPurchaseTitle(entry.purchaseTitle);
-    setNotes(entry.notes);
-    const itemsWithAllFields = entry.items.map((item) => ({
-      code: item.code || "",
-      product: item.product || "",
-      unit: item.unit || "",
-      quantity: item.quantity || 0,
-      rate: item.rate || 0,
-      amount: item.amount || 0,
-      discount: typeof item.discount === "number" ? item.discount : 0,
-      netAmount: typeof item.netAmount === "number" ? item.netAmount : 0,
-    }));
-    setItems(itemsWithAllFields);
-    setEditOpened(true);
-  };
-
-  const handleEditSubmit = () => {
+  // Updated handleEditSubmit function to use backend
+  const handleEditSubmit = async () => {
     if (!editingReturn) return;
-    const updated: ReturnEntry = {
-      ...editingReturn,
-      invoice,
-      date: returnDate,
-      notes,
-      items,
-      amount: items.reduce((acc, i) => acc + i.amount, 0),
-      supplierNumber,
-      supplierTitle,
-      purchaseAccount,
-      purchaseTitle,
-    };
 
-    setReturns((prev) =>
-      prev.map((r) => (r.id === editingReturn.id ? updated : r))
-    );
-    setEditOpened(false);
+    try {
+      const updated: ReturnEntry = {
+        ...editingReturn,
+        invoice,
+        date: returnDate,
+        notes,
+        items,
+        amount: items.reduce((acc, i) => acc + i.amount, 0),
+        supplierNumber,
+        supplierTitle,
+        purchaseAccount,
+        purchaseTitle,
+      };
+
+      await updatePurchaseReturn(updated);
+    } catch (error) {
+      console.error("Error in handleEditSubmit:", error);
+    }
+  };
+
+  // Updated handleDelete function to use backend
+  const handleDelete = async (id: string) => {
+    try {
+      await deletePurchaseReturn(id);
+    } catch (error) {
+      console.error("Error in handleDelete:", error);
+    }
   };
 
   const exportPDF = (entry: ReturnEntry) => {
@@ -430,8 +589,8 @@ export default function PurchaseReturnModal() {
   }));
 
   const productNameOptions = products.map((p) => ({
-    value: p.name,
-    label: p.name,
+    value: p.productName,
+    label: p.productName,
   }));
 
   // Print logic using hidden div and window.print()
@@ -468,6 +627,26 @@ export default function PurchaseReturnModal() {
   };
 
   const netTotal = items.reduce((sum, item) => sum + (item.netAmount ?? 0), 0);
+
+  // Add this missing editNetTotal calculation
+  const editNetTotal = items.reduce(
+    (sum, item) => sum + (item.netAmount ?? 0),
+    0
+  );
+
+  // Add this missing handleEdit function
+  const handleEdit = (entry: ReturnEntry) => {
+    setEditingReturn(entry);
+    setInvoice(entry.invoice);
+    setReturnDate(entry.date);
+    setSupplierNumber(entry.supplierNumber);
+    setSupplierTitle(entry.supplierTitle);
+    setPurchaseAccount(entry.purchaseAccount);
+    setPurchaseTitle(entry.purchaseTitle);
+    setNotes(entry.notes);
+    setItems(entry.items);
+    setEditOpened(true);
+  };
 
   return (
     <div>
@@ -631,8 +810,8 @@ export default function PurchaseReturnModal() {
                         </Button>
                         <Button
                           color="red"
-                          onClick={() =>
-                            deleteTarget && handleDelete(deleteTarget.id)
+                          onClick={
+                            () => deleteTarget && handleDelete(deleteTarget.id) // This now calls backend function
                           }
                         >
                           Delete
@@ -678,7 +857,7 @@ export default function PurchaseReturnModal() {
         opened={opened}
         onClose={() => setOpened(false)}
         title="Create Purchase Return"
-        size="70%"
+        size="100%"
         centered
       >
         <Group grow mb="md" w={"50%"}>
@@ -821,7 +1000,7 @@ export default function PurchaseReturnModal() {
           removeItem={removeItem}
           productCodeOptions={productCodeOptions}
           productNameOptions={productNameOptions}
-          netTotal={0}
+          netTotal={editNetTotal} // Changed from 0 to editNetTotal
         />
 
         <Group justify="flex-end" mt="lg">
