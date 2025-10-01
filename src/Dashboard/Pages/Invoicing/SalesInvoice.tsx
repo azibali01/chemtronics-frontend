@@ -14,7 +14,6 @@ import {
   Switch,
   Pagination,
 } from "@mantine/core";
-import { useProducts } from "../../Context/Inventory/ProductsContext";
 import {
   IconPlus,
   IconTrash,
@@ -255,6 +254,10 @@ export default function SalesInvoicePage() {
     };
     fetchProductCodes();
   }, []);
+
+  useEffect(() => {
+    console.log("Chart of Accounts data:", accounts);
+  }, [accounts]);
 
   const fetchSalesInvoices = async () => {
     try {
@@ -698,7 +701,22 @@ export default function SalesInvoicePage() {
     code: acc.value,
   }));
 
-  // Fetch products from backend for code dropdown
+  // Fix: Remove empty/duplicate/invalid options for account selects
+  const uniqueAccountNoOptions = Array.from(
+    new Map(
+      accountNoOptions
+        .filter((a) => a.value && a.label)
+        .map((a) => [a.value, a])
+    ).values()
+  );
+  const uniqueAccountTitleOptions = Array.from(
+    new Map(
+      accountTitleOptions
+        .filter((a) => a.value && a.label)
+        .map((a) => [a.value, a])
+    ).values()
+  );
+
   const [fetchedProducts, setFetchedProducts] = useState<any[]>([]);
   useEffect(() => {
     const fetchProducts = async () => {
@@ -995,14 +1013,14 @@ export default function SalesInvoicePage() {
             <Select
               label="Account Number"
               placeholder="Select Account Number"
-              data={accountNoOptions}
+              data={uniqueAccountNoOptions}
               value={newAccountNumber}
               onChange={(v) => setNewAccountNumber(v || "")}
             />
             <Select
               label="Account Title"
               placeholder="Select Account Title"
-              data={accountTitleOptions}
+              data={uniqueAccountTitleOptions}
               value={newAccountTitle}
               onChange={(v) => setNewAccountTitle(v || "")}
               mb="sm"
@@ -1075,13 +1093,36 @@ export default function SalesInvoicePage() {
                 return (
                   <Table.Tr key={item.id}>
                     <Table.Td>
-                      <TextInput
+                      <Select
+                        placeholder="Product Code"
+                        data={Array.from(
+                          new Map(
+                            productCodes.map((p) => [
+                              String(p.value),
+                              {
+                                value: String(p.value),
+                                label: p.label,
+                                productName: p.productName,
+                                description: p.description,
+                                rate: p.rate,
+                              },
+                            ])
+                          ).values()
+                        )}
                         value={item.code}
-                        onChange={(e) => {
+                        onChange={(v) => {
+                          const selected = productCodes.find(
+                            (p) => String(p.value) === v
+                          );
                           const newItems = [...items];
-                          newItems[index].code = e.currentTarget.value;
+                          newItems[index].code = v || "";
+                          newItems[index].product = selected?.productName || "";
+                          newItems[index].description =
+                            selected?.description || "";
+                          newItems[index].rate = selected?.rate || 0;
                           setItems(newItems);
                         }}
+                        searchable
                       />
                     </Table.Td>
                     <Table.Td>
@@ -1327,7 +1368,7 @@ export default function SalesInvoicePage() {
                 <Select
                   label="Account Number"
                   placeholder="Select Account Number"
-                  data={accountNoOptions}
+                  data={uniqueAccountNoOptions}
                   value={editInvoice.accountNumber || ""}
                   onChange={(v) =>
                     setEditInvoice({ ...editInvoice, accountNumber: v || "" })
@@ -1336,7 +1377,7 @@ export default function SalesInvoicePage() {
                 <Select
                   label="Account Title"
                   placeholder="Select Account Title"
-                  data={accountTitleOptions}
+                  data={uniqueAccountTitleOptions}
                   value={editInvoice.accountTitle || ""}
                   onChange={(v) =>
                     setEditInvoice({ ...editInvoice, accountTitle: v || "" })
