@@ -59,11 +59,8 @@ export interface Invoice {
   items?: InvoiceItem[];
 }
 
-type AccountNode = {
-  code: string;
-  name: string;
-  children?: AccountNode[];
-};
+import type { AccountNode as ChartAccountNode } from "../../Context/ChartOfAccountsContext";
+type AccountNode = ChartAccountNode;
 
 const saleAccountTitleMap: Record<string, string> = {
   "4114": "Sale Of Chemicals and Equipments",
@@ -689,7 +686,7 @@ export default function SalesInvoicePage() {
     nodes: AccountNode[]
   ): { value: string; label: string }[] {
     return nodes.flatMap((n) => [
-      { value: n.code, label: `${n.code} - ${n.name}` },
+      { value: n.selectedCode, label: `${n.selectedCode} - ${n.accountName}` },
       ...(n.children ? flattenAccounts(n.children) : []),
     ]);
   }
@@ -1015,7 +1012,19 @@ export default function SalesInvoicePage() {
               placeholder="Select Account Number"
               data={uniqueAccountNoOptions}
               value={newAccountNumber}
-              onChange={(v) => setNewAccountNumber(v || "")}
+              onChange={(v) => {
+                setNewAccountNumber(v || "");
+                // Find account by selectedCode
+                const acc = accounts.find((a) => a.selectedCode === v);
+                if (acc) {
+                  setNewAccountTitle(acc.accountName || "");
+                  setNewNtnNumber(acc.ntn || "");
+                  // Add more fields as needed
+                  // setNewAddress(acc.address || "");
+                  // setNewPhoneNo(acc.phoneNo || "");
+                  // setNewSalesTaxNo(acc.salesTaxNo || "");
+                }
+              }}
             />
             <Select
               label="Account Title"

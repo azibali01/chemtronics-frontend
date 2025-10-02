@@ -18,7 +18,6 @@ export type Product = {
   costPrice: number | "";
   status: "active" | "inactive";
 };
-
 // Context value type
 interface ProductsContextType {
   products: Product[];

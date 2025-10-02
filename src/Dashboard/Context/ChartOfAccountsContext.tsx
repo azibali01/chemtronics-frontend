@@ -84,10 +84,10 @@ export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    // Fetch accounts from backend API
+    // Fetch accounts from backend API (correct route)
     const fetchAccounts = async () => {
       try {
-        const res = await axios.get("http://localhost:3000/accounts");
+        const res = await axios.get("http://localhost:3000/chart-of-account");
         if (Array.isArray(res.data)) {
           setAccounts(res.data);
         }

@@ -428,7 +428,7 @@ export default function ChartOfAccounts() {
       payload
     );
     console.log(res);
-    if (!accountType) return; // Ensure accountType is not null
+    if (!accountType) return;
     const newNode: AccountNode = {
       ...payload,
       accountType, // explicitly non-null
