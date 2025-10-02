@@ -20,7 +20,7 @@ import {
   IconDownload,
   IconSearch,
 } from "@tabler/icons-react";
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
@@ -32,9 +32,11 @@ import {
   type SaleReturnItem,
 } from "../../Context/Invoicing/SaleReturnsContext";
 import { useProducts } from "../../Context/Inventory/ProductsContext";
+import axios from "axios";
+import { notifications } from "@mantine/notifications";
 
 function SaleReturnsInner() {
-  const { returns, addReturn, updateReturn, deleteReturn } = useSaleReturns();
+  const { returns, setReturns } = useSaleReturns(); // Updated to use setReturns instead of addReturn, updateReturn, deleteReturn
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -64,9 +66,9 @@ function SaleReturnsInner() {
     label: p.code,
   }));
 
-  const productNameOptions = products.map((p: { name: string }) => ({
-    value: p.name,
-    label: p.name,
+  const productNameOptions = products.map((p: any) => ({
+    value: p.productName,
+    label: p.productName,
   }));
 
   const filteredData = useMemo(() => {
@@ -306,57 +308,199 @@ function SaleReturnsInner() {
     setOpened(true);
   };
 
-  const handleSave = () => {
-    if (!invoiceNumber || !date) return;
-
-    const normalized = items.map((i) => {
-      const qty = Number(i.quantity) || 0;
-      const rate = Number(i.rate) || 0;
-      const amount = qty * rate;
-      const discount = Number(i.discount) || 0;
-      const netAmount = amount - (amount * discount) / 100;
-      return { ...i, quantity: qty, rate, amount, discount, netAmount };
-    });
-
-    if (editData) {
-      updateReturn({
-        ...editData,
-        id: invoiceNumber,
-        customer,
-        customerTitle,
-        saleAccount,
-        saleTitle,
-        salesman,
-        date,
-        items: normalized,
-        notes,
-      });
-    } else {
-      const newReturn: SaleReturn = {
-        id: invoiceNumber,
-        customer,
-        customerTitle,
-        saleAccount,
-        saleTitle,
-        salesman,
-        date,
-        items: normalized,
-        notes,
-        number: "",
-        accountTitle: "",
-        amount: 0,
-      };
-      addReturn(newReturn);
-    }
-
-    setOpened(false);
-    resetForm();
+  const openDelete = (id: string) => {
+    setDeleteId(id);
   };
 
-  const openDelete = (id: string) => setDeleteId(id);
-  const confirmDelete = () => {
-    if (deleteId) deleteReturn(deleteId);
-    setDeleteId(null);
+  // Add useEffect to fetch sale returns from backend on component mount
+  useEffect(() => {
+    fetchSaleReturns();
+  }, []);
+
+  // Function to fetch all sale returns from backend
+  const fetchSaleReturns = async () => {
+    try {
+      const response = await axios.get("http://localhost:3000/sale-return"); // Changed path
+      setReturns(response.data);
+    } catch (error) {
+      console.error("Error fetching sale returns:", error);
+      notifications.show({
+        title: "Error",
+        message: "Failed to fetch sale returns",
+        color: "red",
+      });
+    }
+  };
+
+  // Function to create sale return in backend
+  const createSaleReturn = async (returnData: SaleReturn) => {
+    try {
+      const payload = {
+        id: returnData.id,
+        customer: returnData.customer,
+        customerTitle: returnData.customerTitle,
+        saleAccount: returnData.saleAccount,
+        saleTitle: returnData.saleTitle,
+        salesman: returnData.salesman,
+        date: returnData.date,
+        items: returnData.items,
+        notes: returnData.notes,
+        amount: returnData.amount,
+      };
+
+      const response = await axios.post(
+        "http://localhost:3000/sale-return", // Changed path
+        payload
+      );
+
+      if (response.data) {
+        // Add to local state after successful backend save
+        setReturns((prev) => [response.data, ...prev]);
+
+        notifications.show({
+          title: "Success",
+          message: "Sale return created successfully",
+          color: "green",
+        });
+
+        setOpened(false);
+        resetForm();
+      }
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message:
+          error.response?.data?.message || "Failed to create sale return",
+        color: "red",
+      });
+      console.error("Error creating sale return:", error);
+    }
+  };
+
+  // Function to update sale return
+  const updateSaleReturn = async (returnData: SaleReturn) => {
+    try {
+      const payload = {
+        id: returnData.id,
+        customer: returnData.customer,
+        customerTitle: returnData.customerTitle,
+        saleAccount: returnData.saleAccount,
+        saleTitle: returnData.saleTitle,
+        salesman: returnData.salesman,
+        date: returnData.date,
+        items: returnData.items,
+        notes: returnData.notes,
+        amount: returnData.amount,
+      };
+
+      const response = await axios.put(
+        `http://localhost:3000/sale-return/${returnData.id}`, // Changed path
+        payload
+      );
+
+      if (response.data) {
+        // Update local state after successful backend update
+        setReturns((prev) =>
+          prev.map((r) => (r.id === returnData.id ? response.data : r))
+        );
+
+        notifications.show({
+          title: "Success",
+          message: "Sale return updated successfully",
+          color: "green",
+        });
+
+        setOpened(false);
+        setEditData(null);
+      }
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message:
+          error.response?.data?.message || "Failed to update sale return",
+        color: "red",
+      });
+      console.error("Error updating sale return:", error);
+    }
+  };
+
+  // Function to delete sale return
+  const deleteSaleReturn = async (returnId: string) => {
+    try {
+      await axios.delete(`http://localhost:3000/sale-return/${returnId}`); // Changed path
+
+      // Remove from local state after successful backend deletion
+      setReturns((prev) => prev.filter((r) => r.id !== returnId));
+
+      notifications.show({
+        title: "Success",
+        message: "Sale return deleted successfully",
+        color: "green",
+      });
+
+      setDeleteId(null);
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message:
+          error.response?.data?.message || "Failed to delete sale return",
+        color: "red",
+      });
+      console.error("Error deleting sale return:", error);
+    }
+  };
+
+  // Updated handleSave function to use backend
+  const handleSave = async () => {
+    try {
+      if (!invoiceNumber || !date) {
+        notifications.show({
+          title: "Validation Error",
+          message: "Please fill in required fields",
+          color: "red",
+        });
+        return;
+      }
+
+      const normalized = items.map((i) => {
+        const qty = Number(i.quantity) || 0;
+        const rate = Number(i.rate) || 0;
+        const amount = qty * rate;
+        const discount = Number(i.discount) || 0;
+        const netAmount = amount - (amount * discount) / 100;
+        return { ...i, quantity: qty, rate, amount, discount, netAmount };
+      });
+
+      const returnData: SaleReturn = {
+        id: invoiceNumber,
+        customer,
+        customerTitle,
+        saleAccount,
+        saleTitle,
+        salesman,
+        date,
+        items: normalized,
+        notes,
+        number: invoiceNumber,
+        accountTitle: customerTitle,
+        amount: netTotal,
+      };
+
+      if (editData) {
+        await updateSaleReturn(returnData);
+      } else {
+        await createSaleReturn(returnData);
+      }
+    } catch (error) {
+      console.error("Error in handleSave:", error);
+    }
+  };
+
+  // Updated confirmDelete function to use backend
+  const confirmDelete = async () => {
+    if (deleteId) {
+      await deleteSaleReturn(deleteId);
+    }
   };
 
   const resetForm = () => {
@@ -802,8 +946,8 @@ function SaleReturnsInner() {
                   date,
                   items,
                   notes,
-                  number: "",
-                  accountTitle: "",
+                  number: invoiceNumber,
+                  accountTitle: customerTitle,
                   amount: netTotal,
                 })
               }
