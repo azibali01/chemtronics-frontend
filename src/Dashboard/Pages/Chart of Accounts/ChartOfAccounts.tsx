@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { JSX } from "react";
 import {
   Button,
@@ -32,45 +32,6 @@ import axios from "axios";
 
 type AccountType = "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
 type AccountGroupType = "Group" | "Detail";
-
-function insertAccount(
-  list: AccountNode[],
-  parentCode: string | null,
-  newAcc: AccountNode
-): AccountNode[] {
-  if (!parentCode) return [...list, newAcc];
-  return list.map((n) => {
-    if (n.selectedCode === parentCode) {
-      return { ...n, children: [...(n.children ?? []), newAcc] };
-    }
-    return n.children
-      ? { ...n, children: insertAccount(n.children, parentCode, newAcc) }
-      : n;
-  });
-}
-
-function updateAccount(
-  list: AccountNode[],
-  updated: AccountNode
-): AccountNode[] {
-  return list.map((n) => {
-    if (n.selectedCode === updated.selectedCode) {
-      return { ...n, ...updated };
-    }
-    return n.children
-      ? { ...n, children: updateAccount(n.children, updated) }
-      : n;
-  });
-}
-
-function deleteAccount(list: AccountNode[], code: string): AccountNode[] {
-  return list
-    .filter((n) => n.selectedCode !== code)
-    .map((n) => ({
-      ...n,
-      children: n.children ? deleteAccount(n.children, code) : undefined,
-    }));
-}
 
 function filterAccounts(
   accounts: AccountNode[],
@@ -191,29 +152,25 @@ function renderAccounts(
     ];
   });
 }
+// Fetch accounts from backend
+async function fetchAccounts(setAccounts: (accs: AccountNode[]) => void) {
+  try {
+    const res = await axios.get("http://localhost:3000/chart-of-account");
+    if (Array.isArray(res.data)) {
+      setAccounts(res.data);
+    }
+  } catch (err) {
+    // Optionally handle error
+    console.error("Failed to fetch accounts", err);
+  }
+}
 
 export default function ChartOfAccounts() {
-  // Revenue flow options
-  const revenueAccountTypeOptions1 = [
-    { value: "Sales Control Account", label: "Sales Control Account" },
-  ];
-  const revenueAccountTypeOptions2: Record<
-    string,
-    { value: string; label: string }[]
-  > = {
-    "Sales Control Account": [{ value: "Sales", label: "Sales" }],
-  };
   // Level 1 options for Equity
   const equityAccountTypeOptions = [
     { value: "Share Capital", label: "Share Capital" },
   ];
-  // Expense flow options
-  const expenseAccountTypeOptions1 = [
-    { value: "Administrative Expenses", label: "Administrative Expenses" },
-    { value: "Selling Expenses", label: "Selling Expenses" },
-    { value: "Financial Charges", label: "Financial Charges" },
-    { value: "Other Charges", label: "Other Charges" },
-  ];
+  // Expense flow options (Level 2 options still used below)
   const expenseAccountTypeOptions2: Record<
     string,
     { value: string; label: string }[]
@@ -324,24 +281,12 @@ export default function ChartOfAccounts() {
       salesTaxNo,
       ntn,
     };
-    const res = await axios.post(
-      "http://localhost:3000/chart-of-account",
-      payload
-    );
-    console.log(res);
-    if (!accountType) return;
-    const newNode: AccountNode = {
-      ...payload,
-      accountType,
-      code: "",
-      name: "",
-    };
-    if (!newNode.selectedCode || !newNode.accountName) return;
-
-    if (editing) {
-      setAccounts((prev) => updateAccount(prev, newNode));
-    } else {
-      setAccounts((prev) => insertAccount(prev, parentAccount, newNode));
+    try {
+      await axios.post("http://localhost:3000/chart-of-account", payload);
+      // Always re-fetch accounts after create/update
+      await fetchAccounts(setAccounts);
+    } catch (err) {
+      console.error("Failed to create/update account", err);
     }
     setSelectedCode("");
     setAccountCode("");
@@ -379,12 +324,27 @@ export default function ChartOfAccounts() {
   const handleDelete = (code: string) => {
     setDeleteId(code);
   };
-  const confirmDelete = () => {
-    if (deleteId) setAccounts((prev) => deleteAccount(prev, deleteId));
+  const confirmDelete = async () => {
+    if (deleteId) {
+      try {
+        await axios.delete(
+          `http://localhost:3000/chart-of-account/${deleteId}`
+        );
+        await fetchAccounts(setAccounts);
+      } catch (err) {
+        console.error("Failed to delete account", err);
+      }
+    }
     setDeleteId(null);
   };
 
   const filteredAccounts = filterAccounts(accounts, search, filterType);
+
+  // Fetch accounts on mount
+  useEffect(() => {
+    fetchAccounts(setAccounts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // const filteredAccountsByCity = filterCity
   //   ? filteredAccounts.filter(
   //       (acc) =>
@@ -563,13 +523,16 @@ export default function ChartOfAccounts() {
                       label="Account Type (Level 1)"
                       placeholder="Select account type"
                       data={[
-                        { value: "Current Assets", label: "Current Assets" },
-                        { value: "Fixed Assets", label: "Fixed Assets" },
-                        { value: "Inventories", label: "Inventories" },
-                        { value: "Receivables", label: "Receivables" },
+                        {
+                          value: "Current Assets",
+                          label: "1100 - Current Assets",
+                        },
+                        { value: "Fixed Assets", label: "1200 - Fixed Assets" },
+                        { value: "Inventories", label: "1300 - Inventories" },
+                        { value: "Receivables", label: "1400 - Receivables" },
                         {
                           value: "Advances & Commissions",
-                          label: "Advances & Commissions",
+                          label: "1500 - Advances & Commissions",
                         },
                       ]}
                       value={selectedAccountType1}
@@ -585,7 +548,43 @@ export default function ChartOfAccounts() {
                         <Select
                           label="Account Type (Level 2)"
                           placeholder={`Select subaccount of ${selectedAccountType1}`}
-                          data={accountTypeOptions2[selectedAccountType1]}
+                          data={
+                            selectedAccountType1 === "Current Assets"
+                              ? [
+                                  { value: "Cash", label: "1110 - Cash" },
+                                  {
+                                    value: "Bank Accounts",
+                                    label: "1120 - Bank Accounts",
+                                  },
+                                  {
+                                    value: "Other Current Assets",
+                                    label: "1130 - Other Current Assets",
+                                  },
+                                ]
+                              : selectedAccountType1 === "Receivables"
+                              ? [
+                                  {
+                                    value: "Receivables Accounts",
+                                    label: "1410 - Receivables Accounts",
+                                  },
+                                ]
+                              : selectedAccountType1 ===
+                                "Advances & Commissions"
+                              ? [
+                                  {
+                                    value: "Salesman Account",
+                                    label: "1510 - Salesman Account",
+                                  },
+                                ]
+                              : selectedAccountType1 === "Bank Accounts"
+                              ? [
+                                  {
+                                    value: "Meezan Bank",
+                                    label: "1121 - Meezan Bank",
+                                  },
+                                ]
+                              : []
+                          }
                           value={selectedAccountType2}
                           onChange={(v) => {
                             setSelectedAccountType2(v || "");
@@ -602,17 +601,17 @@ export default function ChartOfAccounts() {
                       label="Account Type (Level 1)"
                       placeholder="Select account type"
                       data={[
-                        { value: "Captial", label: "Captial" },
+                        { value: "Captial", label: "2100 - Captial" },
                         {
                           value: "Current Liabilities",
-                          label: "Current Liabilities",
+                          label: "2200 - Current Liabilities",
                         },
-                        { value: "Other", label: "Other" },
+                        { value: "Other", label: "2300 - Other" },
                         {
                           value: "Salesman Account",
-                          label: "Salesman Account",
+                          label: "2400 - Salesman Account",
                         },
-                        { value: "Bismillah", label: "Bismillah" },
+                        { value: "Bismillah", label: "2500 - Bismillah" },
                       ]}
                       value={selectedAccountType1}
                       onChange={(v) => {
@@ -628,7 +627,18 @@ export default function ChartOfAccounts() {
                           label="Account Type (Level 2)"
                           placeholder={`Select subaccount of ${selectedAccountType1}`}
                           data={
-                            accountTypeOptionsLiabilities[selectedAccountType1]
+                            selectedAccountType1 === "Current Liabilities"
+                              ? [
+                                  {
+                                    value: "Purchase party",
+                                    label: "2210 - Purchase party",
+                                  },
+                                  {
+                                    value: "Advance Exp.",
+                                    label: "2220 - Advance Exp.",
+                                  },
+                                ]
+                              : []
                           }
                           value={selectedAccountType2}
                           onChange={(v) => {
@@ -658,7 +668,12 @@ export default function ChartOfAccounts() {
                     <Select
                       label="Account Type (Level 1)"
                       placeholder="Select account type"
-                      data={revenueAccountTypeOptions1}
+                      data={[
+                        {
+                          value: "Sales Control Account",
+                          label: "4100 - Sales Control Account",
+                        },
+                      ]}
                       value={selectedAccountType1}
                       onChange={(v) => {
                         setSelectedAccountType1(v || "");
@@ -671,9 +686,7 @@ export default function ChartOfAccounts() {
                       <Select
                         label="Account Type (Level 2)"
                         placeholder="Select subaccount of Sales Control Account"
-                        data={
-                          revenueAccountTypeOptions2["Sales Control Account"]
-                        }
+                        data={[{ value: "Sales", label: "4110 - Sales" }]}
                         value={selectedAccountType2}
                         onChange={(v) => {
                           setSelectedAccountType2(v || "");
@@ -689,7 +702,24 @@ export default function ChartOfAccounts() {
                     <Select
                       label="Account Type (Level 1)"
                       placeholder="Select account type"
-                      data={expenseAccountTypeOptions1}
+                      data={[
+                        {
+                          value: "Administrative Expenses",
+                          label: "5100 - Administrative Expenses",
+                        },
+                        {
+                          value: "Selling Expenses",
+                          label: "5200 - Selling Expenses",
+                        },
+                        {
+                          value: "Financial Charges",
+                          label: "5300 - Financial Charges",
+                        },
+                        {
+                          value: "Other Charges",
+                          label: "5400 - Other Charges",
+                        },
+                      ]}
                       value={selectedAccountType1}
                       onChange={(v) => {
                         setSelectedAccountType1(v || "");
@@ -704,7 +734,52 @@ export default function ChartOfAccounts() {
                           label="Account Type (Level 2)"
                           placeholder={`Select subaccount of ${selectedAccountType1}`}
                           data={
-                            expenseAccountTypeOptions2[selectedAccountType1]
+                            selectedAccountType1 === "Administrative Expenses"
+                              ? [
+                                  {
+                                    value: "Salaries",
+                                    label: "5110 - Salaries",
+                                  },
+                                  { value: "Rent", label: "5120 - Rent" },
+                                  {
+                                    value: "Utilities",
+                                    label: "5130 - Utilities",
+                                  },
+                                  {
+                                    value: "Depreciation",
+                                    label: "5140 - Depreciation",
+                                  },
+                                ]
+                              : selectedAccountType1 === "Selling Expenses"
+                              ? [
+                                  {
+                                    value: "Advertising",
+                                    label: "5210 - Advertising",
+                                  },
+                                  {
+                                    value: "Sales Commission",
+                                    label: "5220 - Sales Commission",
+                                  },
+                                ]
+                              : selectedAccountType1 === "Financial Charges"
+                              ? [
+                                  {
+                                    value: "Bank Charges",
+                                    label: "5310 - Bank Charges",
+                                  },
+                                  {
+                                    value: "Interest Expense",
+                                    label: "5320 - Interest Expense",
+                                  },
+                                ]
+                              : selectedAccountType1 === "Other Charges"
+                              ? [
+                                  {
+                                    value: "Miscellaneous",
+                                    label: "5410 - Miscellaneous",
+                                  },
+                                ]
+                              : []
                           }
                           value={selectedAccountType2}
                           onChange={(v) => {
