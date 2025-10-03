@@ -228,15 +228,24 @@ export default function SalesInvoicePage() {
 
   useEffect(() => {
     fetchSalesInvoices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
+    interface Product {
+      code: string;
+      productName?: string;
+      name?: string;
+      productDescription?: string;
+      description?: string;
+      unitPrice?: number;
+    }
     const fetchProductCodes = async () => {
       try {
         const res = await axios.get("http://localhost:3000/products");
         if (Array.isArray(res.data)) {
           setProductCodes(
-            res.data.map((p: any) => ({
+            res.data.map((p: Product) => ({
               value: p.code,
               label: `${p.code} - ${p.productName || p.name || ""}`,
               productName: p.productName || p.name || "",
@@ -245,7 +254,7 @@ export default function SalesInvoicePage() {
             }))
           );
         }
-      } catch (err) {
+      } catch {
         setProductCodes([]);
       }
     };
@@ -713,23 +722,6 @@ export default function SalesInvoicePage() {
         .map((a) => [a.value, a])
     ).values()
   );
-
-  const [fetchedProducts, setFetchedProducts] = useState<any[]>([]);
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const response = await axios.get("http://localhost:3000/products");
-        setFetchedProducts(Array.isArray(response.data) ? response.data : []);
-      } catch (err) {
-        notifications.show({
-          title: "Error",
-          message: "Failed to fetch products",
-          color: "red",
-        });
-      }
-    };
-    fetchProducts();
-  }, []);
 
   return (
     <div className="p-6 space-y-6">

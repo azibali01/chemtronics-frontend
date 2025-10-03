@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import axios from "axios";
 import {
   Table,
   Button,
@@ -17,7 +18,7 @@ const flattenAccounts = (
   nodes: AccountNode[]
 ): { code: string; name: string }[] => {
   return nodes.flatMap((n) => [
-    { code: n.code, name: n.name },
+    { code: String(n.selectedCode), name: n.accountName },
     ...(n.children ? flattenAccounts(n.children) : []),
   ]);
 };
@@ -34,9 +35,9 @@ const AccountsOpeningBalances: React.FC = () => {
   const filteredAccounts = useMemo(
     () =>
       allAccounts.filter(
-        (a: { code: string; name: string }) =>
-          a.name.toLowerCase().includes(search.toLowerCase()) ||
-          a.code.toLowerCase().includes(search.toLowerCase())
+        (a: { code?: string; name?: string }) =>
+          (a.name && a.name.toLowerCase().includes(search.toLowerCase())) ||
+          (a.code && a.code.toLowerCase().includes(search.toLowerCase()))
       ),
     [allAccounts, search]
   );
@@ -54,7 +55,20 @@ const AccountsOpeningBalances: React.FC = () => {
 
   const handleUpdate = async () => {
     setLoading(true);
-    // TODO: Send balances to backend if needed
+    // Prepare payload: array of { code, name, debit, credit }
+    const payload = filteredAccounts.map((acc) => ({
+      code: acc.code,
+      name: acc.name,
+      debit: balances[acc.code]?.debit || 0,
+      credit: balances[acc.code]?.credit || 0,
+    }));
+    try {
+      await axios.post("http://localhost:3000/opening-balances", payload);
+      // Optionally show success notification here
+    } catch (error) {
+      // Optionally show error notification here
+      console.error("Failed to update opening balances", error);
+    }
     setLoading(false);
   };
 

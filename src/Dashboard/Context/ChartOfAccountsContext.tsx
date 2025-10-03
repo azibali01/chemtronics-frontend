@@ -41,6 +41,8 @@ export type ParentAccount =
   | "5220-professional fees";
 
 export interface AccountNode {
+  code: string | number;
+  name: string;
   selectedCode: string;
   accountCode: string;
   level: string;
@@ -91,7 +93,7 @@ export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({
         if (Array.isArray(res.data)) {
           setAccounts(res.data);
         }
-      } catch (err) {
+      } catch {
         // Optionally handle error
         setAccounts([]);
       }
