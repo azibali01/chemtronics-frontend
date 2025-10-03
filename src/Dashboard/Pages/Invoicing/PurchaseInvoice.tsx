@@ -209,10 +209,49 @@ export default function PurchaseInvoice() {
     fetchInvoices();
   }, [setInvoices]);
 
-  // Prepare dropdown data for product code and name with proper mapping
+  const [productCodes, setProductCodes] = useState<
+    {
+      value: string;
+      label: string;
+      productName: string;
+      description: string;
+      rate: number;
+    }[]
+  >([]);
+
+  useEffect(() => {
+    interface Product {
+      code: string;
+      productName?: string;
+      name?: string;
+      productDescription?: string;
+      description?: string;
+      unitPrice?: number;
+    }
+    const fetchProductCodes = async () => {
+      try {
+        const res = await axios.get("http://localhost:3000/products");
+        if (Array.isArray(res.data)) {
+          setProductCodes(
+            res.data.map((p: Product) => ({
+              value: p.code,
+              label: `${p.code} - ${p.productName || p.name || ""}`,
+              productName: p.productName || p.name || "",
+              description: p.productDescription || p.description || "",
+              rate: p.unitPrice || 0,
+            }))
+          );
+        }
+      } catch {
+        setProductCodes([]);
+      }
+    };
+    fetchProductCodes();
+  }, []);
+
   const productCodeOptions = products.map((p) => ({
     value: p.code,
-    label: `${p.code} - ${p.productName}`, // Shows both code and name
+    label: `${p.code} }`, // Shows both code and name
   }));
 
   const productNameOptions = products.map((p) => ({
@@ -220,12 +259,10 @@ export default function PurchaseInvoice() {
     label: p.productName,
   }));
 
-  // Function to get product details by code
   const getProductByCode = (code: string) => {
     return products.find((p) => p.code === code);
   };
 
-  // Function to get product details by name
   const getProductByName = (name: string) => {
     return products.find((p) => p.productName === name);
   };
@@ -234,7 +271,6 @@ export default function PurchaseInvoice() {
   const handleProductCodeChange = (itemId: number, selectedCode: string) => {
     const product = getProductByCode(selectedCode);
     if (product) {
-      // Auto-populate all related fields
       updateItem(itemId, "code", selectedCode);
       updateItem(itemId, "product", product.productName);
       updateItem(itemId, "description", product.productDescription);
@@ -304,7 +340,7 @@ export default function PurchaseInvoice() {
         ],
       ],
       body: filteredInvoices.map((inv) => [
-        inv.number,
+        inv.number || "",
         inv.date,
         inv.supplierNo || "",
         inv.supplierTitle || "",
@@ -411,7 +447,7 @@ export default function PurchaseInvoice() {
 
   const filteredInvoices = invoices.filter(
     (inv) =>
-      inv.number.toLowerCase().includes(search.toLowerCase()) &&
+      (inv.number || "").toLowerCase().includes(search.toLowerCase()) &&
       (!fromDate || new Date(inv.date) >= new Date(fromDate)) &&
       (!toDate || new Date(inv.date) <= new Date(toDate))
   );
@@ -649,7 +685,7 @@ export default function PurchaseInvoice() {
           <Table.Tbody>
             {paginatedInvoices.map((inv) => (
               <Table.Tr key={inv.id}>
-                <Table.Td>{inv.number}</Table.Td>
+                <Table.Td>{inv.number || ""}</Table.Td>
                 <Table.Td>{inv.date}</Table.Td>
                 <Table.Td>{inv.supplierNo || ""}</Table.Td>
                 <Table.Td>{inv.supplierTitle || ""}</Table.Td>
@@ -677,7 +713,7 @@ export default function PurchaseInvoice() {
                       <Menu.Item
                         leftSection={<IconPencil size={14} />}
                         onClick={() => {
-                          setInvoiceNumber(inv.number);
+                          setInvoiceNumber(inv.number || "");
                           setDate(inv.date);
                           setIncludeGST(inv.gst ?? true);
                           setItems(inv.items || []);
@@ -893,12 +929,38 @@ export default function PurchaseInvoice() {
                 <Table.Tr key={item.id}>
                   <Table.Td>
                     <Select
-                      placeholder="Select Product Code"
-                      data={productCodeOptions}
+                      placeholder="Product Code"
+                      data={Array.from(
+                        new Map(
+                          productCodes.map((p) => [
+                            String(p.value),
+                            {
+                              value: String(p.value),
+                              label: p.label,
+                              productName: p.productName,
+                              description: p.description,
+                              rate: p.rate,
+                            },
+                          ])
+                        ).values()
+                      )}
                       value={item.code?.toString() || ""}
-                      onChange={(selectedCode) => {
-                        if (selectedCode) {
-                          handleProductCodeChange(item.id, selectedCode);
+                      onChange={(v) => {
+                        const selected = productCodes.find(
+                          (p) => String(p.value) === v
+                        );
+                        const newItems = [...items];
+                        const itemIndex = newItems.findIndex(
+                          (i) => i.id === item.id
+                        );
+                        if (itemIndex !== -1) {
+                          newItems[itemIndex].code = Number(v) || 0;
+                          newItems[itemIndex].product =
+                            selected?.productName || "";
+                          newItems[itemIndex].description =
+                            selected?.description || "";
+                          newItems[itemIndex].rate = selected?.rate || 0;
+                          setItems(newItems);
                         }
                       }}
                       searchable
@@ -911,12 +973,38 @@ export default function PurchaseInvoice() {
                   </Table.Td>
                   <Table.Td>
                     <Select
-                      placeholder="Select Product Name"
-                      data={productNameOptions}
+                      placeholder="Product Name"
+                      data={Array.from(
+                        new Map(
+                          productCodes.map((p) => [
+                            p.productName,
+                            {
+                              value: p.productName,
+                              label: p.productName,
+                              code: p.value,
+                              description: p.description,
+                              rate: p.rate,
+                            },
+                          ])
+                        ).values()
+                      )}
                       value={item.product}
-                      onChange={(selectedName) => {
-                        if (selectedName) {
-                          handleProductNameChange(item.id, selectedName);
+                      onChange={(v) => {
+                        const selected = productCodes.find(
+                          (p) => p.productName === v
+                        );
+                        const newItems = [...items];
+                        const itemIndex = newItems.findIndex(
+                          (i) => i.id === item.id
+                        );
+                        if (itemIndex !== -1) {
+                          newItems[itemIndex].product = v || "";
+                          newItems[itemIndex].code =
+                            Number(selected?.value) || 0;
+                          newItems[itemIndex].description =
+                            selected?.description || "";
+                          newItems[itemIndex].rate = selected?.rate || 0;
+                          setItems(newItems);
                         }
                       }}
                       searchable
