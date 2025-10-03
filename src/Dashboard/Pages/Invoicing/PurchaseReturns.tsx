@@ -63,6 +63,7 @@ interface ReturnEntry {
 function getNextReturnNumber(returns: ReturnEntry[]) {
   const numbers = returns
     .map((r) => {
+      if (!r.id || typeof r.id !== "string") return null;
       const match = r.id.match(/^PR-(\d+)$/);
       return match ? parseInt(match[1], 10) : null;
     })
@@ -374,8 +375,16 @@ export default function PurchaseReturnModal() {
       };
 
       await updatePurchaseReturn(updated);
+      setEditOpened(false);
+      setEditingReturn(null);
+      resetForm();
     } catch (error) {
       console.error("Error in handleEditSubmit:", error);
+      notifications.show({
+        title: "Error",
+        message: "Failed to update purchase return",
+        color: "red",
+      });
     }
   };
 
@@ -383,8 +392,15 @@ export default function PurchaseReturnModal() {
   const handleDelete = async (id: string) => {
     try {
       await deletePurchaseReturn(id);
+      setDeleteModalOpen(false);
+      setDeleteTarget(null);
     } catch (error) {
       console.error("Error in handleDelete:", error);
+      notifications.show({
+        title: "Error",
+        message: "Failed to delete purchase return",
+        color: "red",
+      });
     }
   };
 
@@ -402,9 +418,9 @@ export default function PurchaseReturnModal() {
       startY: 32,
       head: [["Field", "Value"]],
       body: [
-        ["Invoice", entry.invoice],
+        ["Invoice", entry.invoice || ""],
         ["Date", entry.date],
-        ["Supplier Number", entry.supplierNumber],
+        ["Supplier Number", entry.supplierNumber || ""],
         ["Supplier Title", entry.supplierTitle],
         ["Purchase Account", entry.purchaseAccount],
         ["Purchase Title", entry.purchaseTitle],
@@ -468,8 +484,8 @@ export default function PurchaseReturnModal() {
 
   const filteredReturns = returns.filter((entry) => {
     const matchesSearch =
-      entry.invoice.toLowerCase().includes(search.toLowerCase()) ||
-      entry.supplierNumber.toLowerCase().includes(search.toLowerCase());
+      (entry.invoice || "").toLowerCase().includes(search.toLowerCase()) ||
+      (entry.supplierNumber || "").toLowerCase().includes(search.toLowerCase());
 
     const entryDate = new Date(entry.date).getTime();
     const fromOk = fromDate ? entryDate >= new Date(fromDate).getTime() : true;
@@ -509,9 +525,9 @@ export default function PurchaseReturnModal() {
         ],
       ],
       body: filteredReturns.map((entry) => [
-        entry.invoice,
+        entry.invoice || "",
         entry.date,
-        entry.supplierNumber,
+        entry.supplierNumber || "",
         entry.supplierTitle,
         entry.purchaseAccount,
         entry.purchaseTitle,
@@ -583,6 +599,46 @@ export default function PurchaseReturnModal() {
     setOpened(true);
   };
 
+  const [productCodes, setProductCodes] = useState<
+    {
+      value: string;
+      label: string;
+      productName: string;
+      description: string;
+      rate: number;
+    }[]
+  >([]);
+
+  useEffect(() => {
+    interface Product {
+      code: string;
+      productName?: string;
+      name?: string;
+      productDescription?: string;
+      description?: string;
+      unitPrice?: number;
+    }
+    const fetchProductCodes = async () => {
+      try {
+        const res = await axios.get("http://localhost:3000/products");
+        if (Array.isArray(res.data)) {
+          setProductCodes(
+            res.data.map((p: Product) => ({
+              value: p.code,
+              label: `${p.code} - ${p.productName || p.name || ""}`,
+              productName: p.productName || p.name || "",
+              description: p.productDescription || p.description || "",
+              rate: p.unitPrice || 0,
+            }))
+          );
+        }
+      } catch {
+        setProductCodes([]);
+      }
+    };
+    fetchProductCodes();
+  }, []);
+
   const productCodeOptions = products.map((p) => ({
     value: p.code,
     label: p.code,
@@ -637,9 +693,9 @@ export default function PurchaseReturnModal() {
   // Add this missing handleEdit function
   const handleEdit = (entry: ReturnEntry) => {
     setEditingReturn(entry);
-    setInvoice(entry.invoice);
+    setInvoice(entry.invoice || "");
     setReturnDate(entry.date);
-    setSupplierNumber(entry.supplierNumber);
+    setSupplierNumber(entry.supplierNumber || "");
     setSupplierTitle(entry.supplierTitle);
     setPurchaseAccount(entry.purchaseAccount);
     setPurchaseTitle(entry.purchaseTitle);
@@ -906,9 +962,11 @@ export default function PurchaseReturnModal() {
           notes={notes}
           setNotes={setNotes}
           items={items}
+          setItems={setItems}
           updateItem={updateItem}
           addItem={addItem}
           removeItem={removeItem}
+          productCodes={productCodes}
           productCodeOptions={productCodeOptions}
           productNameOptions={productNameOptions}
           netTotal={netTotal} // <-- Add this line
@@ -995,9 +1053,11 @@ export default function PurchaseReturnModal() {
           notes={notes}
           setNotes={setNotes}
           items={items}
+          setItems={setItems}
           updateItem={updateItem}
           addItem={addItem}
           removeItem={removeItem}
+          productCodes={productCodes}
           productCodeOptions={productCodeOptions}
           productNameOptions={productNameOptions}
           netTotal={editNetTotal} // Changed from 0 to editNetTotal
@@ -1037,13 +1097,13 @@ function PurchaseReturnPrintTemplate({ entry }: { entry: ReturnEntry }) {
         <tbody>
           <tr>
             <td style={{ fontWeight: "bold" }}>Invoice #</td>
-            <td>{entry.invoice}</td>
+            <td>{entry.invoice || ""}</td>
             <td style={{ fontWeight: "bold" }}>Date</td>
             <td>{entry.date}</td>
           </tr>
           <tr>
             <td style={{ fontWeight: "bold" }}>Supplier Number</td>
-            <td>{entry.supplierNumber}</td>
+            <td>{entry.supplierNumber || ""}</td>
             <td style={{ fontWeight: "bold" }}>Supplier Title</td>
             <td>{entry.supplierTitle}</td>
           </tr>
@@ -1113,6 +1173,7 @@ interface ReturnFormProps {
   notes: string;
   setNotes: (notes: string) => void;
   items: ReturnItem[];
+  setItems: React.Dispatch<React.SetStateAction<ReturnItem[]>>;
   updateItem: (
     index: number,
     field: keyof ReturnItem,
@@ -1120,6 +1181,13 @@ interface ReturnFormProps {
   ) => void;
   addItem: () => void;
   removeItem: (index: number) => void;
+  productCodes: {
+    value: string;
+    label: string;
+    productName: string;
+    description: string;
+    rate: number;
+  }[];
   productCodeOptions: { value: string; label: string }[];
   productNameOptions: { value: string; label: string }[];
   netTotal: number; // <-- Add this line
@@ -1129,9 +1197,11 @@ function ReturnForm({
   notes,
   setNotes,
   items,
+  setItems,
   updateItem,
   addItem,
   removeItem,
+  productCodes,
   productCodeOptions,
   productNameOptions,
   netTotal, // <-- Add this line
@@ -1144,17 +1214,61 @@ function ReturnForm({
           <Group key={index} grow mb="xs">
             <Select
               label="Code"
-              placeholder="Select product code"
-              data={productCodeOptions}
+              placeholder="Product Code"
+              data={Array.from(
+                new Map(
+                  productCodes.map((p) => [
+                    String(p.value),
+                    {
+                      value: String(p.value),
+                      label: p.label,
+                      productName: p.productName,
+                      description: p.description,
+                      rate: p.rate,
+                    },
+                  ])
+                ).values()
+              )}
               value={item.code}
-              onChange={(val) => updateItem(index, "code", val ?? "")}
+              onChange={(v) => {
+                const selected = productCodes.find(
+                  (p) => String(p.value) === v
+                );
+                const newItems = [...items];
+                newItems[index].code = v || "";
+                newItems[index].product = selected?.productName || "";
+                newItems[index].rate = selected?.rate || 0;
+                setItems(newItems);
+              }}
+              searchable
             />
             <Select
               label="Product"
-              placeholder="Select product"
-              data={productNameOptions}
+              placeholder="Product Name"
+              data={Array.from(
+                new Map(
+                  productCodes.map((p) => [
+                    p.productName,
+                    {
+                      value: p.productName,
+                      label: p.productName,
+                      code: p.value,
+                      description: p.description,
+                      rate: p.rate,
+                    },
+                  ])
+                ).values()
+              )}
               value={item.product}
-              onChange={(val) => updateItem(index, "product", val ?? "")}
+              onChange={(v) => {
+                const selected = productCodes.find((p) => p.productName === v);
+                const newItems = [...items];
+                newItems[index].product = v || "";
+                newItems[index].code = selected?.value || "";
+                newItems[index].rate = selected?.rate || 0;
+                setItems(newItems);
+              }}
+              searchable
             />
             <TextInput
               label="Unit"
