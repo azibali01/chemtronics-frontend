@@ -22,13 +22,27 @@ import {
   IconUsers,
   IconEdit,
   IconTrash,
-  IconArrowDown,
 } from "@tabler/icons-react";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import type { AccountNode } from "../../Context/ChartOfAccountsContext";
 import axios from "axios";
 
 // Types and initial data
+// Helper: Count all accounts (including nested) of a given type
+function countAccountsByType(
+  accounts: AccountNode[],
+  type: AccountType
+): number {
+  let count = 0;
+  function walk(nodes: AccountNode[]) {
+    for (const acc of nodes) {
+      if (acc.accountType === type) count++;
+      if (acc.children) walk(acc.children);
+    }
+  }
+  walk(accounts);
+  return count;
+}
 
 type AccountType = "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
 type AccountGroupType = "Group" | "Detail";
@@ -60,97 +74,144 @@ function filterAccounts(
     .filter(Boolean) as AccountNode[];
 }
 
-function renderAccounts(
-  data: AccountNode[],
+function findImmediateParentName(
+  accounts: AccountNode[],
+  code: string,
+  parentAccountCode?: string
+): string | null {
+  // If parentAccountCode is provided, use it to find the parent name directly
+  if (parentAccountCode) {
+    let parentName: string | null = null;
+    function dfs(nodes: AccountNode[]): boolean {
+      for (const acc of nodes) {
+        if (acc.selectedCode === parentAccountCode) {
+          parentName = acc.accountName;
+          return true;
+        }
+        if (acc.children && dfs(acc.children)) return true;
+      }
+      return false;
+    }
+    dfs(accounts);
+    return parentName;
+  }
+  // Otherwise, traverse the tree to find the parent
+  let found: string | null = null;
+  function dfs(nodes: AccountNode[]): boolean {
+    for (const acc of nodes) {
+      if (acc.children) {
+        for (const child of acc.children) {
+          if (child.selectedCode === code) {
+            found = acc.accountName;
+            return true;
+          }
+        }
+        if (dfs(acc.children)) return true;
+      }
+    }
+    return false;
+  }
+  dfs(accounts);
+  return found;
+}
+
+// Helper to flatten all accounts into a list with parent and path info
+function flattenAccounts(
+  accounts: AccountNode[],
+  allAccounts: AccountNode[]
+): { acc: AccountNode; parent: string | null; path: string }[] {
+  const result: { acc: AccountNode; parent: string | null; path: string }[] =
+    [];
+  function walk(nodes: AccountNode[]) {
+    for (const acc of nodes) {
+      // Use acc.parentAccount if available, otherwise use tree traversal
+      const parent = findImmediateParentName(
+        allAccounts,
+        acc.selectedCode,
+        acc.parentAccount
+      );
+      const path = getAccountPath(allAccounts, acc.selectedCode);
+      result.push({ acc, parent, path });
+      if (acc.children) walk(acc.children);
+    }
+  }
+  walk(accounts);
+  return result;
+}
+
+// Helper to get full path (subaccount hierarchy) for an account (from root to this account)
+function getAccountPath(accounts: AccountNode[], code: string): string {
+  let result: string[] = [];
+  function dfs(nodes: AccountNode[], target: string, curr: string[]): boolean {
+    for (const acc of nodes) {
+      const next = [...curr, acc.accountName];
+      if (acc.selectedCode === target) {
+        result = next;
+        return true;
+      }
+      if (acc.children && dfs(acc.children, target, next)) return true;
+    }
+    return false;
+  }
+  dfs(accounts, code, []);
+  return result.length > 0 ? result.join(" > ") : "";
+}
+
+// Render all accounts as a flat table with parent and path info
+function renderAccountsTable(
+  accounts: AccountNode[],
+  allAccounts: AccountNode[],
   onEdit: (acc: AccountNode) => void,
-  onDelete: (code: string) => void,
-  expanded: Record<string, boolean>,
-  setExpanded: (exp: Record<string, boolean>) => void,
-  level = 0
-): JSX.Element[] {
-  return data.flatMap(function (acc) {
-    return [
-      <div key={acc.selectedCode} style={{ marginLeft: level * 20 }}>
-        <Group align="center" py={4} gap={8} style={{ width: "100%" }}>
-          {/* Expand/collapse arrow for accounts with children */}
-          {acc.children && acc.children.length > 0 && (
-            <ActionIcon
-              variant="subtle"
-              color="gray"
-              onClick={() => {
-                setExpanded({
-                  ...expanded,
-                  [acc.selectedCode]: !expanded[acc.selectedCode],
-                });
+  onDelete: (code: string) => void
+): JSX.Element {
+  const flat = flattenAccounts(accounts, allAccounts);
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <thead>
+        <tr>
+          <th style={{ textAlign: "left", padding: 4 }}>Account Name</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Parent</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Path</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {flat.map(({ acc, parent, path }) => (
+          <tr key={acc.selectedCode} style={{ borderBottom: "1px solid #eee" }}>
+            <td
+              style={{
+                padding: 4,
+                fontWeight: 600,
+                textTransform: "uppercase",
               }}
-              size={24}
             >
-              {expanded[acc.selectedCode] ? (
-                <IconArrowDown color="#0A6802" size={16} />
-              ) : (
-                <IconArrowDown
-                  style={{ transform: "rotate(-90deg)" }}
-                  size={16}
-                  color="#0A6802"
-                />
-              )}
-            </ActionIcon>
-          )}
-          {/* Show summary card icon for top-level accounts, else nothing */}
-          {level === 0 && (
-            <span style={{ marginRight: 8 }}>
-              {acc.accountType === "Asset" && (
-                <IconBuildingBank size={24} color="blue" />
-              )}
-              {acc.accountType === "Liability" && (
-                <IconCreditCard size={24} color="red" />
-              )}
-              {acc.accountType === "Equity" && (
-                <IconUsers size={24} color="#0A6802" />
-              )}
-              {acc.accountType === "Revenue" && (
-                <IconChartBar size={24} color="teal" />
-              )}
-              {acc.accountType === "Expense" && (
-                <IconCurrencyDollar size={24} color="orange" />
-              )}
-            </span>
-          )}
-          <Text fw={600} style={{ textTransform: "uppercase" }}>
-            {acc.accountName}
-          </Text>
-          <div style={{ flex: 1 }} />
-          {/* Edit and Delete icons */}
-          <ActionIcon
-            variant="subtle"
-            color="#0A6802"
-            onClick={() => onEdit(acc)}
-            title="Edit Account"
-          >
-            <IconEdit size={16} />
-          </ActionIcon>
-          <ActionIcon
-            variant="subtle"
-            color="red"
-            onClick={() => onDelete(acc.selectedCode)}
-            title="Delete Account"
-          >
-            <IconTrash size={16} />
-          </ActionIcon>
-        </Group>
-        {acc.children &&
-          expanded[acc.selectedCode] &&
-          renderAccounts(
-            acc.children,
-            onEdit,
-            onDelete,
-            expanded,
-            setExpanded,
-            level + 1
-          )}
-      </div>,
-    ];
-  });
+              {acc.accountName}
+            </td>
+            <td style={{ padding: 4 }}>{parent || "-"}</td>
+            <td style={{ padding: 4 }}>{path}</td>
+            <td style={{ padding: 4 }}>
+              <ActionIcon
+                variant="subtle"
+                color="#0A6802"
+                onClick={() => onEdit(acc)}
+                title="Edit Account"
+              >
+                <IconEdit size={16} />
+              </ActionIcon>
+              <ActionIcon
+                variant="subtle"
+                color="red"
+                onClick={() => onDelete(acc.selectedCode)}
+                title="Delete Account"
+              >
+                <IconTrash size={16} />
+              </ActionIcon>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 // Fetch accounts from backend
 async function fetchAccounts(setAccounts: (accs: AccountNode[]) => void) {
@@ -191,7 +252,7 @@ export default function ChartOfAccounts() {
     ],
     "Other Charges": [{ value: "Miscellaneous", label: "Miscellaneous" }],
   };
-  const { accounts, setAccounts, expanded, setExpanded } = useChartOfAccounts();
+  const { accounts, setAccounts } = useChartOfAccounts();
   const [opened, setOpened] = useState(false);
 
   // Only show backend data, do not set demo data
@@ -354,6 +415,13 @@ export default function ChartOfAccounts() {
   //     )
   //   : filteredAccounts;
 
+  // Calculate totals for each type
+  const assetCount = countAccountsByType(accounts, "Asset");
+  const liabilityCount = countAccountsByType(accounts, "Liability");
+  const equityCount = countAccountsByType(accounts, "Equity");
+  const revenueCount = countAccountsByType(accounts, "Revenue");
+  const expenseCount = countAccountsByType(accounts, "Expense");
+
   return (
     <div className="p-6">
       <Group justify="space-between" mb="lg">
@@ -364,6 +432,18 @@ export default function ChartOfAccounts() {
           color="#0A6802"
           onClick={() => {
             setEditing(null);
+            setSelectedCode("");
+            setAccountCode("");
+            setLevel("");
+            setAccountName("");
+            setAccountType(null);
+            setParentAccount("");
+            setType("Group");
+            setIsParty(false);
+            setAddress("");
+            setPhoneNo("");
+            setSalesTaxNo("");
+            setNtn("");
             setOpened(true);
           }}
         >
@@ -376,7 +456,7 @@ export default function ChartOfAccounts() {
             <Stack gap={2}>
               <Text fw={600}>Assets</Text>
               <Text size="xl" fw={700}>
-                {/* TODO: Show dynamic asset total here */}
+                {assetCount} Accounts
               </Text>
             </Stack>
             <IconBuildingBank size={32} color="blue" />
@@ -387,7 +467,7 @@ export default function ChartOfAccounts() {
             <Stack gap={2}>
               <Text fw={600}>Liabilities</Text>
               <Text size="xl" fw={700}>
-                {/* TODO: Show dynamic liabilities total here */}
+                {liabilityCount} Accounts
               </Text>
             </Stack>
             <IconCreditCard size={32} color="red" />
@@ -398,7 +478,7 @@ export default function ChartOfAccounts() {
             <Stack gap={2}>
               <Text fw={600}>Equity</Text>
               <Text size="xl" fw={700}>
-                {/* TODO: Show dynamic equity total here */}
+                {equityCount} Accounts
               </Text>
             </Stack>
             <IconUsers size={32} color="#0A6802" />
@@ -409,7 +489,7 @@ export default function ChartOfAccounts() {
             <Stack gap={2}>
               <Text fw={600}>Revenue</Text>
               <Text size="xl" fw={700}>
-                {/* TODO: Show dynamic revenue total here */}
+                {revenueCount} Accounts
               </Text>
             </Stack>
             <IconChartBar size={32} color="teal" />
@@ -420,7 +500,7 @@ export default function ChartOfAccounts() {
             <Stack gap={2}>
               <Text fw={600}>Expenses</Text>
               <Text size="xl" fw={700}>
-                {/* TODO: Show dynamic expenses total here */}
+                {expenseCount} Accounts
               </Text>
             </Stack>
             <IconCurrencyDollar size={32} color="orange" />
@@ -455,12 +535,11 @@ export default function ChartOfAccounts() {
           </Group>
           <Divider />
           <ScrollArea h={400}>
-            {renderAccounts(
+            {renderAccountsTable(
               filteredAccounts,
+              accounts,
               handleEdit,
-              handleDelete,
-              expanded,
-              setExpanded
+              handleDelete
             )}
           </ScrollArea>
         </Stack>
