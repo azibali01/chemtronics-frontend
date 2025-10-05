@@ -409,6 +409,26 @@ function CreditSaleInvoiceInner() {
     `;
   }
 
+  // Sale Account mapping logic (same as SaleReturns)
+  const saleAccountTitleMap: Record<string, string> = {
+    "4111": "Sales Of Chemicals",
+    "4112": "Sale Of Equipments",
+    "4113": "Services",
+    "4114": "Sale Of Chemicals and Equipments",
+  };
+
+  const saleAccountOptions = Object.entries(saleAccountTitleMap).map(
+    ([code, title]) => ({
+      value: code,
+      label: `${code} - ${title}`,
+    })
+  );
+
+  function handleSaleAccountSelect(selectedValue: string | null) {
+    setSaleAccount(selectedValue || "");
+    setSaleTitle(selectedValue ? saleAccountTitleMap[selectedValue] : "");
+  }
+
   return (
     <div>
       <Group justify="space-between" mb="md">
@@ -660,17 +680,19 @@ function CreditSaleInvoiceInner() {
                 value={customerTitle}
                 onChange={(value) => setCustomerTitle(value || "")}
               />
-              <TextInput
-                label="Sale Account"
-                placeholder="Enter sale account"
-                value={saleAccount}
-                onChange={(e) => setSaleAccount(e.currentTarget.value)}
-              />
+              {/* Sale Account Select Dropdown */}
               <Select
+                label="Sale Account"
+                placeholder="Select sale account"
+                data={saleAccountOptions}
+                value={saleAccount}
+                onChange={handleSaleAccountSelect}
+              />
+              <TextInput
                 label="Sale Title"
-                placeholder="Enter sale title"
+                placeholder="Sale title"
                 value={saleTitle}
-                onChange={(value) => setSaleTitle(value || "")}
+                readOnly
               />
               <Select
                 label="Salesman"

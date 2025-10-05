@@ -160,6 +160,27 @@ export default function PurchaseReturnModal() {
     }
   };
 
+  // --- Sale Account mapping logic (same as SaleReturns) ---
+  const saleAccountTitleMap: Record<string, string> = {
+    "4111": "Sales Of Chemicals",
+    "4112": "Sale Of Equipments",
+    "4113": "Services",
+    "4114": "Sale Of Chemicals and Equipments",
+  };
+
+  const saleAccountOptions = Object.entries(saleAccountTitleMap).map(
+    ([code, title]) => ({
+      value: code,
+      label: `${code} - ${title}`,
+    })
+  );
+
+  // Function to handle sale account selection
+  const handleSaleAccountSelect = (selectedValue: string) => {
+    setPurchaseAccount(selectedValue);
+    setPurchaseTitle(saleAccountTitleMap[selectedValue] || "");
+  };
+
   const [search, setSearch] = useState<string>("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
