@@ -149,7 +149,7 @@ export default function PurchaseReturnModal() {
         purchaseTitle: returnData.purchaseTitle,
         amount: returnData.amount,
         notes: returnData.notes,
-        items: returnData.items,
+        products: returnData.items,
       };
 
       const response = await axios.post(
@@ -193,7 +193,7 @@ export default function PurchaseReturnModal() {
         purchaseTitle: returnData.purchaseTitle,
         amount: returnData.amount,
         notes: returnData.notes,
-        items: returnData.items,
+        products: returnData.items,
       };
 
       const response = await axios.put(
