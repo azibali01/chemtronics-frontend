@@ -305,7 +305,7 @@ export default function SalesInvoicePage() {
         amount: netTotal,
         netAmount: netTotal,
         province,
-        items: items,
+        products: items,
       };
 
       const response = await axios.post(
