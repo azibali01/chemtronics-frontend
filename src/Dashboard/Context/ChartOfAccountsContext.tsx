@@ -11,27 +11,23 @@ export type AccountType =
 
 export type AccountGroupType = "Group" | "Detail";
 
+// ParentAccount now does NOT include main parent codes (1000, 2000, 3000, 4000, 5000)
 export type ParentAccount =
-  | "1000-Assets"
   | "1100-Current-Assets"
   | "1110-CashInHands"
   | "1120-CashAtBank"
   | "1130-AccountsReceiveable"
   | "1200-fixedAssets"
   | "1220-Furniture & fixtures"
-  | "2000-Liabilities"
   | "2100-current Liabilities"
   | "2110-AccountsPayable"
   | "2120-AccuredExpenses"
   | "2200-Long-Term Liabilites"
   | "2210-Bank Loan"
-  | "300-Equity"
   | "3100-Owner's Equity"
   | "3200-Retained Earnings"
-  | "4000-Revenue"
   | "4100-sales revenue"
   | "4200-serviceRevenue"
-  | "5000-Expenses"
   | "5100-operating Expenses"
   | "5110-salaries & wages"
   | "5120-Rent Expense"
@@ -43,12 +39,12 @@ export type ParentAccount =
 export interface AccountNode {
   code: string | number;
   name: string;
-  selectedCode: string;
+  selectedCode: string; // For main parents, this is 1000, 2000, 3000, 4000, 5000
   accountCode: string;
   level: string;
   accountName: string;
   accountType: AccountType;
-  parentAccount: ParentAccount | string;
+  parentAccount: ParentAccount | string; // For main parents, this is empty
   type: AccountGroupType;
   isParty: boolean;
   address?: string;

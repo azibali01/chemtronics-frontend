@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import type { JSX } from "react";
 import {
   Button,
@@ -10,9 +10,9 @@ import {
   TextInput,
   Select,
   Divider,
-  ScrollArea,
   ActionIcon,
   Checkbox,
+  Pagination, // <-- add this
 } from "@mantine/core";
 import {
   IconBuildingBank,
@@ -28,15 +28,21 @@ import type { AccountNode } from "../../Context/ChartOfAccountsContext";
 import axios from "axios";
 
 // Types and initial data
-// Helper: Count all accounts (including nested) of a given type
-function countAccountsByType(
+// Helper: Count all accounts (including nested) under a given main parent code (e.g. '1000' for Assets)
+function countAccountsByParentCode(
   accounts: AccountNode[],
-  type: AccountType
+  parentCode: string
 ): number {
   let count = 0;
   function walk(nodes: AccountNode[]) {
     for (const acc of nodes) {
-      if (acc.accountType === type) count++;
+      // If this account or any ancestor has parentAccount starting with parentCode, count it
+      if (
+        acc.parentAccount &&
+        acc.parentAccount.split("-")[0].trim() === parentCode
+      ) {
+        count++;
+      }
       if (acc.children) walk(acc.children);
     }
   }
@@ -47,91 +53,53 @@ function countAccountsByType(
 type AccountType = "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
 type AccountGroupType = "Group" | "Detail";
 
-function filterAccounts(
-  accounts: AccountNode[],
-  search: string,
-  type: AccountType | null
-): AccountNode[] {
-  const match = (acc: AccountNode) => {
-    const searchMatch =
-      !search ||
-      acc.accountName.toLowerCase().includes(search.toLowerCase()) ||
-      acc.selectedCode.includes(search);
-    const typeMatch = !type || acc.accountType === type;
-    return searchMatch && typeMatch;
-  };
-
-  return accounts
-    .map((acc) => {
-      const filteredChildren = acc.children
-        ? filterAccounts(acc.children, search, type)
-        : [];
-      if (match(acc) || filteredChildren.length > 0) {
-        return { ...acc, children: filteredChildren };
-      }
-      return null;
-    })
-    .filter(Boolean) as AccountNode[];
-}
-
-function findImmediateParentName(
-  accounts: AccountNode[],
-  code: string,
-  parentAccountCode?: string
-): string | null {
-  // If parentAccountCode is provided, use it to find the parent name directly
-  if (parentAccountCode) {
-    let parentName: string | null = null;
-    function dfs(nodes: AccountNode[]): boolean {
-      for (const acc of nodes) {
-        if (acc.selectedCode === parentAccountCode) {
-          parentName = acc.accountName;
-          return true;
-        }
-        if (acc.children && dfs(acc.children)) return true;
-      }
-      return false;
-    }
-    dfs(accounts);
-    return parentName;
-  }
-  // Otherwise, traverse the tree to find the parent
-  let found: string | null = null;
-  function dfs(nodes: AccountNode[]): boolean {
-    for (const acc of nodes) {
-      if (acc.children) {
-        for (const child of acc.children) {
-          if (child.selectedCode === code) {
-            found = acc.accountName;
-            return true;
-          }
-        }
-        if (dfs(acc.children)) return true;
-      }
-    }
-    return false;
-  }
-  dfs(accounts);
-  return found;
-}
-
 // Helper to flatten all accounts into a list with parent and path info
+type FlattenedAccount = {
+  acc: AccountNode;
+  parent: string | null;
+  subaccount: string | null;
+  path: string;
+};
+
 function flattenAccounts(
   accounts: AccountNode[],
   allAccounts: AccountNode[]
-): { acc: AccountNode; parent: string | null; path: string }[] {
-  const result: { acc: AccountNode; parent: string | null; path: string }[] =
-    [];
+): FlattenedAccount[] {
+  const result: FlattenedAccount[] = [];
+  // Map for code to name (for main parents)
+  const codeToName: Record<string, string> = {
+    "1000": "Assets",
+    "2000": "Liabilities",
+    "3000": "Equity",
+    "4000": "Revenue",
+    "5000": "Expenses",
+  };
   function walk(nodes: AccountNode[]) {
     for (const acc of nodes) {
-      // Use acc.parentAccount if available, otherwise use tree traversal
-      const parent = findImmediateParentName(
-        allAccounts,
-        acc.selectedCode,
-        acc.parentAccount
-      );
+      let parent = null;
+      if (acc.parentAccount) {
+        const parts = acc.parentAccount.split("-");
+        if (parts.length > 1) {
+          parent = parts.slice(1).join("-");
+        } else {
+          parent = codeToName[acc.parentAccount] || acc.parentAccount;
+        }
+      }
+      // Subaccount: Show all immediate children (by parentAccount code match, using backend fields)
+      let subaccount = null;
+      const children = allAccounts.filter((a) => {
+        if (!a.parentAccount) return false;
+        // Parent code is before dash (e.g. "1000" in "1000-Assets")
+        const parentCode = a.parentAccount.split("-")[0];
+        return parentCode === acc.code;
+      });
+      if (children.length > 0) {
+        subaccount = children
+          .map((child) => child.accountName || child.name)
+          .join(", ");
+      }
       const path = getAccountPath(allAccounts, acc.selectedCode);
-      result.push({ acc, parent, path });
+      result.push({ acc, parent, subaccount, path });
       if (acc.children) walk(acc.children);
     }
   }
@@ -169,15 +137,19 @@ function renderAccountsTable(
     <table style={{ width: "100%", borderCollapse: "collapse" }}>
       <thead>
         <tr>
+          <th style={{ textAlign: "left", padding: 4 }}>Sr No</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Account Code</th>
           <th style={{ textAlign: "left", padding: 4 }}>Account Name</th>
           <th style={{ textAlign: "left", padding: 4 }}>Parent</th>
-          <th style={{ textAlign: "left", padding: 4 }}>Path</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Subaccount(s)</th>
           <th style={{ textAlign: "left", padding: 4 }}>Actions</th>
         </tr>
       </thead>
       <tbody>
-        {flat.map(({ acc, parent, path }) => (
+        {flat.map(({ acc, parent, subaccount }, idx) => (
           <tr key={acc.selectedCode} style={{ borderBottom: "1px solid #eee" }}>
+            <td style={{ padding: 4 }}>{idx + 1}</td>
+            <td style={{ padding: 4 }}>{acc.accountCode || "-"}</td>
             <td
               style={{
                 padding: 4,
@@ -188,7 +160,7 @@ function renderAccountsTable(
               {acc.accountName}
             </td>
             <td style={{ padding: 4 }}>{parent || "-"}</td>
-            <td style={{ padding: 4 }}>{path}</td>
+            <td style={{ padding: 4 }}>{subaccount || "-"}</td>
             <td style={{ padding: 4 }}>
               <ActionIcon
                 variant="subtle"
@@ -232,29 +204,10 @@ export default function ChartOfAccounts() {
     { value: "Share Capital", label: "Share Capital" },
   ];
   // Expense flow options (Level 2 options still used below)
-  const expenseAccountTypeOptions2: Record<
-    string,
-    { value: string; label: string }[]
-  > = {
-    "Administrative Expenses": [
-      { value: "Salaries", label: "Salaries" },
-      { value: "Rent", label: "Rent" },
-      { value: "Utilities", label: "Utilities" },
-      { value: "Depreciation", label: "Depreciation" },
-    ],
-    "Selling Expenses": [
-      { value: "Advertising", label: "Advertising" },
-      { value: "Sales Commission", label: "Sales Commission" },
-    ],
-    "Financial Charges": [
-      { value: "Bank Charges", label: "Bank Charges" },
-      { value: "Interest Expense", label: "Interest Expense" },
-    ],
-    "Other Charges": [{ value: "Miscellaneous", label: "Miscellaneous" }],
-  };
   const { accounts, setAccounts } = useChartOfAccounts();
+  const PAGE_SIZE = 15;
   const [opened, setOpened] = useState(false);
-
+  const [page, setPage] = useState(1);
   // Only show backend data, do not set demo data
   const [selectedCode, setSelectedCode] = useState("");
   const [accountCode, setAccountCode] = useState("");
@@ -271,7 +224,7 @@ export default function ChartOfAccounts() {
   // Multi-level Account Type workflow for Assets and Liabilities
   const [editing, setEditing] = useState<AccountNode | null>(null);
   const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState<AccountType | null>(null);
+  const [filterParent, setFilterParent] = useState<string>("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   // Only allow valid parent options for new accounts
@@ -294,36 +247,10 @@ export default function ChartOfAccounts() {
   const [selectedAccountType2, setSelectedAccountType2] = useState<string>("");
 
   // Level 2 options for Liabilities
-  const accountTypeOptionsLiabilities: Record<
-    string,
-    { value: string; label: string }[]
-  > = {
-    "Current Liabilities": [
-      { value: "Purchase party", label: "Purchase party" },
-      { value: "Advance Exp.", label: "Advance Exp." },
-    ],
-  };
 
   // Level 1 options for Assets
 
-  // Level 2 options for Assets
-  const accountTypeOptions2: Record<
-    string,
-    { value: string; label: string }[]
-  > = {
-    "Current Assets": [
-      { value: "Cash", label: "Cash" },
-      { value: "Bank Accounts", label: "Bank Accounts" },
-      { value: "Other Current Assets", label: "Other Current Assets" },
-    ],
-    Receivables: [
-      { value: "Receivables Accounts", label: "Receivables Accounts" },
-    ],
-    "Advances & Commissions": [
-      { value: "Salesman Account", label: "Salesman Account" },
-    ],
-    "Bank Accounts": [{ value: "Meezan Bank", label: "Meezan Bank" }],
-  };
+  // (Removed unused accountTypeOptions2)
 
   // Level 3 options for Assets
 
@@ -372,7 +299,12 @@ export default function ChartOfAccounts() {
     setLevel(acc.level);
     setAccountName(acc.accountName);
     setAccountType(acc.accountType);
-    setParentAccount(acc.parentAccount);
+    // If this is a main parent, set parentAccount to the code
+    if (["1000", "2000", "3000", "4000", "5000"].includes(acc.selectedCode)) {
+      setParentAccount(acc.selectedCode);
+    } else {
+      setParentAccount(acc.parentAccount);
+    }
     setType(acc.type);
     setIsParty(acc.isParty);
     setAddress(acc.address || "");
@@ -399,7 +331,30 @@ export default function ChartOfAccounts() {
     setDeleteId(null);
   };
 
-  const filteredAccounts = filterAccounts(accounts, search, filterType);
+  // Filter by parent account
+  let filteredAccounts = filterParent
+    ? accounts.filter((acc) => {
+        if (!acc.parentAccount) return false;
+        const parentCode = acc.parentAccount.split("-")[0];
+        return parentCode === filterParent;
+      })
+    : accounts;
+
+  // Filter by search (only account name)
+  if (search.trim() !== "") {
+    const searchLower = search.trim().toLowerCase();
+    filteredAccounts = filteredAccounts.filter(
+      (acc) =>
+        acc.accountName && acc.accountName.toLowerCase().includes(searchLower)
+    );
+  }
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredAccounts.length / PAGE_SIZE) || 1;
+  const paginatedAccounts = filteredAccounts.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE
+  );
 
   // Fetch accounts on mount
   useEffect(() => {
@@ -415,12 +370,97 @@ export default function ChartOfAccounts() {
   //     )
   //   : filteredAccounts;
 
-  // Calculate totals for each type
-  const assetCount = countAccountsByType(accounts, "Asset");
-  const liabilityCount = countAccountsByType(accounts, "Liability");
-  const equityCount = countAccountsByType(accounts, "Equity");
-  const revenueCount = countAccountsByType(accounts, "Revenue");
-  const expenseCount = countAccountsByType(accounts, "Expense");
+  // Calculate totals for each main parent (all descendants)
+  const assetCount = countAccountsByParentCode(accounts, "1000");
+  const liabilityCount = countAccountsByParentCode(accounts, "2000");
+  const equityCount = countAccountsByParentCode(accounts, "3000");
+  const revenueCount = countAccountsByParentCode(accounts, "4000");
+  const expenseCount = countAccountsByParentCode(accounts, "5000");
+
+  // Helper: Get next account code for a given parent
+  const getNextAccountCode = React.useCallback(
+    (parentCode: string) => {
+      // Only extract numeric part from parentCode (e.g. '1120 - Bank Accounts' -> '1120')
+      const codeMatch = parentCode.match(/\d{4,}/);
+      const numericParentCode = codeMatch ? codeMatch[0] : parentCode;
+      if (isNaN(Number(numericParentCode))) {
+        return "";
+      }
+      // Find all accounts whose parentAccount (numeric part) matches numericParentCode
+      const children = accounts.filter((acc) => {
+        if (!acc.parentAccount) return false;
+        // Extract numeric part from acc.parentAccount (e.g. '1110 - Cash' -> '1110')
+        const accParentCodeMatch = acc.parentAccount.match(/\d{4,}/);
+        const accParentCode = accParentCodeMatch
+          ? accParentCodeMatch[0]
+          : acc.parentAccount;
+        return accParentCode === numericParentCode;
+      });
+      // If no children, for main parents (1000, 2000, 3000, 4000, 5000), start from parent*10 + 101 (e.g. 3000 -> 3101)
+      if (children.length === 0) {
+        if (
+          ["1000", "2000", "3000", "4000", "5000"].includes(numericParentCode)
+        ) {
+          return (parseInt(numericParentCode, 10) + 101).toString();
+        }
+        // If this is a subaccount, start from parent + 1
+        return (parseInt(numericParentCode, 10) + 1).toString();
+      }
+      // Find max code among children
+      const maxCode = Math.max(
+        ...children.map((acc) => {
+          const codeMatch = acc.accountCode
+            ? acc.accountCode.match(/\d{4,}/)
+            : null;
+          const code = codeMatch ? parseInt(codeMatch[0], 10) : 0;
+          return code;
+        })
+      );
+      return (maxCode + 1).toString();
+    },
+    [accounts]
+  );
+
+  // When parentAccount or selectedAccountType1/2 changes, auto-generate accountCode
+  useEffect(() => {
+    // For all 5 main parents, use their code directly if selected
+    let parentCode = "";
+    // If a Level 2 subaccount is selected, use its code
+    if (selectedAccountType2 && selectedAccountType2.match(/^\d{4,}/)) {
+      parentCode =
+        selectedAccountType2.match(/^\d{4,}/)?.[0] || selectedAccountType2;
+    }
+    // Else if a Level 1 subaccount is selected, use its code (if it looks like a code)
+    else if (selectedAccountType1 && selectedAccountType1.match(/^\d{4,}/)) {
+      parentCode =
+        selectedAccountType1.match(/^\d{4,}/)?.[0] || selectedAccountType1;
+    }
+    // Else if a main parent is selected, use its code directly
+    else if (["1000", "2000", "3000", "4000", "5000"].includes(parentAccount)) {
+      parentCode = parentAccount;
+    }
+    // Else, try to extract code from parentAccount (for custom/other parents)
+    else if (parentAccount) {
+      const match = parentAccount.match(/^\d{4,}/);
+      parentCode = match ? match[0] : parentAccount;
+    }
+    if (parentCode) {
+      setAccountCode(getNextAccountCode(parentCode));
+    } else {
+      setAccountCode("");
+    }
+  }, [
+    parentAccount,
+    selectedAccountType1,
+    selectedAccountType2,
+    accounts,
+    getNextAccountCode,
+  ]);
+
+  // Reset to page 1 when filters/search change
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterParent]);
 
   return (
     <div className="p-6">
@@ -512,36 +552,39 @@ export default function ChartOfAccounts() {
           <Text fw={600}>Account Structure</Text>
           <Group grow mt="sm">
             <TextInput
+              label="Search"
               placeholder="Search by name or code..."
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
             />
             <Select
-              placeholder="Filter by type"
-              data={["Asset", "Liability", "Equity", "Revenue", "Expense"]}
-              value={filterType}
-              onChange={(v) => setFilterType(v as AccountType)}
+              placeholder="Filter by Parent Account"
+              label="Filter by Parent Account"
+              data={parentOptions}
+              value={filterParent}
+              onChange={(v) => setFilterParent(v || "")}
               clearable
+              searchable
             />
-            {/*
-            <Select
-              placeholder="Filter by city"
-              data={["Multan", "Faisalabad", "Lahore", "Karachi", "Rawalpindi"]}
-              value={filterCity}
-              onChange={setFilterCity}
-              clearable
-            />
-            */}
           </Group>
           <Divider />
-          <ScrollArea h={400}>
-            {renderAccountsTable(
-              filteredAccounts,
-              accounts,
-              handleEdit,
-              handleDelete
-            )}
-          </ScrollArea>
+          {renderAccountsTable(
+            paginatedAccounts,
+            accounts,
+            handleEdit,
+            handleDelete
+          )}
+          <Group justify="center" mt="md">
+            <Pagination
+              value={page}
+              onChange={setPage}
+              total={totalPages}
+              size="md"
+              radius="xl"
+              color="#0A6802"
+              disabled={totalPages <= 1}
+            />
+          </Group>
         </Stack>
       </Card>
       <Modal
@@ -571,7 +614,7 @@ export default function ChartOfAccounts() {
               placeholder="Account Code"
               value={accountCode}
               onChange={(e) => setAccountCode(e.currentTarget.value)}
-              disabled={!!editing}
+              disabled={!!editing || accountCode !== ""}
             />
           </Group>
           <Group grow>
@@ -602,15 +645,12 @@ export default function ChartOfAccounts() {
                       label="Account Type (Level 1)"
                       placeholder="Select account type"
                       data={[
+                        { value: "1100", label: "1100 - Current Assets" },
+                        { value: "1200", label: "1200 - Fixed Assets" },
+                        { value: "1300", label: "1300 - Inventories" },
+                        { value: "1400", label: "1400 - Receivables" },
                         {
-                          value: "Current Assets",
-                          label: "1100 - Current Assets",
-                        },
-                        { value: "Fixed Assets", label: "1200 - Fixed Assets" },
-                        { value: "Inventories", label: "1300 - Inventories" },
-                        { value: "Receivables", label: "1400 - Receivables" },
-                        {
-                          value: "Advances & Commissions",
+                          value: "1500",
                           label: "1500 - Advances & Commissions",
                         },
                       ]}
@@ -622,56 +662,49 @@ export default function ChartOfAccounts() {
                       }}
                       searchable
                     />
-                    {selectedAccountType1 &&
-                      accountTypeOptions2[selectedAccountType1] && (
-                        <Select
-                          label="Account Type (Level 2)"
-                          placeholder={`Select subaccount of ${selectedAccountType1}`}
-                          data={
-                            selectedAccountType1 === "Current Assets"
-                              ? [
-                                  { value: "Cash", label: "1110 - Cash" },
-                                  {
-                                    value: "Bank Accounts",
-                                    label: "1120 - Bank Accounts",
-                                  },
-                                  {
-                                    value: "Other Current Assets",
-                                    label: "1130 - Other Current Assets",
-                                  },
-                                ]
-                              : selectedAccountType1 === "Receivables"
-                              ? [
-                                  {
-                                    value: "Receivables Accounts",
-                                    label: "1410 - Receivables Accounts",
-                                  },
-                                ]
-                              : selectedAccountType1 ===
-                                "Advances & Commissions"
-                              ? [
-                                  {
-                                    value: "Salesman Account",
-                                    label: "1510 - Salesman Account",
-                                  },
-                                ]
-                              : selectedAccountType1 === "Bank Accounts"
-                              ? [
-                                  {
-                                    value: "Meezan Bank",
-                                    label: "1121 - Meezan Bank",
-                                  },
-                                ]
-                              : []
-                          }
-                          value={selectedAccountType2}
-                          onChange={(v) => {
-                            setSelectedAccountType2(v || "");
-                            setAccountType(v as AccountType);
-                          }}
-                          searchable
-                        />
-                      )}
+                    {selectedAccountType1 && (
+                      <Select
+                        label="Account Type (Level 2)"
+                        placeholder={`Select subaccount of ${selectedAccountType1}`}
+                        data={
+                          selectedAccountType1 === "1100"
+                            ? [
+                                { value: "1110", label: "1110 - Cash" },
+                                {
+                                  value: "1120",
+                                  label: "1120 - Bank Accounts",
+                                },
+                                {
+                                  value: "1130",
+                                  label: "1130 - Other Current Assets",
+                                },
+                              ]
+                            : selectedAccountType1 === "1400"
+                            ? [
+                                {
+                                  value: "1410",
+                                  label: "1410 - Receivables Accounts",
+                                },
+                              ]
+                            : selectedAccountType1 === "1500"
+                            ? [
+                                {
+                                  value: "1510",
+                                  label: "1510 - Salesman Account",
+                                },
+                              ]
+                            : selectedAccountType1 === "1120"
+                            ? [{ value: "1121", label: "1121 - Meezan Bank" }]
+                            : []
+                        }
+                        value={selectedAccountType2}
+                        onChange={(v) => {
+                          setSelectedAccountType2(v || "");
+                          setAccountType(v as AccountType);
+                        }}
+                        searchable
+                      />
+                    )}
                   </>
                 )}
                 {parentAccount === "2000" && (
@@ -680,17 +713,11 @@ export default function ChartOfAccounts() {
                       label="Account Type (Level 1)"
                       placeholder="Select account type"
                       data={[
-                        { value: "Captial", label: "2100 - Captial" },
-                        {
-                          value: "Current Liabilities",
-                          label: "2200 - Current Liabilities",
-                        },
-                        { value: "Other", label: "2300 - Other" },
-                        {
-                          value: "Salesman Account",
-                          label: "2400 - Salesman Account",
-                        },
-                        { value: "Bismillah", label: "2500 - Bismillah" },
+                        { value: "2100", label: "2100 - Captial" },
+                        { value: "2200", label: "2200 - Current Liabilities" },
+                        { value: "2300", label: "2300 - Other" },
+                        { value: "2400", label: "2400 - Salesman Account" },
+                        { value: "2500", label: "2500 - Bismillah" },
                       ]}
                       value={selectedAccountType1}
                       onChange={(v) => {
@@ -700,33 +727,22 @@ export default function ChartOfAccounts() {
                       }}
                       searchable
                     />
-                    {selectedAccountType1 &&
-                      accountTypeOptionsLiabilities[selectedAccountType1] && (
-                        <Select
-                          label="Account Type (Level 2)"
-                          placeholder={`Select subaccount of ${selectedAccountType1}`}
-                          data={
-                            selectedAccountType1 === "Current Liabilities"
-                              ? [
-                                  {
-                                    value: "Purchase party",
-                                    label: "2210 - Purchase party",
-                                  },
-                                  {
-                                    value: "Advance Exp.",
-                                    label: "2220 - Advance Exp.",
-                                  },
-                                ]
-                              : []
-                          }
-                          value={selectedAccountType2}
-                          onChange={(v) => {
-                            setSelectedAccountType2(v || "");
-                            setAccountType(v as AccountType);
-                          }}
-                          searchable
-                        />
-                      )}
+                    {selectedAccountType1 === "2200" && (
+                      <Select
+                        label="Account Type (Level 2)"
+                        placeholder={`Select subaccount of Current Liabilities`}
+                        data={[
+                          { value: "2210", label: "2210 - Purchase party" },
+                          { value: "2220", label: "2220 - Advance Exp." },
+                        ]}
+                        value={selectedAccountType2}
+                        onChange={(v) => {
+                          setSelectedAccountType2(v || "");
+                          setAccountType(v as AccountType);
+                        }}
+                        searchable
+                      />
+                    )}
                   </>
                 )}
                 {parentAccount === "3000" && (
@@ -749,7 +765,7 @@ export default function ChartOfAccounts() {
                       placeholder="Select account type"
                       data={[
                         {
-                          value: "Sales Control Account",
+                          value: "4100",
                           label: "4100 - Sales Control Account",
                         },
                       ]}
@@ -761,11 +777,11 @@ export default function ChartOfAccounts() {
                       }}
                       searchable
                     />
-                    {selectedAccountType1 === "Sales Control Account" && (
+                    {selectedAccountType1 === "4100" && (
                       <Select
                         label="Account Type (Level 2)"
                         placeholder="Select subaccount of Sales Control Account"
-                        data={[{ value: "Sales", label: "4110 - Sales" }]}
+                        data={[{ value: "4110", label: "4110 - Sales" }]}
                         value={selectedAccountType2}
                         onChange={(v) => {
                           setSelectedAccountType2(v || "");
@@ -783,21 +799,12 @@ export default function ChartOfAccounts() {
                       placeholder="Select account type"
                       data={[
                         {
-                          value: "Administrative Expenses",
+                          value: "5100",
                           label: "5100 - Administrative Expenses",
                         },
-                        {
-                          value: "Selling Expenses",
-                          label: "5200 - Selling Expenses",
-                        },
-                        {
-                          value: "Financial Charges",
-                          label: "5300 - Financial Charges",
-                        },
-                        {
-                          value: "Other Charges",
-                          label: "5400 - Other Charges",
-                        },
+                        { value: "5200", label: "5200 - Selling Expenses" },
+                        { value: "5300", label: "5300 - Financial Charges" },
+                        { value: "5400", label: "5400 - Other Charges" },
                       ]}
                       value={selectedAccountType1}
                       onChange={(v) => {
@@ -807,67 +814,71 @@ export default function ChartOfAccounts() {
                       }}
                       searchable
                     />
-                    {selectedAccountType1 &&
-                      expenseAccountTypeOptions2[selectedAccountType1] && (
-                        <Select
-                          label="Account Type (Level 2)"
-                          placeholder={`Select subaccount of ${selectedAccountType1}`}
-                          data={
-                            selectedAccountType1 === "Administrative Expenses"
-                              ? [
-                                  {
-                                    value: "Salaries",
-                                    label: "5110 - Salaries",
-                                  },
-                                  { value: "Rent", label: "5120 - Rent" },
-                                  {
-                                    value: "Utilities",
-                                    label: "5130 - Utilities",
-                                  },
-                                  {
-                                    value: "Depreciation",
-                                    label: "5140 - Depreciation",
-                                  },
-                                ]
-                              : selectedAccountType1 === "Selling Expenses"
-                              ? [
-                                  {
-                                    value: "Advertising",
-                                    label: "5210 - Advertising",
-                                  },
-                                  {
-                                    value: "Sales Commission",
-                                    label: "5220 - Sales Commission",
-                                  },
-                                ]
-                              : selectedAccountType1 === "Financial Charges"
-                              ? [
-                                  {
-                                    value: "Bank Charges",
-                                    label: "5310 - Bank Charges",
-                                  },
-                                  {
-                                    value: "Interest Expense",
-                                    label: "5320 - Interest Expense",
-                                  },
-                                ]
-                              : selectedAccountType1 === "Other Charges"
-                              ? [
-                                  {
-                                    value: "Miscellaneous",
-                                    label: "5410 - Miscellaneous",
-                                  },
-                                ]
-                              : []
-                          }
-                          value={selectedAccountType2}
-                          onChange={(v) => {
-                            setSelectedAccountType2(v || "");
-                            setAccountType(v as AccountType);
-                          }}
-                          searchable
-                        />
-                      )}
+                    {selectedAccountType1 === "5100" && (
+                      <Select
+                        label="Account Type (Level 2)"
+                        placeholder="Select subaccount of Administrative Expenses"
+                        data={[
+                          { value: "5110", label: "5110 - Salaries" },
+                          { value: "5120", label: "5120 - Rent" },
+                          { value: "5130", label: "5130 - Utilities" },
+                          { value: "5140", label: "5140 - Depreciation" },
+                        ]}
+                        value={selectedAccountType2}
+                        onChange={(v) => {
+                          setSelectedAccountType2(v || "");
+                          setAccountType(v as AccountType);
+                        }}
+                        searchable
+                      />
+                    )}
+                    {selectedAccountType1 === "5200" && (
+                      <Select
+                        label="Account Type (Level 2)"
+                        placeholder="Select subaccount of Selling Expenses"
+                        data={[
+                          { value: "5210", label: "5210 - Advertising" },
+                          { value: "5220", label: "5220 - Sales Commission" },
+                        ]}
+                        value={selectedAccountType2}
+                        onChange={(v) => {
+                          setSelectedAccountType2(v || "");
+                          setAccountType(v as AccountType);
+                        }}
+                        searchable
+                      />
+                    )}
+                    {selectedAccountType1 === "5300" && (
+                      <Select
+                        label="Account Type (Level 2)"
+                        placeholder="Select subaccount of Financial Charges"
+                        data={[
+                          { value: "5310", label: "5310 - Bank Charges" },
+                          { value: "5320", label: "5320 - Interest Expense" },
+                        ]}
+                        value={selectedAccountType2}
+                        onChange={(v) => {
+                          setSelectedAccountType2(v || "");
+                          setAccountType(v as AccountType);
+                        }}
+                        searchable
+                      />
+                    )}
+                    {selectedAccountType1 === "5400" && (
+                      <Select
+                        label="Account Type (Level 2)"
+                        placeholder="Select subaccount of Other Charges"
+                        data={[
+                          { value: "5410", label: "5410 - Miscellaneous" },
+                        ]}
+                        value={selectedAccountType2}
+                        onChange={(v) => {
+                          setSelectedAccountType2(v || "");
+                          setAccountType(v as AccountType);
+                        }}
+                        searchable
+                      />
+                    )}
                   </>
                 )}
               </>
@@ -882,16 +893,28 @@ export default function ChartOfAccounts() {
                 disabled
               />
             )}
-            {!editing && (
-              <Select
-                label="Parent Account"
-                placeholder="Select parent account"
-                data={parentOptions}
-                value={parentAccount}
-                onChange={(v) => setParentAccount(v || "")}
-                searchable
-              />
-            )}
+            <Select
+              label="Parent Account"
+              placeholder="Select parent account"
+              data={parentOptions}
+              value={parentAccount}
+              onChange={(v) => {
+                // If main parent selected, set selectedCode and parentAccount to the code (e.g. '2000')
+                if (
+                  v === "1000" ||
+                  v === "2000" ||
+                  v === "3000" ||
+                  v === "4000" ||
+                  v === "5000"
+                ) {
+                  setSelectedCode(v);
+                  setParentAccount(v);
+                } else {
+                  setParentAccount(v || "");
+                }
+              }}
+              searchable
+            />
           </Group>
           <Group grow>
             <Select

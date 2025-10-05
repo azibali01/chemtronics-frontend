@@ -14,6 +14,7 @@ import { CreditSalesProvider } from "./Dashboard/Context/Invoicing/CreditSalesCo
 import { SaleReturnsProvider } from "./Dashboard/Context/Invoicing/SaleReturnsContext.tsx";
 import { JournalVouchersProvider } from "./Dashboard/Context/Accounts/JournalVouchersContext.tsx";
 import { ChartOfAccountsProvider } from "./Dashboard/Context/ChartOfAccountsContext";
+import { AccountsOpeningBalancesProvider } from "./Dashboard/Context/AccountsOpeningbalancesContext";
 import { DashboardHomeProvider } from "./Dashboard/Context/DashboardHomeContext";
 import { ProductsProvider } from "./Dashboard/Context/Inventory/ProductsContext";
 import { StockReportsProvider } from "./Dashboard/Context/Inventory/StockReportsContext";
@@ -32,13 +33,15 @@ createRoot(document.getElementById("root")!).render(
                         <SaleReturnsProvider>
                           <JournalVouchersProvider>
                             <ChartOfAccountsProvider>
-                              <DashboardHomeProvider>
-                                <ProductsProvider>
-                                  <StockReportsProvider>
-                                    <RouterProvider />
-                                  </StockReportsProvider>
-                                </ProductsProvider>
-                              </DashboardHomeProvider>
+                              <AccountsOpeningBalancesProvider>
+                                <DashboardHomeProvider>
+                                  <ProductsProvider>
+                                    <StockReportsProvider>
+                                      <RouterProvider />
+                                    </StockReportsProvider>
+                                  </ProductsProvider>
+                                </DashboardHomeProvider>
+                              </AccountsOpeningBalancesProvider>
                             </ChartOfAccountsProvider>
                           </JournalVouchersProvider>
                         </SaleReturnsProvider>

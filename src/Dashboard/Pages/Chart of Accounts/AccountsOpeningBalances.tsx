@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useMemo } from "react";
 import axios from "axios";
 import {
   Table,
@@ -12,6 +12,7 @@ import {
   Divider,
 } from "@mantine/core";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import { useAccountsOpeningBalances } from "../../Context/AccountsOpeningbalancesContext";
 import type { AccountNode } from "../../Context/ChartOfAccountsContext";
 
 const flattenAccounts = (
@@ -25,11 +26,9 @@ const flattenAccounts = (
 
 const AccountsOpeningBalances: React.FC = () => {
   const { accounts } = useChartOfAccounts();
-  const [balances, setBalances] = useState<
-    Record<string, { debit: number; credit: number }>
-  >({});
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { balances, setBalances, loading, setLoading } =
+    useAccountsOpeningBalances();
+  const [search, setSearch] = React.useState("");
 
   const allAccounts = useMemo(() => flattenAccounts(accounts), [accounts]);
   const filteredAccounts = useMemo(
@@ -193,7 +192,7 @@ const AccountsOpeningBalances: React.FC = () => {
       <Divider my="md" />
       <Group mt="md" justify="space-between">
         <Button
-          color="green"
+          color="#0A6802"
           size="md"
           onClick={handleUpdate}
           loading={loading}
