@@ -186,7 +186,7 @@ function renderAccountsTable(
               <ActionIcon
                 variant="subtle"
                 color="red"
-                onClick={() => onDelete(acc.selectedCode)}
+                onClick={() => acc._id && onDelete(acc._id)}
                 title="Delete Account"
               >
                 <IconTrash size={16} />
