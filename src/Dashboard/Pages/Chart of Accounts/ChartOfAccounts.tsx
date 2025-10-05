@@ -165,7 +165,13 @@ function renderAccountsTable(
               {acc.accountName}
             </td>
             <td style={{ padding: 4 }}>{acc.selectedAccountType1 || "-"}</td>
-            <td style={{ padding: 4 }}>{acc.selectedAccountType2 || "-"}</td>
+            <td style={{ padding: 4 }}>
+              {acc.selectedAccountType2
+                ? acc.selectedAccountType2 === "2210"
+                  ? "2210-Purchase Party"
+                  : acc.selectedAccountType2
+                : "-"}
+            </td>
             <td style={{ padding: 4 }}>{parent || "-"}</td>
             <td style={{ padding: 4 }}>{subaccount || "-"}</td>
             <td style={{ padding: 4 }}>

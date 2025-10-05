@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+
 import {
   Modal,
   Button,
@@ -42,7 +43,7 @@ interface ReturnItem {
   amount: number;
   code: string;
   unit: string;
-  discount?: number; // always a number, never undefined
+  discount?: number;
   netAmount?: number;
 }
 
@@ -90,6 +91,74 @@ export default function PurchaseReturnModal() {
   const [purchaseAccount, setPurchaseAccount] = useState("");
   const [purchaseTitle, setPurchaseTitle] = useState("");
   const [invoice, setInvoice] = useState("");
+
+  // --- Supplier mapping logic (same as PurchaseInvoice) ---
+  const [accounts, setAccounts] = useState<any[]>([]);
+
+  const flattenAccounts = (nodes: any[]): any[] => {
+    let result: any[] = [];
+    nodes.forEach((node) => {
+      result.push({
+        code: node.code,
+        name: node.name,
+        parentAccount: node.parentAccount,
+        isParty: node.isParty,
+        accountName: node.accountName,
+        accountType: node.accountType,
+        address: node.address,
+        phoneNo: node.phoneNo,
+        ntn: node.ntn,
+      });
+      if (node.children && node.children.length > 0) {
+        result = result.concat(flattenAccounts(node.children));
+      }
+    });
+    return result;
+  };
+
+  useEffect(() => {
+    axios.get("http://localhost:3000/chart-of-account/all").then((res) => {
+      console.log("Raw accounts response:", res.data);
+      if (Array.isArray(res.data)) {
+        setAccounts(res.data);
+        // Flatten and console all accounts
+        const allAccounts = flattenAccounts(res.data);
+        console.log("All found accounts in Purchase Return:", allAccounts);
+      }
+    });
+  }, []);
+
+  const flatAccounts = flattenAccounts(accounts);
+  console.log("Full flattened accounts:", flatAccounts);
+  const supplierAccounts = flatAccounts.filter(
+    (acc) => acc.accountType === "2210"
+  );
+  console.log(
+    "Filtered supplierAccounts (accountType === '2210'):",
+    supplierAccounts
+  );
+  // Supplier select options from backend supplierAccounts
+  const supplierSelectOptions =
+    supplierAccounts.length > 0
+      ? supplierAccounts
+          .filter((supplier) => supplier.accountName)
+          .map((supplier) => ({
+            value: supplier.accountName,
+            label: supplier.accountName,
+            data: supplier,
+          }))
+      : [{ value: "", label: "No supplier found", disabled: true }];
+
+  // Function to handle supplier selection
+  const handleSupplierSelect = (selectedValue: string) => {
+    const selectedSupplier = supplierAccounts.find(
+      (s: any) => s.accountName === selectedValue
+    );
+    if (selectedSupplier) {
+      setSupplierNumber(selectedSupplier.accountName);
+      setSupplierTitle(selectedSupplier.accountName || selectedSupplier.name);
+    }
+  };
 
   const [search, setSearch] = useState<string>("");
   const [fromDate, setFromDate] = useState("");
@@ -933,15 +1002,23 @@ export default function PurchaseReturnModal() {
           />
         </Group>
         <Group grow mb="md">
-          <TextInput
-            label="Supplier Number"
-            placeholder="Enter supplier number"
+          <Select
+            label="Select Supplier"
+            placeholder="Choose supplier from list"
+            data={supplierSelectOptions}
             value={supplierNumber}
-            onChange={(e) => setSupplierNumber(e.currentTarget.value)}
+            onChange={(selectedValue) => {
+              if (selectedValue) {
+                handleSupplierSelect(selectedValue);
+              }
+            }}
+            searchable
+            clearable
+            maxDropdownHeight={200}
           />
           <TextInput
-            label="Supplier Title"
-            placeholder="Enter supplier name/title"
+            label="Supplier Title (Manual)"
+            placeholder="Enter manually if not in list"
             value={supplierTitle}
             onChange={(e) => setSupplierTitle(e.currentTarget.value)}
           />

@@ -1,3 +1,4 @@
+// import { useProducts } from "../../Context/Inventory/ProductsContext"; // Removed unused import
 import { useState, useEffect } from "react";
 import {
   Card,
@@ -29,9 +30,7 @@ import axios from "axios";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { usePurchaseInvoice } from "../../Context/Invoicing/PurchaseInvoiceContext";
-import { useProducts } from "../../Context/Inventory/ProductsContext";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
-
 type Invoice = {
   id: number;
   number: string;
@@ -77,13 +76,12 @@ function getTaxRate(hsCode: string, province: "Punjab" | "Sindh") {
   if (type === "Services") {
     return province === "Punjab" ? 16 : 15;
   }
-  // Chemicals, Equipments, Pumps
   return 18;
 }
 
 export default function PurchaseInvoice() {
   const { invoices, setInvoices } = usePurchaseInvoice();
-  const { products } = useProducts();
+  // Removed unused products destructuring from useProducts
   const { accounts } = useChartOfAccounts(); // Add this line
 
   // Remove hardcoded data and add state for dynamic data
@@ -106,10 +104,11 @@ export default function PurchaseInvoice() {
           const flatAccounts = flattenAccounts(accounts);
           const purchaseAccountsList = flatAccounts.filter(
             (account) =>
-              account.code.startsWith("5") || // Expense accounts
-              account.code.startsWith("131") || // Stock accounts
-              account.name.toLowerCase().includes("purchase") ||
-              account.name.toLowerCase().includes("stock")
+              (typeof account.code === "string" &&
+                (account.code.startsWith("5") ||
+                  account.code.startsWith("131"))) ||
+              account.name?.toLowerCase().includes("purchase") ||
+              account.name?.toLowerCase().includes("stock")
           );
           setPurchaseAccounts(purchaseAccountsList);
         }
@@ -148,17 +147,26 @@ export default function PurchaseInvoice() {
     return result;
   };
 
-  // Create dropdown options from Chart of Accounts supplier accounts
-  const supplierAccounts = flattenAccounts(accounts).filter(
-    (acc) => acc.parentAccount === "2110-AccountsPayable" || acc.isParty
+  const flatAccounts = flattenAccounts(accounts);
+  console.log("Full flattened accounts:", flatAccounts);
+  const supplierAccounts = flatAccounts.filter(
+    (acc) => acc.accountType === "2210"
   );
-  const supplierOptions = supplierAccounts
-    .filter((supplier) => supplier.code)
-    .map((supplier) => ({
-      value: supplier.code,
-      label: `${supplier.code} - ${supplier.accountName || supplier.name}`,
-      data: supplier,
-    }));
+  console.log(
+    "Filtered supplierAccounts (accountType === '2210'):",
+    supplierAccounts
+  );
+  // Supplier select options from backend supplierAccounts
+  const supplierSelectOptions =
+    supplierAccounts.length > 0
+      ? supplierAccounts
+          .filter((supplier) => supplier.accountName)
+          .map((supplier) => ({
+            value: supplier.accountName,
+            label: supplier.accountName,
+            data: supplier,
+          }))
+      : [{ value: "", label: "No supplier found", disabled: true }];
 
   const purchaseAccountOptions = purchaseAccounts.map((account) => ({
     value: account.code,
@@ -168,10 +176,10 @@ export default function PurchaseInvoice() {
   // Function to handle supplier selection
   const handleSupplierSelect = (selectedValue: string) => {
     const selectedSupplier = supplierAccounts.find(
-      (s: any) => s.code === selectedValue
+      (s: any) => s.accountName === selectedValue
     );
     if (selectedSupplier) {
-      setSupplierNo(selectedSupplier.code);
+      setSupplierNo(selectedSupplier.accountName);
       setSupplierTitle(selectedSupplier.accountName || selectedSupplier.name);
       setNtnNo(selectedSupplier.ntn || "");
     }
@@ -251,49 +259,7 @@ export default function PurchaseInvoice() {
     fetchProductCodes();
   }, []);
 
-  const productCodeOptions = products.map((p) => ({
-    value: p.code,
-    label: `${p.code} }`, // Shows both code and name
-  }));
-
-  const productNameOptions = products.map((p) => ({
-    value: p.productName,
-    label: p.productName,
-  }));
-
-  const getProductByCode = (code: string) => {
-    return products.find((p) => p.code === code);
-  };
-
-  const getProductByName = (name: string) => {
-    return products.find((p) => p.productName === name);
-  };
-
-  // Update item with product details when code is selected
-  const handleProductCodeChange = (itemId: number, selectedCode: string) => {
-    const product = getProductByCode(selectedCode);
-    if (product) {
-      updateItem(itemId, "code", selectedCode);
-      updateItem(itemId, "product", product.productName);
-      updateItem(itemId, "description", product.productDescription);
-      updateItem(itemId, "rate", product.unitPrice);
-    }
-  };
-
-  // Update item with product details when name is selected
-  const handleProductNameChange = (itemId: number, selectedName: string) => {
-    const product = getProductByName(selectedName);
-    if (product) {
-      // Auto-fill product details when name is selected
-      updateItem(itemId, "product", selectedName);
-      updateItem(itemId, "code", product.code);
-      updateItem(itemId, "description", product.productDescription);
-      updateItem(itemId, "rate", product.unitPrice || 0);
-      updateItem(itemId, "unit", "Piece"); // You can set default unit or get from product
-    } else {
-      updateItem(itemId, "product", selectedName);
-    }
-  };
+  // Removed unused productCodeOptions, productNameOptions, getProductByCode, getProductByName, handleProductCodeChange, handleProductNameChange
 
   // Helper for header/footer
   function addHeaderFooter(doc: jsPDF, title: string) {
@@ -380,12 +346,12 @@ export default function PurchaseInvoice() {
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
 
   const [invoiceNumber, setInvoiceNumber] = useState("PUR-004");
-  const [vendor, setVendor] = useState("");
+  // const [vendor, setVendor] = useState(""); // Removed unused vendor state
   const [date, setDate] = useState(() => {
     const today = new Date();
     return today.toISOString().slice(0, 10); // YYYY-MM-DD
   });
-  const [dueDate, setDueDate] = useState("");
+  // const [dueDate, setDueDate] = useState(""); // Removed unused dueDate state
   const [includeGST, setIncludeGST] = useState(true);
   const [province, setProvince] = useState<"Punjab" | "Sindh">("Punjab");
   const [items, setItems] = useState<Item[]>([]);
@@ -554,7 +520,6 @@ export default function PurchaseInvoice() {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
-
   const paginatedInvoices = filteredInvoices.slice(
     (page - 1) * pageSize,
     page * pageSize
@@ -572,9 +537,9 @@ export default function PurchaseInvoice() {
             setInvoiceNumber(
               "PUR-" + (invoices.length + 1).toString().padStart(3, "0")
             );
-            setVendor("");
+            // setVendor(""); // Removed reference to setVendor
             setDate(new Date().toISOString().slice(0, 10)); // <-- Fix: set current date
-            setDueDate("");
+            // setDueDate(""); // Removed reference to setDueDate
             setIncludeGST(true);
             setItems([]);
             setNotes("");
@@ -813,7 +778,7 @@ export default function PurchaseInvoice() {
             <Select
               label="Select Supplier"
               placeholder="Choose supplier from list"
-              data={supplierOptions}
+              data={supplierSelectOptions}
               value={supplierNo}
               onChange={(selectedValue) => {
                 if (selectedValue) {
@@ -1043,14 +1008,10 @@ export default function PurchaseInvoice() {
                           e.currentTarget.value
                         )
                       }
-                      readOnly={!!getProductByCode(item.code?.toString() || "")} // Read-only if auto-filled
+                      readOnly={false} // Removed getProductByCode reference, always editable
                       styles={{
                         input: {
-                          backgroundColor: getProductByCode(
-                            item.code?.toString() || ""
-                          )
-                            ? "#f8f9fa"
-                            : "white",
+                          backgroundColor: "white", // Removed getProductByCode reference
                         },
                       }}
                     />
@@ -1261,7 +1222,9 @@ export default function PurchaseInvoice() {
   );
 }
 
-const purchaseAccountMap: Record<string, string> = {
-  "131": "STOCK",
-  // Add more codes and titles here
-};
+// const purchaseAccountMap: Record<string, string> = {
+//   "131": "STOCK",
+//   // Add more codes and titles here
+// }; // Removed unused purchaseAccountMap
+
+// Fetch supplier accounts when createOpen is true
