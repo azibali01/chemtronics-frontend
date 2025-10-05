@@ -40,6 +40,8 @@ export interface AccountNode {
   code: string | number;
   name: string;
   selectedCode: string; // For main parents, this is 1000, 2000, 3000, 4000, 5000
+  selectedAccountType1?: string;
+  selectedAccountType2?: string;
   accountCode: string;
   level: string;
   accountName: string;

@@ -87,7 +87,6 @@ export default function PurchaseInvoice() {
   const { accounts } = useChartOfAccounts(); // Add this line
 
   // Remove hardcoded data and add state for dynamic data
-  const [suppliers, setSuppliers] = useState<any[]>([]);
   const [purchaseAccounts, setPurchaseAccounts] = useState<any[]>([]);
 
   // Fetch all required data from backend on component mount
@@ -102,17 +101,10 @@ export default function PurchaseInvoice() {
           setInvoices(invoicesResponse.data);
         }
 
-        // Fetch Suppliers from backend
-        const suppliersResponse = await axios.get(
-          "http://localhost:3000/suppliers"
-        );
-        if (suppliersResponse.data && Array.isArray(suppliersResponse.data)) {
-          setSuppliers(suppliersResponse.data);
-        }
-
-        // Extract Purchase Accounts from Chart of Accounts
+        // Extract Purchase Accounts and Supplier Accounts from Chart of Accounts
         if (accounts && accounts.length > 0) {
-          const purchaseAccountsList = flattenAccounts(accounts).filter(
+          const flatAccounts = flattenAccounts(accounts);
+          const purchaseAccountsList = flatAccounts.filter(
             (account) =>
               account.code.startsWith("5") || // Expense accounts
               account.code.startsWith("131") || // Stock accounts
@@ -141,6 +133,13 @@ export default function PurchaseInvoice() {
       result.push({
         code: node.code,
         name: node.name,
+        parentAccount: node.parentAccount,
+        isParty: node.isParty,
+        accountName: node.accountName,
+        accountType: node.accountType,
+        address: node.address,
+        phoneNo: node.phoneNo,
+        ntn: node.ntn,
       });
       if (node.children && node.children.length > 0) {
         result = result.concat(flattenAccounts(node.children));
@@ -149,14 +148,17 @@ export default function PurchaseInvoice() {
     return result;
   };
 
-  // Create dropdown options from backend data
-  const supplierOptions = suppliers.map((supplier) => ({
-    value: supplier.id || supplier.supplierNo,
-    label: `${supplier.supplierNo || supplier.id} - ${
-      supplier.supplierTitle || supplier.name
-    }`,
-    data: supplier,
-  }));
+  // Create dropdown options from Chart of Accounts supplier accounts
+  const supplierAccounts = flattenAccounts(accounts).filter(
+    (acc) => acc.parentAccount === "2110-AccountsPayable" || acc.isParty
+  );
+  const supplierOptions = supplierAccounts
+    .filter((supplier) => supplier.code)
+    .map((supplier) => ({
+      value: supplier.code,
+      label: `${supplier.code} - ${supplier.accountName || supplier.name}`,
+      data: supplier,
+    }));
 
   const purchaseAccountOptions = purchaseAccounts.map((account) => ({
     value: account.code,
@@ -165,13 +167,13 @@ export default function PurchaseInvoice() {
 
   // Function to handle supplier selection
   const handleSupplierSelect = (selectedValue: string) => {
-    const selectedSupplier = suppliers.find(
-      (s) => (s.id || s.supplierNo) === selectedValue
+    const selectedSupplier = supplierAccounts.find(
+      (s: any) => s.code === selectedValue
     );
     if (selectedSupplier) {
-      setSupplierNo(selectedSupplier.supplierNo || selectedSupplier.id);
-      setSupplierTitle(selectedSupplier.supplierTitle || selectedSupplier.name);
-      setNtnNo(selectedSupplier.ntnNo || "");
+      setSupplierNo(selectedSupplier.code);
+      setSupplierTitle(selectedSupplier.accountName || selectedSupplier.name);
+      setNtnNo(selectedSupplier.ntn || "");
     }
   };
 

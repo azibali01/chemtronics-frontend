@@ -140,6 +140,8 @@ function renderAccountsTable(
           <th style={{ textAlign: "left", padding: 4 }}>Sr No</th>
           <th style={{ textAlign: "left", padding: 4 }}>Account Code</th>
           <th style={{ textAlign: "left", padding: 4 }}>Account Name</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Level 1 Type</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Level 2 Type</th>
           <th style={{ textAlign: "left", padding: 4 }}>Parent</th>
           <th style={{ textAlign: "left", padding: 4 }}>Subaccount(s)</th>
           <th style={{ textAlign: "left", padding: 4 }}>Actions</th>
@@ -147,7 +149,10 @@ function renderAccountsTable(
       </thead>
       <tbody>
         {flat.map(({ acc, parent, subaccount }, idx) => (
-          <tr key={acc.selectedCode} style={{ borderBottom: "1px solid #eee" }}>
+          <tr
+            key={`${acc.selectedCode}-${idx}`}
+            style={{ borderBottom: "1px solid #eee" }}
+          >
             <td style={{ padding: 4 }}>{idx + 1}</td>
             <td style={{ padding: 4 }}>{acc.accountCode || "-"}</td>
             <td
@@ -159,6 +164,8 @@ function renderAccountsTable(
             >
               {acc.accountName}
             </td>
+            <td style={{ padding: 4 }}>{acc.selectedAccountType1 || "-"}</td>
+            <td style={{ padding: 4 }}>{acc.selectedAccountType2 || "-"}</td>
             <td style={{ padding: 4 }}>{parent || "-"}</td>
             <td style={{ padding: 4 }}>{subaccount || "-"}</td>
             <td style={{ padding: 4 }}>
@@ -257,6 +264,8 @@ export default function ChartOfAccounts() {
   const handleCreateOrUpdate = async () => {
     const payload = {
       selectedCode,
+      selectedAccountType1,
+      selectedAccountType2,
       accountCode,
       level,
       accountName,
@@ -270,6 +279,7 @@ export default function ChartOfAccounts() {
       ntn,
     };
     try {
+      console.log("Creating new Chart of Account:", payload);
       await axios.post("http://localhost:3000/chart-of-account", payload);
       // Always re-fetch accounts after create/update
       await fetchAccounts(setAccounts);
@@ -472,12 +482,15 @@ export default function ChartOfAccounts() {
           color="#0A6802"
           onClick={() => {
             setEditing(null);
-            setSelectedCode("");
-            setAccountCode("");
+            // Default to first parent if none selected
+            const parentCode = parentAccount || "1000";
+            const nextCode = getNextAccountCode(parentCode);
+            setSelectedCode(nextCode);
+            setAccountCode(nextCode);
             setLevel("");
             setAccountName("");
             setAccountType(null);
-            setParentAccount("");
+            setParentAccount(parentCode);
             setType("Group");
             setIsParty(false);
             setAddress("");
