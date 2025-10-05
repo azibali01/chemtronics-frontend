@@ -24,6 +24,20 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+// ...existing code...
+
+function ErrorFallback({ error }: { error: any }) {
+  return (
+    <Card shadow="sm" p="lg" radius="md" withBorder bg="#fff0f0">
+      <Text color="red" fw={700}>
+        Error loading Chart of Accounts
+      </Text>
+      <Text color="red">{error?.message || String(error)}</Text>
+    </Card>
+  );
+}
+
+// ...existing code...
 import type { AccountNode } from "../../Context/ChartOfAccountsContext";
 import axios from "axios";
 
@@ -212,12 +226,29 @@ async function fetchAccounts(setAccounts: (accs: AccountNode[]) => void) {
 }
 
 export default function ChartOfAccounts() {
+  let accounts, setAccounts;
+  try {
+    ({ accounts, setAccounts } = useChartOfAccounts());
+  } catch (error) {
+    return <ErrorFallback error={error} />;
+  }
+  if (!accounts || accounts.length === 0) {
+    return (
+      <Card shadow="sm" p="lg" radius="md" withBorder bg="#fffbe0">
+        <Text color="#a00" fw={700}>
+          No Chart of Accounts data found.
+        </Text>
+        <Text color="#a00">Check backend API or context provider.</Text>
+      </Card>
+    );
+  }
+  // ...existing code...
   // Level 1 options for Equity
   const equityAccountTypeOptions = [
     { value: "Share Capital", label: "Share Capital" },
   ];
   // Expense flow options (Level 2 options still used below)
-  const { accounts, setAccounts } = useChartOfAccounts();
+  // ...existing code...
   const PAGE_SIZE = 15;
   const [opened, setOpened] = useState(false);
   const [page, setPage] = useState(1);

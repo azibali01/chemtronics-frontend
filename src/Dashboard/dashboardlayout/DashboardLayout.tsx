@@ -248,11 +248,7 @@ export default function DashboardLayout() {
   const location = useLocation();
 
   // Dynamically determine base path for sidebar links
-  const basePath = useMemo(() => {
-    if (location.pathname.startsWith("/hydroworx/dashboard"))
-      return "/hydroworx/dashboard";
-    return "/chemtronics/dashboard";
-  }, [location.pathname]);
+  const basePath = "/dashboard";
 
   const toggle = (label: string) => {
     setOpened((prev) => ({ ...prev, [label]: !prev[label] }));
@@ -399,11 +395,8 @@ export default function DashboardLayout() {
                     label={sub.label}
                     leftSection={sub.icon}
                     component={Link}
-                    to={`${basePath}${sub.path.replace("/dashboard", "")}`}
-                    active={
-                      location.pathname ===
-                      `${basePath}${sub.path.replace("/dashboard", "")}`
-                    }
+                    to={sub.path}
+                    active={location.pathname === sub.path}
                     ml="lg"
                     styles={{
                       root: {
