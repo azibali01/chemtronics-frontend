@@ -1,0 +1,869 @@
+import {
+  ActionIcon,
+  Badge,
+  Button,
+  Card,
+  Chip,
+  Group,
+  Menu,
+  Modal,
+  NumberInput,
+  Pagination,
+  Select,
+  SimpleGrid,
+  Table,
+  Text,
+  TextInput,
+  Textarea,
+  ThemeIcon,
+  Title,
+} from "@mantine/core";
+import {
+  IconDots,
+  IconEdit,
+  IconPlus,
+  IconSquareCheck,
+  IconSquareX,
+  IconTrash,
+  IconBox,
+  IconAlertTriangle,
+  IconTrendingUp,
+  IconCategory2,
+  IconDownload,
+  IconSearch,
+  IconX,
+} from "@tabler/icons-react";
+import { useMemo, useEffect } from "react";
+import { notifications } from "@mantine/notifications";
+import axios from "axios";
+
+import {
+  ProductsProvider,
+  useProducts,
+  type Product,
+} from "../../../Context/Inventory/ProductsContext";
+const money = (n: number) =>
+  `${n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+function stockStatus(p: { quantity: number; minimumStockLevel: number }) {
+  if (p.quantity <= p.minimumStockLevel)
+    return { label: "Low", color: "red" as const };
+  if (p.quantity <= p.minimumStockLevel * 2)
+    return { label: "Medium", color: "yellow" as const };
+  return { label: "Good", color: "green" as const };
+}
+
+// Helper to generate next product code (just number: 1, 2, 3, ...)
+function getNextProductCode(products: Array<{ code: string }>) {
+  if (!products.length) return "1";
+  const numbers = products
+    .map((p) => {
+      const match = p.code.match(/(\d+)/);
+      return match ? parseInt(match[1], 10) : 0;
+    })
+    .filter((n) => !isNaN(n));
+  const next = Math.max(...numbers, 0) + 1;
+  return next.toString();
+}
+
+function ProductsInner() {
+  // All state and setters come from context now!
+  const {
+    products,
+    setProducts,
+    categories,
+    setCategories,
+    query,
+    setQuery,
+    cat,
+    setCat,
+    statusFilter,
+    setStatusFilter,
+    page,
+    setPage,
+    opened,
+    setOpened,
+    editing,
+    setEditing,
+    delId,
+    setDelId,
+    catModal,
+    setCatModal,
+    productName,
+    setProductName,
+    code,
+    setCode,
+    category,
+    setCategory,
+    productDescription,
+    setProductDescription,
+    unitPrice,
+    setUnitPrice,
+    costPrice,
+    setCostPrice,
+    quantity,
+    setQuantity,
+    minimumStockLevel,
+    setMinimumStockLevel,
+    status,
+    setStatus,
+    newCategory,
+    setNewCategory,
+    loading,
+    setLoading,
+  } = useProducts();
+
+  // Fetch products from backend
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get("http://localhost:3000/products");
+
+      if (response.data && Array.isArray(response.data)) {
+        // Transform backend data to match frontend Product type if needed
+        const transformedProducts: Product[] = response.data.map(
+          (product: any) => ({
+            id:
+              product.id ||
+              product._id ||
+              `p-${Math.random().toString(36).slice(2, 8)}`,
+            code: String(product.code || ""),
+            productName: String(
+              product.name || product.productname || product.productName || ""
+            ),
+            category: String(product.category || ""),
+            productDescription: String(
+              product.description || product.productDescription || ""
+            ),
+            quantity: product.stock || product.quantity || 0,
+            minimumStockLevel:
+              product.minStock ||
+              product.min_stock ||
+              product.minimumStockLevel ||
+              0,
+            unitPrice: product.unitPrice || product.unit_price || 0,
+            costPrice: product.costPrice || product.cost_price || 0,
+            status:
+              product.status === "active" || product.status === "inactive"
+                ? product.status
+                : "active",
+          })
+        );
+
+        setProducts(transformedProducts);
+
+        // Extract unique categories from products
+        const uniqueCategories = Array.from(
+          new Set(transformedProducts.map((p) => p.category).filter(Boolean))
+        );
+        if (uniqueCategories.length > 0) {
+          setCategories((prev: string[]) => {
+            const merged = [...new Set([...prev, ...uniqueCategories])];
+            return merged;
+          });
+        }
+
+        notifications.show({
+          title: "Success",
+          message: `Loaded ${transformedProducts.length} products`,
+          color: "green",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error fetching products:", error);
+      notifications.show({
+        title: "Error",
+        message: error.response?.data?.message || "Failed to load products",
+        color: "red",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pageSize = 5;
+
+  const totalProducts = products.length;
+  const activeCount = products.filter(
+    (r: Product) => r.status === "active"
+  ).length;
+  const lowStockCount = products.filter(
+    (r: Product) => r.quantity <= r.minimumStockLevel
+  ).length;
+  const stockValue = products.reduce(
+    (sum: number, r: Product) => sum + Number(r.quantity) * Number(r.unitPrice),
+    0
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return products.filter((r: Product) => {
+      // Enhanced search: match product name, code, or category with null safety
+      const matchQ =
+        !q ||
+        (r.productName &&
+          typeof r.productName === "string" &&
+          r.productName.toLowerCase().includes(q)) ||
+        (r.code &&
+          typeof r.code === "string" &&
+          r.code.toLowerCase().includes(q)) ||
+        (r.category &&
+          typeof r.category === "string" &&
+          r.category.toLowerCase().includes(q)) ||
+        (r.productDescription &&
+          typeof r.productDescription === "string" &&
+          r.productDescription.toLowerCase().includes(q));
+      const matchC = cat ? r.category === cat : true;
+      const matchS = statusFilter === "all" ? true : r.status === statusFilter;
+      return matchQ && matchC && matchS;
+    });
+  }, [products, query, cat, statusFilter]);
+
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const pageData = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  const openCreate = () => {
+    setEditing(null);
+    resetForm();
+    setCode(getNextProductCode(products));
+    setOpened(true);
+  };
+
+  // Fix: Always pass a string for description (never undefined)
+  const openEdit = (p: {
+    id: string;
+    productName: string;
+    code: string;
+    category: string;
+    productDescription?: string;
+    unitPrice: number;
+    costPrice: number;
+    quantity: number;
+    minimumStockLevel: number;
+    status: string;
+  }) => {
+    setEditing({
+      ...p,
+      productDescription: p.productDescription ?? "",
+      status: p.status === "active" ? "active" : "inactive",
+    });
+    setProductName(p.productName);
+    setCode(p.code);
+    setCategory(p.category);
+    setProductDescription(p.productDescription ?? "");
+    setUnitPrice(p.unitPrice);
+    setCostPrice(p.costPrice);
+    setQuantity(p.quantity);
+    setMinimumStockLevel(p.minimumStockLevel);
+    setStatus(p.status === "active" ? "active" : "inactive");
+    setOpened(true);
+  };
+
+  const handleSubmit = async () => {
+    if (
+      !productName ||
+      !code ||
+      !category ||
+      unitPrice === "" ||
+      costPrice === "" ||
+      quantity === "" ||
+      minimumStockLevel === ""
+    ) {
+      notifications.show({
+        title: "Validation Error",
+        message: "Please fill in all required fields",
+        color: "red",
+      });
+      return;
+    }
+
+    const statusValue: "active" | "inactive" =
+      status === "active" ? "active" : "inactive";
+
+    const payload = {
+      //change name to productname
+      productName: productName,
+      code,
+      category,
+      productDescription: productDescription ?? "",
+      unitPrice: Number(unitPrice),
+      costPrice: Number(costPrice),
+      quantity: Number(quantity),
+      minimumStockLevel: Number(minimumStockLevel),
+      status: statusValue,
+    };
+
+    try {
+      if (editing) {
+        const updatedProduct: Product = {
+          id: editing.id,
+          ...payload,
+        };
+        setProducts((prev: Product[]) =>
+          prev.map((r: Product) => (r.id === editing.id ? updatedProduct : r))
+        );
+        notifications.show({
+          title: "Success",
+          message: "Product updated successfully",
+          color: "green",
+        });
+      } else {
+        const response = await axios.post(
+          "http://localhost:3000/Products/create-product",
+          payload
+        );
+
+        if (response.data) {
+          const newProduct: Product = {
+            id:
+              response.data.id || `p-${Math.random().toString(36).slice(2, 8)}`,
+            ...response.data,
+          };
+          setProducts((prev: Product[]) => [newProduct, ...prev]);
+          notifications.show({
+            title: "Success",
+            message: "Product created successfully",
+            color: "green",
+          });
+        }
+      }
+
+      setOpened(false);
+      resetForm();
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message: error.response?.data?.message || "Failed to save product",
+        color: "red",
+      });
+      console.error("Error saving product:", error);
+    }
+  };
+
+  const toggleStatus = (id: string) => {
+    setProducts((prev: Product[]) =>
+      prev.map((r: Product) =>
+        r.id === id
+          ? { ...r, status: r.status === "active" ? "inactive" : "active" }
+          : r
+      )
+    );
+  };
+
+  const confirmDelete = () => {
+    if (delId)
+      setProducts((prev: Product[]) =>
+        prev.filter((r: Product) => r.id !== delId)
+      );
+    setDelId(null);
+  };
+
+  const resetForm = () => {
+    setProductName("");
+    setCode("");
+    setCategory(null);
+    setProductDescription("");
+    setUnitPrice("");
+    setCostPrice("");
+    setQuantity("");
+    setMinimumStockLevel("");
+    setStatus("active");
+  };
+
+  const exportPDF = (p: Product) => {
+    const content = `${p.productName} (${p.code})
+Category: ${p.category}
+Stock: ${p.quantity} | Min: ${p.minimumStockLevel}
+Unit Price: ${money(p.unitPrice === "" ? 0 : p.unitPrice)}
+Cost Price: ${money(p.costPrice === "" ? 0 : p.costPrice)}
+Status: ${p.status}`;
+    const blob = new Blob([content], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${p.productName}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Load products on component mount
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  useEffect(() => {
+    if (lowStockCount > 0) {
+      notifications.show({
+        title: "Low Stock Alert",
+        message: `${lowStockCount} product(s) are low in stock!`,
+        color: "red",
+        icon: <IconAlertTriangle />,
+        autoClose: 5000,
+      });
+    }
+  }, [lowStockCount]);
+
+  return (
+    <div>
+      <Group justify="space-between" mb="md">
+        <Title order={2}>Product Management</Title>
+        <Button
+          leftSection={<IconPlus size={16} />}
+          color="#0A6802"
+          onClick={openCreate}
+        >
+          Add Product
+        </Button>
+      </Group>
+
+      <SimpleGrid cols={{ base: 1, sm: 4 }} spacing="lg" mb="lg">
+        <Card withBorder bg={"#F1FCF0"}>
+          <Group justify="space-between">
+            <Text>Total Products</Text>
+            <ThemeIcon variant="light" color="#0A6802">
+              <IconBox size={20} />
+            </ThemeIcon>
+          </Group>
+          <Title order={2}>{totalProducts}</Title>
+          <Text size="sm" c="dimmed">
+            {activeCount} active
+          </Text>
+        </Card>
+
+        <Card withBorder bg={"#F1FCF0"}>
+          <Group justify="space-between">
+            <Text>Low Stock Items</Text>
+            <ThemeIcon variant="light" color="yellow">
+              <IconAlertTriangle size={20} />
+            </ThemeIcon>
+          </Group>
+          <Title order={2}>{lowStockCount}</Title>
+          <Text size="sm" c="dimmed">
+            Need attention
+          </Text>
+        </Card>
+
+        <Card withBorder bg={"#F1FCF0"}>
+          <Group justify="space-between">
+            <Text>Stock Value</Text>
+            <ThemeIcon variant="light" color="teal">
+              <IconTrendingUp size={20} />
+            </ThemeIcon>
+          </Group>
+          <Title order={2}>{money(stockValue)}</Title>
+          <Text size="sm" c="dimmed">
+            Total inventory value
+          </Text>
+        </Card>
+
+        <Card withBorder bg={"#F1FCF0"}>
+          <Group justify="space-between">
+            <Text>Categories</Text>
+            <ThemeIcon variant="light" color="grape">
+              <IconCategory2 size={20} />
+            </ThemeIcon>
+          </Group>
+          <Title order={2}>{categories.length}</Title>
+          <Button
+            size="xs"
+            mt="xs"
+            variant="light"
+            color="grape"
+            onClick={() => setCatModal(true)}
+          >
+            Manage Categories
+          </Button>
+        </Card>
+      </SimpleGrid>
+
+      <Card withBorder radius="md" p="md" style={{ background: "#F1FCF0" }}>
+        <Group justify="space-between" mb="sm">
+          <div>
+            <Text fw={600}>Products List</Text>
+            <Text c={"dimmed"} size="sm">
+              Manage your product inventory and stock levels
+              {query &&
+                ` • Found ${filtered.length} product(s) matching "${query}"`}
+            </Text>
+          </div>
+        </Group>
+        <Group mb="md" grow>
+          <TextInput
+            placeholder="Search by product name, code, category, or description..."
+            value={query}
+            leftSection={<IconSearch size={16} />}
+            rightSection={
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                onClick={() => {
+                  setQuery("");
+                  setPage(1);
+                }}
+                style={{
+                  opacity: query ? 1 : 0,
+                  pointerEvents: query ? "auto" : "none",
+                }}
+              >
+                <IconX size={16} />
+              </ActionIcon>
+            }
+            onChange={(e) => {
+              setQuery(e.currentTarget.value);
+              setPage(1); // Reset to first page when searching
+            }}
+          />
+          <Select
+            placeholder="All Categories"
+            data={categories}
+            clearable
+            value={cat}
+            onChange={(value) => {
+              setCat(value);
+              setPage(1); // Reset to first page when filtering by category
+            }}
+          />
+        </Group>
+
+        <Group mb="md">
+          <Chip.Group
+            value={statusFilter}
+            onChange={(value) => {
+              if (typeof value === "string") {
+                setStatusFilter(value as "all" | "active" | "inactive");
+              }
+            }}
+          >
+            <Chip value="all" color="#819E00">
+              All
+            </Chip>
+            <Chip value="active" color="#0A6802">
+              Active
+            </Chip>
+            <Chip value="inactive" color="gray">
+              Inactive
+            </Chip>
+          </Chip.Group>
+        </Group>
+
+        {/* ---- Table ---- */}
+        {loading ? (
+          <Card withBorder p="xl" style={{ textAlign: "center" }}>
+            <Title order={4} c="dimmed">
+              Loading products...
+            </Title>
+            <Text size="sm" c="dimmed" mt="xs">
+              Please wait while we fetch your products
+            </Text>
+          </Card>
+        ) : (
+          <Table highlightOnHover withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Product Code</Table.Th>
+                <Table.Th>Product Name</Table.Th>
+                <Table.Th>Category</Table.Th>
+                <Table.Th>Stock</Table.Th>
+                <Table.Th>Unit Price</Table.Th>
+                <Table.Th>Status</Table.Th>
+                <Table.Th>Stock Status</Table.Th>
+                <Table.Th>Actions</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {pageData.map((p: Product) => {
+                // Ensure quantity and minimumStockLevel are numbers for stockStatus
+                const ss = stockStatus({
+                  quantity: typeof p.quantity === "number" ? p.quantity : 0,
+                  minimumStockLevel:
+                    typeof p.minimumStockLevel === "number"
+                      ? p.minimumStockLevel
+                      : 0,
+                });
+                return (
+                  <Table.Tr key={p.id}>
+                    <Table.Td>
+                      <Text fw={600} c="#819E00">
+                        {p.code}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text fw={500}>{p.productName}</Text>
+                      <Text size="xs" c="dimmed">
+                        {p.productDescription}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge variant="light" color="grape">
+                        {p.category}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text>{p.quantity}</Text>
+                      <Text size="xs" c="dimmed">
+                        Min: {p.minimumStockLevel}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      {money(p.unitPrice === "" ? 0 : p.unitPrice)}
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge
+                        color={p.status === "active" ? "#0A6802" : "gray"}
+                        variant="filled"
+                      >
+                        {p.status}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap={6}>
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 999,
+                            background:
+                              ss.color === "green"
+                                ? "#22c55e"
+                                : ss.color === "yellow"
+                                ? "#f59e0b"
+                                : "#ef4444",
+                            display: "inline-block",
+                          }}
+                        />
+                        <Text size="sm">{ss.label}</Text>
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
+                      <Menu withinPortal shadow="sm" position="bottom-end">
+                        <Menu.Target>
+                          <ActionIcon variant="light" color="#0A6802">
+                            <IconDots size={16} />
+                          </ActionIcon>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          <Menu.Item
+                            leftSection={<IconEdit size={16} />}
+                            onClick={() =>
+                              openEdit({
+                                ...p,
+                                unitPrice:
+                                  typeof p.unitPrice === "number"
+                                    ? p.unitPrice
+                                    : 0,
+                                costPrice:
+                                  typeof p.costPrice === "number"
+                                    ? p.costPrice
+                                    : 0,
+                                quantity:
+                                  typeof p.quantity === "number"
+                                    ? p.quantity
+                                    : 0,
+                                minimumStockLevel:
+                                  typeof p.minimumStockLevel === "number"
+                                    ? p.minimumStockLevel
+                                    : 0,
+                              })
+                            }
+                          >
+                            Edit
+                          </Menu.Item>
+                          <Menu.Item
+                            leftSection={
+                              p.status === "active" ? (
+                                <IconSquareX size={16} />
+                              ) : (
+                                <IconSquareCheck size={16} />
+                              )
+                            }
+                            onClick={() => toggleStatus(p.id)}
+                          >
+                            {p.status === "active"
+                              ? "Mark Inactive"
+                              : "Mark Active"}
+                          </Menu.Item>
+                          <Menu.Item
+                            leftSection={<IconDownload size={16} />}
+                            onClick={() => exportPDF(p)}
+                          >
+                            Download PDF
+                          </Menu.Item>
+                          <Menu.Divider />
+                          <Menu.Item
+                            color="red"
+                            leftSection={<IconTrash size={16} />}
+                            onClick={() => setDelId(p.id)}
+                          >
+                            Delete
+                          </Menu.Item>
+                        </Menu.Dropdown>
+                      </Menu>
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        )}
+
+        {/* ---- Pagination ---- */}
+        {totalPages > 1 && (
+          <Group justify="center" mt="md">
+            <Pagination total={totalPages} value={page} onChange={setPage} />
+          </Group>
+        )}
+      </Card>
+
+      {/* Product Modal (create/edit) */}
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title={
+          editing ? (
+            <strong>Edit Product</strong>
+          ) : (
+            <strong>Add New Product</strong>
+          )
+        }
+        centered
+        size="lg"
+      >
+        <SimpleGrid cols={2} mb="md">
+          <TextInput
+            label="Product Code"
+            value={code}
+            onChange={(e) => setCode(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Product Name"
+            value={productName}
+            onChange={(e) => setProductName(e.currentTarget.value)}
+          />
+        </SimpleGrid>
+        <SimpleGrid cols={2} mb="md">
+          <Select
+            label="Category"
+            data={categories}
+            value={category}
+            onChange={setCategory}
+            searchable
+          />
+          <div />
+        </SimpleGrid>
+        <Textarea
+          label="Description"
+          value={productDescription}
+          onChange={(e) => setProductDescription(e.currentTarget.value)}
+          mb="md"
+        />
+        <SimpleGrid cols={2} mb="md">
+          <NumberInput
+            label="Unit Price"
+            value={unitPrice}
+            onChange={(v) => setUnitPrice(v === "" ? "" : Number(v))}
+          />
+          <NumberInput
+            label="Cost Price"
+            value={costPrice}
+            onChange={(v) => setCostPrice(v === "" ? "" : Number(v))}
+          />
+        </SimpleGrid>
+        <SimpleGrid cols={2} mb="md">
+          <NumberInput
+            label="Stock Quantity"
+            value={quantity}
+            onChange={(v) => setQuantity(v === "" ? "" : Number(v))}
+          />
+          <NumberInput
+            label="Min Stock Level"
+            value={minimumStockLevel}
+            onChange={(v) => setMinimumStockLevel(v === "" ? "" : Number(v))}
+          />
+        </SimpleGrid>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={() => setOpened(false)}>
+            Cancel
+          </Button>
+          <Button color="#0A6802" onClick={handleSubmit}>
+            {editing ? "Update Product" : "Create Product"}
+          </Button>
+        </Group>
+      </Modal>
+
+      {/* Delete Confirm */}
+      <Modal
+        opened={!!delId}
+        onClose={() => setDelId(null)}
+        title="Delete Product"
+        centered
+      >
+        <Text>Are you sure you want to delete this product?</Text>
+        <Group justify="flex-end" mt="md">
+          <Button variant="default" onClick={() => setDelId(null)}>
+            Cancel
+          </Button>
+          <Button color="red" onClick={confirmDelete}>
+            Delete
+          </Button>
+        </Group>
+      </Modal>
+
+      {/* Category Manager */}
+      <Modal
+        opened={catModal}
+        onClose={() => setCatModal(false)}
+        title="Manage Categories"
+        centered
+      >
+        {categories.map((c: string) => (
+          <Group key={c} mb="xs" justify="space-between">
+            <Text>{c}</Text>
+            <ActionIcon
+              color="red"
+              variant="light"
+              onClick={() =>
+                setCategories((prev: string[]) =>
+                  prev.filter((x: string) => x !== c)
+                )
+              }
+            >
+              <IconTrash size={16} />
+            </ActionIcon>
+          </Group>
+        ))}
+        <Group mt="sm">
+          <TextInput
+            placeholder="New category"
+            value={newCategory}
+            onChange={(e) => setNewCategory(e.currentTarget.value)}
+          />
+          <Button
+            color="green"
+            onClick={() => {
+              if (newCategory.trim()) {
+                setCategories((prev: string[]) => [
+                  ...prev,
+                  newCategory.trim(),
+                ]);
+                setNewCategory("");
+              }
+            }}
+          >
+            Add
+          </Button>
+        </Group>
+      </Modal>
+    </div>
+  );
+}
+
+export default function Products() {
+  return (
+    <ProductsProvider>
+      <ProductsInner />
+    </ProductsProvider>
+  );
+}

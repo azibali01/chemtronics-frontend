@@ -1,4 +1,4 @@
-import { Children, useState, type ReactNode } from "react";
+import { Children, useState, type ReactNode, useMemo } from "react";
 import {
   AppShell,
   ScrollArea,
@@ -247,6 +247,13 @@ export default function DashboardLayout() {
   const [opened, setOpened] = useState<{ [key: string]: boolean }>({});
   const location = useLocation();
 
+  // Dynamically determine base path for sidebar links
+  const basePath = useMemo(() => {
+    if (location.pathname.startsWith("/hydroworx/dashboard"))
+      return "/hydroworx/dashboard";
+    return "/chemtronics/dashboard";
+  }, [location.pathname]);
+
   const toggle = (label: string) => {
     setOpened((prev) => ({ ...prev, [label]: !prev[label] }));
   };
@@ -361,19 +368,20 @@ export default function DashboardLayout() {
                 }
                 onClick={() => item.children && toggle(item.label)}
                 active={
-                  location.pathname === `/dashboard/${item.label.toLowerCase()}`
+                  location.pathname ===
+                  `${basePath}/${item.label.toLowerCase()}`
                 }
                 styles={{
                   root: {
                     borderRadius: 6,
                     backgroundColor:
                       location.pathname ===
-                      `/dashboard/${item.label.toLowerCase()}`
+                      `${basePath}/${item.label.toLowerCase()}`
                         ? "#0A6802"
                         : "transparent",
                     color:
                       location.pathname ===
-                      `/dashboard/${item.label.toLowerCase()}`
+                      `${basePath}/${item.label.toLowerCase()}`
                         ? "#ffffff"
                         : "#222222",
                     "&:hover": {
@@ -391,8 +399,11 @@ export default function DashboardLayout() {
                     label={sub.label}
                     leftSection={sub.icon}
                     component={Link}
-                    to={sub.path}
-                    active={location.pathname === sub.path}
+                    to={`${basePath}${sub.path.replace("/dashboard", "")}`}
+                    active={
+                      location.pathname ===
+                      `${basePath}${sub.path.replace("/dashboard", "")}`
+                    }
                     ml="lg"
                     styles={{
                       root: {
@@ -400,11 +411,13 @@ export default function DashboardLayout() {
                         borderRadius: 4,
                         transition: "all 0.2s ease",
                         backgroundColor:
-                          location.pathname === sub.path
+                          location.pathname ===
+                          `${basePath}${sub.path.replace("/dashboard", "")}`
                             ? "#0A6802"
                             : "transparent",
                         color:
-                          location.pathname === sub.path
+                          location.pathname ===
+                          `${basePath}${sub.path.replace("/dashboard", "")}`
                             ? "#ffffff"
                             : "#222222",
                         "&:hover": {
