@@ -1,6 +1,6 @@
 import type { RouteObject } from "react-router";
 import DashboardLayout from "../dashboardlayout/DashboardLayout";
-import ChartOfAccounts from "../Pages/Chart of Accounts/ChartOfAccounts";
+
 import SalesInvoice from "../Pages/Invoicing/SalesInvoice";
 import PurchaseInvoice from "../Pages/Invoicing/PurchaseInvoice";
 import PurchaseReturns from "../Pages/Invoicing/PurchaseReturns";
@@ -21,9 +21,12 @@ import JournalVouchers from "../Pages/Accounts/JournalVouchers";
 import GSTInvoices from "../Pages/Tax & Invoices/GstInvoices";
 import Analytics from "../Pages/Analytics/Analytics";
 import DashboardHome from "../Pages/DashboardHome";
-import AccountsOpeningBalances from "../Pages/Chart of Accounts/AccountsOpeningBalances";
+
 import ManageCompanies from "../Pages/Company & Users/ManageCompanies";
 import ManageUsers from "../Pages/Company & Users/ManageUsers";
+import Permissions from "../Pages/Company & Users/Permissions";
+import AccountsOpeningBalances from "../Pages/Chart of Accounts/AccountsOpeningBalances";
+import ChartOfAccounts from "../Pages/Chart of Accounts/ChartOfAccounts";
 const routes: RouteObject[] = [
   {
     path: "/dashboard",
@@ -41,10 +44,20 @@ const routes: RouteObject[] = [
         path: "manage-users",
         element: <ManageUsers />,
       },
-      // {
-      //   path: "permissions",
-      //   element: <Permissions />,
-      // },
+      {
+        path: "permissions",
+        element: <Permissions />,
+      },
+      // -------------Chart of Accounts & Opening Balances------------------
+      {
+        path: "chart-of-accounts",
+        element: <ChartOfAccounts />,
+      },
+      {
+        path: "accounts-opening-balances",
+        element: <AccountsOpeningBalances />,
+      },
+      // -------------Invoicing------------------
       { path: "sales-invoice", element: <SalesInvoice /> },
       {
         path: "purchase-invoice",

@@ -25,17 +25,6 @@ const flattenAccounts = (
 };
 
 const AccountsOpeningBalances: React.FC = () => {
-  function ErrorFallback({ error }: { error: any }) {
-    return (
-      <Card shadow="sm" p="lg" radius="md" withBorder bg="#fff0f0">
-        <Text color="red" fw={700}>
-          Error loading Accounts Opening Balances
-        </Text>
-        <Text color="red">{error?.message || String(error)}</Text>
-      </Card>
-    );
-  }
-
   const { accounts } = useChartOfAccounts();
   const { balances, setBalances, loading, setLoading } =
     useAccountsOpeningBalances();

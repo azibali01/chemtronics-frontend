@@ -691,23 +691,107 @@ export default function SalesInvoicePage() {
     setCreateModal(true);
   };
 
-  function flattenAccounts(
-    nodes: AccountNode[]
-  ): { value: string; label: string }[] {
-    return nodes.flatMap((n) => [
-      { value: n.selectedCode, label: `${n.selectedCode} - ${n.accountName}` },
-      ...(n.children ? flattenAccounts(n.children) : []),
-    ]);
+  function flattenAccountsWith1410(
+    nodes: AccountNode[],
+    parentChain: string[] = []
+  ): {
+    value: string;
+    label: string;
+    code: string;
+    parentAccount?: string;
+    accountName: string;
+    accountCode?: string;
+  }[] {
+    let result: {
+      value: string;
+      label: string;
+      code: string;
+      parentAccount?: string;
+      accountName: string;
+      accountCode?: string;
+    }[] = [];
+    for (const node of nodes) {
+      const newParentChain = [...parentChain, node.selectedCode];
+      result.push({
+        value: node.accountCode || node.selectedCode,
+        label: `${node.accountCode || node.selectedCode} - ${node.accountName}`,
+        code: node.accountCode || node.selectedCode,
+        parentAccount: node.parentAccount,
+        accountName: node.accountName,
+        accountCode: node.accountCode,
+      });
+      if (node.children) {
+        result = result.concat(
+          flattenAccountsWith1410(node.children, newParentChain)
+        );
+      }
+    }
+    return result;
   }
 
-  const accountNoOptions = flattenAccounts(accounts as AccountNode[]);
-  const accountTitleOptions = accountNoOptions.map((acc) => ({
-    value: acc.label.split(" - ")[1],
-    label: acc.label.split(" - ")[1],
-    code: acc.value,
+  // Helper: Collect all descendants of every node where selectedCode or accountCode is '4110'
+  function getSalesAccounts(nodes: AccountNode[]): {
+    value: string;
+    label: string;
+    code: string;
+    accountName: string;
+    accountCode?: string;
+  }[] {
+    const result: {
+      value: string;
+      label: string;
+      code: string;
+      accountName: string;
+      accountCode?: string;
+    }[] = [];
+    function collectAll(n: AccountNode) {
+      result.push({
+        value: n.accountCode || n.selectedCode,
+        label: `${n.accountCode || n.selectedCode} - ${n.accountName}`,
+        code: n.accountCode || n.selectedCode,
+        accountName: n.accountName,
+        accountCode: n.accountCode,
+      });
+      if (n.children) n.children.forEach(collectAll);
+    }
+    function traverse(nodes: AccountNode[]) {
+      for (const node of nodes) {
+        if (node.selectedCode === "4110" || node.accountCode === "4110") {
+          collectAll(node);
+        } else if (node.children) {
+          traverse(node.children);
+        }
+      }
+    }
+    traverse(nodes);
+    return result;
+  }
+
+  // Get all accounts, then filter for those under 1410 (including 1410 itself)
+  const allAccountsFlat = flattenAccountsWith1410(accounts as AccountNode[]);
+  function isUnder1410(acc: { value: string; parentAccount?: string }) {
+    if (acc.value === "1410") return true;
+    // Check if parentAccount chain includes 1410
+    if (!acc.parentAccount) return false;
+    // parentAccount may be like "1400-Receivables" or "1410-Receivables Accounts"
+    return (
+      acc.parentAccount.split("-")[0] === "1410" ||
+      acc.parentAccount.includes("1410")
+    );
+  }
+  const receivablesAccounts = allAccountsFlat.filter(isUnder1410);
+
+  const accountNoOptions = receivablesAccounts.map((acc) => ({
+    value: acc.accountCode || acc.code,
+    label: `${acc.accountCode || acc.code} - ${acc.accountName}`,
+  }));
+  const accountTitleOptions = receivablesAccounts.map((acc) => ({
+    value: acc.accountName,
+    label: acc.accountName,
+    code: acc.accountCode || acc.code,
   }));
 
-  // Fix: Remove empty/duplicate/invalid options for account selects
+  // Remove empty/duplicate/invalid options for account selects
   const uniqueAccountNoOptions = Array.from(
     new Map(
       accountNoOptions
@@ -718,6 +802,16 @@ export default function SalesInvoicePage() {
   const uniqueAccountTitleOptions = Array.from(
     new Map(
       accountTitleOptions
+        .filter((a) => a.value && a.label)
+        .map((a) => [a.value, a])
+    ).values()
+  );
+
+  // Sale Account dropdown options: all accounts under 4110 (Sales)
+  const salesAccountOptionsRaw = getSalesAccounts(accounts as AccountNode[]);
+  const uniqueSalesAccountOptions = Array.from(
+    new Map(
+      salesAccountOptionsRaw
         .filter((a) => a.value && a.label)
         .map((a) => [a.value, a])
     ).values()
@@ -1006,45 +1100,54 @@ export default function SalesInvoicePage() {
               value={newAccountNumber}
               onChange={(v) => {
                 setNewAccountNumber(v || "");
-                // Find account by selectedCode
-                const acc = accounts.find((a) => a.selectedCode === v);
+                // Find account by accountCode from receivablesAccounts
+                const acc = receivablesAccounts.find(
+                  (a) => (a.accountCode || a.code) === v
+                );
                 if (acc) {
                   setNewAccountTitle(acc.accountName || "");
-                  setNewNtnNumber(acc.ntn || "");
-                  // Add more fields as needed
-                  // setNewAddress(acc.address || "");
-                  // setNewPhoneNo(acc.phoneNo || "");
-                  // setNewSalesTaxNo(acc.salesTaxNo || "");
+                } else {
+                  setNewAccountTitle("");
                 }
               }}
+              clearable
             />
             <Select
               label="Account Title"
               placeholder="Select Account Title"
               data={uniqueAccountTitleOptions}
               value={newAccountTitle}
-              onChange={(v) => setNewAccountTitle(v || "")}
+              onChange={(v) => {
+                setNewAccountTitle(v || "");
+                // Find account by name from receivablesAccounts
+                const acc = receivablesAccounts.find(
+                  (a) => a.accountName === v
+                );
+                if (acc) {
+                  setNewAccountNumber(acc.accountCode || acc.code || "");
+                } else {
+                  setNewAccountNumber("");
+                }
+              }}
               mb="sm"
+              clearable
             />
             <Select
               label="Sale Account"
-              data={[
-                { value: "4114", label: "4114" },
-                { value: "4112", label: "4112" },
-                { value: "4111", label: "4111" },
-                { value: "4113", label: "4113" },
-              ]}
+              placeholder="Select Sale Account"
+              data={uniqueSalesAccountOptions}
               value={newSaleAccount}
               onChange={(v) => {
                 setNewSaleAccount(v || "");
-                setNewSaleAccountTitle(saleAccountTitleMap[v || ""] || "");
+                // Auto-fill Sale Account Title
+                const acc = uniqueSalesAccountOptions.find(
+                  (a) => a.value === v
+                );
+                setNewSaleAccountTitle(acc?.accountName || "");
               }}
+              clearable
             />
-            <TextInput
-              label="Sale Account Title"
-              value={newSaleAccountTitle}
-              readOnly
-            />
+            <TextInput label="Sale Account Title" value={newSaleAccountTitle} />
             <TextInput
               label="NTN Number"
               value={newNtnNumber}
@@ -1371,19 +1474,33 @@ export default function SalesInvoicePage() {
                   placeholder="Select Account Number"
                   data={uniqueAccountNoOptions}
                   value={editInvoice.accountNumber || ""}
-                  onChange={(v) =>
-                    setEditInvoice({ ...editInvoice, accountNumber: v || "" })
-                  }
+                  onChange={(v) => {
+                    const acc = accounts.find((a) => a.selectedCode === v);
+                    setEditInvoice({
+                      ...editInvoice,
+                      accountNumber: v || "",
+                      accountTitle: acc?.accountName || "",
+                      ntnNumber: acc?.ntn || "",
+                    });
+                  }}
+                  clearable
                 />
                 <Select
                   label="Account Title"
                   placeholder="Select Account Title"
                   data={uniqueAccountTitleOptions}
                   value={editInvoice.accountTitle || ""}
-                  onChange={(v) =>
-                    setEditInvoice({ ...editInvoice, accountTitle: v || "" })
-                  }
+                  onChange={(v) => {
+                    const acc = accounts.find((a) => a.accountName === v);
+                    setEditInvoice({
+                      ...editInvoice,
+                      accountTitle: v || "",
+                      accountNumber: acc?.selectedCode || "",
+                      ntnNumber: acc?.ntn || "",
+                    });
+                  }}
                   mb="sm"
+                  clearable
                 />
                 <Select
                   label="Sale Account"
@@ -1401,11 +1518,11 @@ export default function SalesInvoicePage() {
                       saleAccountTitle: saleAccountTitleMap[v || ""] || "",
                     });
                   }}
+                  clearable
                 />
                 <TextInput
                   label="Sale Account Title"
                   value={editInvoice.saleAccountTitle || ""}
-                  readOnly
                 />
                 <TextInput
                   label="NTN Number"

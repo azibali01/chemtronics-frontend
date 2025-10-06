@@ -1,4 +1,4 @@
-import { Children, useState, type ReactNode, useMemo } from "react";
+import { useState, type ReactNode } from "react";
 import {
   AppShell,
   ScrollArea,
