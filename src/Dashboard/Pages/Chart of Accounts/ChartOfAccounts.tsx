@@ -472,19 +472,6 @@ export default function ChartOfAccounts() {
 
   // Fetch accounts on mount
   useEffect(() => {
-    fetchAccounts(setAccounts);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Calculate totals for each main parent (all descendants)
-  const assetCount = countAccountsByParentCode(accounts, "1000");
-  const liabilityCount = countAccountsByParentCode(accounts, "2000");
-  const equityCount = countAccountsByParentCode(accounts, "3000");
-  const revenueCount = countAccountsByParentCode(accounts, "4000");
-  const expenseCount = countAccountsByParentCode(accounts, "5000");
-
-  // When parentAccount or selectedAccountType1/2 changes, auto-generate accountCode
-  useEffect(() => {
     // If only parent is selected, do not increment, just clear accountCode
     if (
       parentAccount &&
@@ -511,39 +498,32 @@ export default function ChartOfAccounts() {
     if (codeBase) {
       // For increment, use first 3 digits for Level 2 (e.g., 411 for 4110)
       const codePrefix = codeBase.substring(0, 3);
-      // Find all accounts whose parentAccount matches codeBase or codeLabel (handles '4110', '4110 - Sales')
-      // AND whose accountCode starts with codePrefix
+      // Find all siblings with the same parent and code prefix
       const siblings = accounts.filter((acc) => {
         if (!acc.parentAccount || !acc.accountCode) return false;
-        // Numeric code
         const accParentCodeMatch = acc.parentAccount.match(/^\d{4,}/);
         const accParentCode = accParentCodeMatch
           ? accParentCodeMatch[0]
           : acc.parentAccount;
-        // Full label
         const accParentLabel = acc.parentAccount.trim();
-        // Check parent match
         const parentMatch =
           accParentCode === codeBase || accParentLabel === codeLabel;
-        // Check code prefix match (e.g., 4111, 4112, ...)
         const codeMatch = acc.accountCode.startsWith(codePrefix);
         return parentMatch && codeMatch;
       });
-      if (siblings.length === 0) {
-        setAccountCode(codePrefix + "1");
-      } else {
-        // Find the max code among siblings (extract numeric part after prefix)
-        const maxSuffix = Math.max(
-          ...siblings.map((acc) => {
-            const code = acc.accountCode;
-            // Get the suffix after the prefix (e.g., for 4112, suffix is 2)
-            const suffix =
-              code.length > 3 ? parseInt(code.substring(3), 10) : 0;
-            return isNaN(suffix) ? 0 : suffix;
-          })
-        );
-        setAccountCode(codePrefix + (maxSuffix + 1));
+      // Collect all used suffixes (after prefix)
+      const usedSuffixes = new Set(
+        siblings.map((acc) => {
+          const code = acc.accountCode;
+          return code.length > 3 ? parseInt(code.substring(3), 10) : 0;
+        })
+      );
+      // Find the smallest available suffix >= 1
+      let nextSuffix = 1;
+      while (usedSuffixes.has(nextSuffix)) {
+        nextSuffix++;
       }
+      setAccountCode(codePrefix + nextSuffix);
     } else {
       setAccountCode("");
     }
@@ -553,6 +533,13 @@ export default function ChartOfAccounts() {
   useEffect(() => {
     setPage(1);
   }, [search, filterParent]);
+
+  // Account counts for dashboard cards
+  const assetCount = countAccountsByParentCode(accounts, "1000");
+  const liabilityCount = countAccountsByParentCode(accounts, "2000");
+  const equityCount = countAccountsByParentCode(accounts, "3000");
+  const revenueCount = countAccountsByParentCode(accounts, "4000");
+  const expenseCount = countAccountsByParentCode(accounts, "5000");
 
   if (!accounts || accounts.length === 0) {
     return (
@@ -576,7 +563,13 @@ export default function ChartOfAccounts() {
           onClick={() => {
             setEditing(null);
             setSelectedCode("");
-            setAccountCode("");
+            // Find max accountCode and increment
+            let maxCode = 0;
+            accounts.forEach((acc) => {
+              const codeNum = parseInt(acc.accountCode, 10);
+              if (!isNaN(codeNum) && codeNum > maxCode) maxCode = codeNum;
+            });
+            setAccountCode(maxCode ? String(maxCode + 1) : "1001");
             setLevel("");
             setAccountName("");
             setAccountType(null);

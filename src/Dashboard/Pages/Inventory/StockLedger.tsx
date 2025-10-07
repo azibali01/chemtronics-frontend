@@ -10,7 +10,8 @@ import {
   Title,
 } from "@mantine/core";
 import { IconDownload } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import axios from "axios";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -28,48 +29,6 @@ type StockLedgerRow = {
   balance: number;
 };
 
-const stockLedgerData: StockLedgerRow[] = [
-  {
-    id: "1",
-    date: "2024-09-01",
-    invid: "INV-001",
-    particulars: "Sale to ABC Corp",
-    productCode: "P-001",
-    productName: "A4 Paper",
-    qtyIn: 10,
-    qtyOut: 5,
-    qtyBalance: 5,
-    rate: 100,
-    balance: 500,
-  },
-  {
-    id: "2",
-    date: "2024-09-02",
-    invid: "INV-002",
-    particulars: "Purchase from XYZ Ltd",
-    productCode: "P-002",
-    productName: "Printer",
-    qtyIn: 20,
-    qtyOut: 0,
-    qtyBalance: 20,
-    rate: 90,
-    balance: 1800,
-  },
-  {
-    id: "3",
-    date: "2024-09-03",
-    invid: "INV-003",
-    particulars: "Stock adjustment",
-    productCode: "P-003",
-    productName: "Stapler",
-    qtyIn: 0,
-    qtyOut: 2,
-    qtyBalance: 18,
-    rate: 90,
-    balance: 1620,
-  },
-];
-
 const toDate = (s: string) => new Date(s + "T00:00:00");
 const inRange = (d: string, from: string, to: string) => {
   const dt = toDate(d).getTime();
@@ -79,6 +38,63 @@ const inRange = (d: string, from: string, to: string) => {
 };
 
 export default function StockLedger() {
+  const [stockLedgerData, setStockLedgerData] = useState<StockLedgerRow[]>([]);
+  // Fetch sale invoices and map to stock ledger rows
+  useEffect(() => {
+    const fetchAndMapInvoices = async () => {
+      try {
+        const res = await axios.get("http://localhost:3000/sale-invoice");
+        if (Array.isArray(res.data)) {
+          // Console log all sale invoices
+          console.log("All Sale Invoices:", res.data);
+          // Define types for invoice and item
+          type Invoice = {
+            id: string;
+            invoiceDate: string;
+            invoiceNumber: string;
+            accountTitle?: string;
+            products?: Array<{
+              id?: string | number;
+              code: string;
+              product: string;
+              qty?: number;
+              rate?: number;
+            }>;
+          };
+          const runningBalances: Record<string, number> = {};
+          const rows: StockLedgerRow[] = [];
+          (res.data as Invoice[]).forEach((inv) => {
+            if (Array.isArray(inv.products)) {
+              inv.products.forEach((item, idx) => {
+                const prevBalance = runningBalances[item.code] || 0;
+                const qtyOut = item.qty || 0;
+                const qtyIn = 0;
+                const qtyBalance = prevBalance - qtyOut;
+                runningBalances[item.code] = qtyBalance;
+                rows.push({
+                  id: inv.id + "-" + (item.id || idx),
+                  date: inv.invoiceDate,
+                  invid: inv.invoiceNumber,
+                  particulars: inv.accountTitle || "Sale Invoice",
+                  productCode: item.code,
+                  productName: item.product,
+                  qtyIn,
+                  qtyOut,
+                  qtyBalance,
+                  rate: item.rate || 0,
+                  balance: qtyBalance * (item.rate || 0),
+                });
+              });
+            }
+          });
+          setStockLedgerData(rows);
+        }
+      } catch {
+        setStockLedgerData([]);
+      }
+    };
+    fetchAndMapInvoices();
+  }, []);
   // filters UI state
   const [productCode, setProductCode] = useState<string>("");
   const [productName, setProductName] = useState<string>("");
@@ -97,7 +113,7 @@ export default function StockLedger() {
     const code = e.currentTarget.value;
     setProductCode(code);
     const found = stockLedgerData.find(
-      (r) => r.productCode.toLowerCase() === code.toLowerCase()
+      (r) => r.productCode && r.productCode.toLowerCase() === code.toLowerCase()
     );
     setProductName(found ? found.productName : "");
   };
@@ -137,7 +153,7 @@ export default function StockLedger() {
     const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
     if (page > totalPages) setPage(1);
     return rows;
-  }, [applied, page]);
+  }, [applied, page, stockLedgerData]);
 
   const start = (page - 1) * pageSize;
   const paginatedData = filtered.slice(start, start + pageSize);
@@ -288,7 +304,7 @@ export default function StockLedger() {
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Date</Table.Th>
-              <Table.Th>Invid</Table.Th>
+              <Table.Th>Invoice Number</Table.Th>
               <Table.Th>Particulars</Table.Th>
               <Table.Th>Qty In</Table.Th>
               <Table.Th>Qty Out</Table.Th>

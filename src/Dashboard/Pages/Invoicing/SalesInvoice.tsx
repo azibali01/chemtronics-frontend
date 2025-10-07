@@ -300,11 +300,6 @@ export default function SalesInvoicePage() {
     fetchProductCodes();
   }, []);
 
-  // Get and process sales accounts
-  // Remove duplicate options by value (selectedCode)
-  // Use unique value (selectedCode + '-' + _id) so all revenue accounts show
-  // Use unique value (selectedCode + '-' + accountName) so all revenue accounts show
-  // Use unique value (code + '-' + accountName) so all revenue accounts show
   const salesAccountOptions = getSalesAccounts(accounts)
     .sort((a, b) => a.label.localeCompare(b.label))
     .map((a) => ({
