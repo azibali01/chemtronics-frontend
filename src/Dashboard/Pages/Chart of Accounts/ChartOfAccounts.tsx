@@ -1,273 +1,5 @@
-import { useState, useEffect } from "react";
-import type { JSX } from "react";
-import {
-  Button,
-  Card,
-  Group,
-  Modal,
-  Stack,
-  Text,
-  TextInput,
-  Select,
-  Divider,
-  ActionIcon,
-  Checkbox,
-  Pagination, // <-- add this
-} from "@mantine/core";
-import {
-  IconBuildingBank,
-  IconCurrencyDollar,
-  IconChartBar,
-  IconCreditCard,
-  IconUsers,
-  IconEdit,
-  IconTrash,
-} from "@tabler/icons-react";
-import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
-// ...existing code...
-
-// ...existing code...
-import type { AccountNode } from "../../Context/ChartOfAccountsContext";
-import axios from "axios";
-
-// Types and initial data
-// Helper: Count all accounts (including nested) under a given main parent code (e.g. '1000' for Assets)
-function countAccountsByParentCode(
-  accounts: AccountNode[],
-  parentCode: string
-): number {
-  let count = 0;
-  function walk(nodes: AccountNode[]) {
-    for (const acc of nodes) {
-      // If this account or any ancestor has parentAccount starting with parentCode, count it
-      if (
-        acc.parentAccount &&
-        acc.parentAccount.split("-")[0].trim() === parentCode
-      ) {
-        count++;
-      }
-      if (acc.children) walk(acc.children);
-    }
-  }
-  walk(accounts);
-  return count;
-}
-
-type AccountType = "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
-type AccountGroupType = "Group" | "Detail";
-
-// Helper to flatten all accounts into a list with parent and path info
-type FlattenedAccount = {
-  acc: AccountNode;
-  parent: string | null;
-  subaccount: string | null;
-  path: string;
-};
-
-function flattenAccounts(
-  accounts: AccountNode[],
-  allAccounts: AccountNode[]
-): FlattenedAccount[] {
-  const result: FlattenedAccount[] = [];
-  // ---
-  function walk(nodes: AccountNode[]) {
-    for (const acc of nodes) {
-      let parent = null;
-      if (acc.parentAccount) {
-        const parts = acc.parentAccount.split("-");
-        if (parts.length > 1) {
-          parent = parts.slice(1).join("-");
-        }
-      }
-      // Set subaccount as a comma-separated list of immediate children names (if any)
-      let subaccount = null;
-      if (acc.children && acc.children.length > 0) {
-        subaccount = acc.children.map((child) => child.accountName).join(", ");
-      }
-      const path = getAccountPath(allAccounts, acc.selectedCode);
-      result.push({ acc, parent, subaccount, path });
-      if (acc.children) walk(acc.children);
-    }
-  }
-  walk(accounts);
-  return result;
-}
-
-// Helper to get full path (subaccount hierarchy) for an account (from root to this account)
-function getAccountPath(accounts: AccountNode[], code: string): string {
-  let result: string[] = [];
-  function dfs(nodes: AccountNode[], target: string, curr: string[]): boolean {
-    for (const acc of nodes) {
-      const next = [...curr, acc.accountName];
-      if (acc.selectedCode === target) {
-        result = next;
-        return true;
-      }
-      if (acc.children && dfs(acc.children, target, next)) return true;
-    }
-    return false;
-  }
-  dfs(accounts, code, []);
-  return result.length > 0 ? result.join(" > ") : "";
-}
-
-function renderAccountsTable(
-  accounts: AccountNode[],
-  allAccounts: AccountNode[],
-  onEdit: (acc: AccountNode) => void,
-  onDelete: (code: string) => void
-): JSX.Element {
-  const flat = flattenAccounts(accounts, allAccounts);
-  // Mapping for Level 1 and Level 2 codes to labels
-  const level1Map: Record<string, string> = {
-    "1100": "Current Assets",
-    "1200": "Fixed Assets",
-    "1300": "Inventories",
-    "1400": "Receivables",
-    "1500": "Advances & Commissions",
-    "2100": "Captial",
-    "2200": "Current Liabilities",
-    "2300": "Other",
-    "2400": "Salesman Account",
-    "2500": "Bismillah",
-    "4100": "Sales Control Account",
-    "5100": "Administrative Expenses",
-    "5200": "Selling Expenses",
-    "5300": "Financial Charges",
-    "5400": "Other Charges",
-    "Share Capital": "Share Capital",
-  };
-  const level2Map: Record<string, string> = {
-    "1110": "Cash",
-    "1120": "Bank Accounts",
-    "1130": "Other Current Assets",
-    "1410": "Receivables Accounts",
-    "1510": "Salesman Account",
-    "2210": "Purchase Party",
-    "2220": "Advance Exp.",
-    "4110": "Sales",
-    "5110": "Salaries",
-    "5120": "Rent",
-    "5130": "Utilities",
-    "5140": "Depreciation",
-    "5210": "Advertising",
-    "5220": "Sales Commission",
-    "5310": "Bank Charges",
-    "5320": "Interest Expense",
-    "5410": "Miscellaneous",
-    "1121": "Meezan Bank",
-  };
-  // Main parent code to label
-  const parentMap: Record<string, string> = {
-    "1000": "Assets",
-    "2000": "Liabilities",
-    "3000": "Equity",
-    "4000": "Revenue",
-    "5000": "Expenses",
-  };
-  return (
-    <table style={{ width: "100%", borderCollapse: "collapse" }}>
-      <thead>
-        <tr>
-          <th style={{ textAlign: "left", padding: 4 }}>Sr No</th>
-          <th style={{ textAlign: "left", padding: 4 }}>Account Code</th>
-          <th style={{ textAlign: "left", padding: 4 }}>Account Name</th>
-          <th style={{ textAlign: "left", padding: 4 }}>Level 1 Type</th>
-          <th style={{ textAlign: "left", padding: 4 }}>Level 2 Type</th>
-          <th style={{ textAlign: "left", padding: 4 }}>Parent</th>
-          <th style={{ textAlign: "left", padding: 4 }}>Subaccount(s)</th>
-          <th style={{ textAlign: "left", padding: 4 }}>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {flat.map(({ acc, parent, subaccount }, idx) => {
-          const level1Label =
-            acc.selectedAccountType1 && level1Map[acc.selectedAccountType1]
-              ? level1Map[acc.selectedAccountType1]
-              : acc.selectedAccountType1 || "-";
-          const level2Label =
-            acc.selectedAccountType2 && level2Map[acc.selectedAccountType2]
-              ? level2Map[acc.selectedAccountType2]
-              : acc.selectedAccountType2 || "-";
-          // Parent label: find parent account by selectedCode
-          let parentLabel = "-";
-          if (parent) {
-            const parentAcc = allAccounts.find(
-              (a) => a.selectedCode === parent
-            );
-            if (parentAcc && parentAcc.accountName) {
-              parentLabel = parentAcc.accountName;
-            } else {
-              parentLabel =
-                parentMap[parent] ||
-                level1Map[parent] ||
-                level2Map[parent] ||
-                parent;
-            }
-          }
-          return (
-            <tr
-              key={`${acc.selectedCode}-${idx}`}
-              style={{ borderBottom: "1px solid #eee" }}
-            >
-              <td style={{ padding: 4 }}>{idx + 1}</td>
-              <td style={{ padding: 4 }}>{acc.accountCode}</td>
-              <td
-                style={{
-                  padding: 4,
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                }}
-              >
-                {acc.accountName}
-              </td>
-              <td style={{ padding: 4 }}>{level1Label}</td>
-              <td style={{ padding: 4 }}>{level2Label}</td>
-              <td style={{ padding: 4 }}>{parentLabel}</td>
-              <td style={{ padding: 4 }}>{subaccount || "-"}</td>
-              <td style={{ padding: 4 }}>
-                <ActionIcon
-                  variant="subtle"
-                  color="blue"
-                  onClick={() => onEdit(acc)}
-                  title="Edit Account"
-                >
-                  <IconEdit size={16} />
-                </ActionIcon>
-                <ActionIcon
-                  variant="subtle"
-                  color="red"
-                  onClick={() => acc.selectedCode && onDelete(acc.selectedCode)}
-                  title="Delete Account"
-                >
-                  <IconTrash size={16} />
-                </ActionIcon>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-// Fetch accounts from backend
-async function fetchAccounts(setAccounts: (accs: AccountNode[]) => void) {
-  try {
-    const res = await axios.get("http://localhost:3000/chart-of-account");
-    if (Array.isArray(res.data)) {
-      setAccounts(res.data);
-    }
-  } catch (err) {
-    // Optionally handle error
-    console.error("Failed to fetch accounts", err);
-  }
-}
-
-export default function ChartOfAccounts() {
-  // Always call hooks unconditionally
+function ChartOfAccounts() {
   const { accounts, setAccounts } = useChartOfAccounts();
-
-  // State hooks
   const PAGE_SIZE = 15;
   const [opened, setOpened] = useState(false);
   const [page, setPage] = useState(1);
@@ -289,12 +21,12 @@ export default function ChartOfAccounts() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [selectedAccountType1, setSelectedAccountType1] = useState<string>("");
   const [selectedAccountType2, setSelectedAccountType2] = useState<string>("");
+  const [formError, setFormError] = useState<string>("");
+  const [loading, setLoading] = useState(false);
 
-  // Level 1 options for Equity
   const equityAccountTypeOptions = [
     { value: "Share Capital", label: "Share Capital" },
   ];
-  // Hardcoded 5 main parent account options for Parent Account dropdown
   const parentOptions = [
     { value: "1000", label: "1000 - Assets" },
     { value: "2000", label: "2000 - Liabilities" },
@@ -303,9 +35,36 @@ export default function ChartOfAccounts() {
     { value: "5000", label: "5000 - Expenses" },
   ];
 
-  // Handlers
   const handleCreateOrUpdate = async () => {
-    // Determine accountType based on main parent
+    setFormError("");
+    if (!accountName.trim()) {
+      setFormError("Account Name is required.");
+      return;
+    }
+    if (!accountCode.trim()) {
+      setFormError("Account Code is required.");
+      return;
+    }
+    const duplicateCode = accounts.some(
+      (acc) =>
+        acc.accountCode === accountCode &&
+        (!editing || acc.selectedCode !== editing.selectedCode)
+    );
+    if (duplicateCode) {
+      setFormError("Account Code already exists. Please choose another.");
+      return;
+    }
+    const duplicateName = accounts.some(
+      (acc) =>
+        acc.accountName.trim().toLowerCase() ===
+          accountName.trim().toLowerCase() &&
+        (!editing || acc.selectedCode !== editing.selectedCode)
+    );
+    if (duplicateName) {
+      setFormError("Account Name already exists. Please choose another.");
+      return;
+    }
+    setLoading(true);
     let resolvedAccountType: AccountType | null = accountType;
     if (
       [
@@ -380,10 +139,8 @@ export default function ChartOfAccounts() {
       ntn,
     };
     try {
-      console.log("Creating new Chart of Account:", payload);
       await axios.post("http://localhost:3000/chart-of-account", payload);
       await fetchAccounts(setAccounts);
-      // Only clear the form if not editing (i.e., creating new)
       if (!editing) {
         setSelectedCode("");
         setAccountCode("");
@@ -403,7 +160,10 @@ export default function ChartOfAccounts() {
       setEditing(null);
       setOpened(false);
     } catch (err) {
+      setFormError("Failed to create or update account. Please try again.");
       console.error("Failed to create/update account", err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -413,7 +173,18 @@ export default function ChartOfAccounts() {
     setSelectedCode(acc.selectedCode);
     setLevel(acc.level);
     setAccountName(acc.accountName);
-    setAccountType(acc.accountType);
+    const validAccountTypes: AccountType[] = [
+      "Asset",
+      "Liability",
+      "Equity",
+      "Revenue",
+      "Expense",
+    ];
+    setAccountType(
+      validAccountTypes.includes(acc.accountType as AccountType)
+        ? (acc.accountType as AccountType)
+        : null
+    );
     if (["1000", "2000", "3000", "4000", "5000"].includes(acc.selectedCode)) {
       setParentAccount(acc.selectedCode);
     } else {
@@ -439,13 +210,13 @@ export default function ChartOfAccounts() {
         );
         await fetchAccounts(setAccounts);
       } catch (err) {
+        alert("Failed to delete account. Please try again.");
         console.error("Failed to delete account", err);
       }
     }
     setDeleteId(null);
   };
 
-  // Filter by parent account
   let filteredAccounts = filterParent
     ? accounts.filter((acc) => {
         if (!acc.parentAccount) return false;
@@ -454,7 +225,6 @@ export default function ChartOfAccounts() {
       })
     : accounts;
 
-  // Filter by search (only account name)
   if (search.trim() !== "") {
     const searchLower = search.trim().toLowerCase();
     filteredAccounts = filteredAccounts.filter(
@@ -463,78 +233,51 @@ export default function ChartOfAccounts() {
     );
   }
 
-  // Pagination logic
   const totalPages = Math.ceil(filteredAccounts.length / PAGE_SIZE) || 1;
   const paginatedAccounts = filteredAccounts.slice(
     (page - 1) * PAGE_SIZE,
     page * PAGE_SIZE
   );
 
-  // Fetch accounts on mount
   useEffect(() => {
-    // If only parent is selected, do not increment, just clear accountCode
     if (
-      parentAccount &&
       (!selectedAccountType1 || selectedAccountType1 === "") &&
       (!selectedAccountType2 || selectedAccountType2 === "")
     ) {
       setAccountCode("");
       return;
     }
-
-    // If Level 2 is selected, increment under Level 2
-    let codeBase = "";
-    let codeLabel = "";
-    if (selectedAccountType2 && /^\d{4,}/.test(selectedAccountType2)) {
-      codeBase =
-        selectedAccountType2.match(/^\d{4,}/)?.[0] || selectedAccountType2;
-      codeLabel = selectedAccountType2;
-    } else if (selectedAccountType1 && /^\d{4,}/.test(selectedAccountType1)) {
-      codeBase =
-        selectedAccountType1.match(/^\d{4,}/)?.[0] || selectedAccountType1;
-      codeLabel = selectedAccountType1;
+    let codePrefix = "";
+    if (selectedAccountType2) {
+      codePrefix = selectedAccountType2.split("-")[0];
+    } else if (selectedAccountType1) {
+      codePrefix = selectedAccountType1.split("-")[0];
     }
-
-    if (codeBase) {
-      // For increment, use first 3 digits for Level 2 (e.g., 411 for 4110)
-      const codePrefix = codeBase.substring(0, 3);
-      // Find all siblings with the same parent and code prefix
-      const siblings = accounts.filter((acc) => {
-        if (!acc.parentAccount || !acc.accountCode) return false;
-        const accParentCodeMatch = acc.parentAccount.match(/^\d{4,}/);
-        const accParentCode = accParentCodeMatch
-          ? accParentCodeMatch[0]
-          : acc.parentAccount;
-        const accParentLabel = acc.parentAccount.trim();
-        const parentMatch =
-          accParentCode === codeBase || accParentLabel === codeLabel;
-        const codeMatch = acc.accountCode.startsWith(codePrefix);
-        return parentMatch && codeMatch;
-      });
-      // Collect all used suffixes (after prefix)
-      const usedSuffixes = new Set(
-        siblings.map((acc) => {
+    const siblings = accounts.filter((acc) => {
+      if (!acc.accountCode) return false;
+      return acc.accountCode.startsWith(codePrefix);
+    });
+    const usedSuffixes = new Set(
+      siblings
+        .map((acc) => {
           const code = acc.accountCode;
-          return code.length > 3 ? parseInt(code.substring(3), 10) : 0;
+          const suffix = code.slice(codePrefix.length);
+          const parsed = parseInt(suffix, 10);
+          return !isNaN(parsed) && parsed > 0 ? parsed : null;
         })
-      );
-      // Find the smallest available suffix >= 1
-      let nextSuffix = 1;
-      while (usedSuffixes.has(nextSuffix)) {
-        nextSuffix++;
-      }
-      setAccountCode(codePrefix + nextSuffix);
-    } else {
-      setAccountCode("");
+        .filter((v) => v !== null)
+    );
+    let nextSuffix = 1;
+    while (usedSuffixes.has(nextSuffix)) {
+      nextSuffix++;
     }
-  }, [parentAccount, selectedAccountType1, selectedAccountType2, accounts]);
+    setAccountCode(codePrefix + String(nextSuffix));
+  }, [selectedAccountType1, selectedAccountType2, accounts]);
 
-  // Reset to page 1 when filters/search change
   useEffect(() => {
     setPage(1);
   }, [search, filterParent]);
 
-  // Account counts for dashboard cards
   const assetCount = countAccountsByParentCode(accounts, "1000");
   const liabilityCount = countAccountsByParentCode(accounts, "2000");
   const equityCount = countAccountsByParentCode(accounts, "3000");
@@ -563,7 +306,6 @@ export default function ChartOfAccounts() {
           onClick={() => {
             setEditing(null);
             setSelectedCode("");
-            // Find max accountCode and increment
             let maxCode = 0;
             accounts.forEach((acc) => {
               const codeNum = parseInt(acc.accountCode, 10);
@@ -698,6 +440,11 @@ export default function ChartOfAccounts() {
         size="lg"
       >
         <Stack>
+          {formError && (
+            <Text c="red" fw={600} mb={-10} mt={-5}>
+              {formError}
+            </Text>
+          )}
           <Group grow>
             <TextInput
               label="Selected Code"
@@ -711,7 +458,7 @@ export default function ChartOfAccounts() {
               placeholder="Account Code"
               value={accountCode}
               onChange={(e) => setAccountCode(e.currentTarget.value)}
-              disabled={!!editing || accountCode !== ""}
+              disabled={!!editing}
             />
           </Group>
           <Group grow>
@@ -721,7 +468,6 @@ export default function ChartOfAccounts() {
               data={parentOptions}
               value={parentAccount}
               onChange={(v) => {
-                // If main parent selected, set selectedCode and parentAccount to the code (e.g. '2000')
                 if (
                   v === "1000" ||
                   v === "2000" ||
@@ -737,15 +483,8 @@ export default function ChartOfAccounts() {
               }}
               clearable
             />
-            {/* Only show Account Type select if not in multi-level type selection mode */}
-            {!(
-              parentAccount === "1000" ||
-              parentAccount === "2000" ||
-              parentAccount === "3000" ||
-              parentAccount === "4000" ||
-              parentAccount === "5000" ||
-              (selectedAccountType1 && parentAccount.length === 4) ||
-              (selectedAccountType2 && parentAccount.length === 4)
+            {!["1000", "2000", "3000", "4000", "5000"].includes(
+              parentAccount
             ) && (
               <Select
                 label="Account Type"
@@ -778,7 +517,6 @@ export default function ChartOfAccounts() {
                   }}
                   clearable
                 />
-                {/* Level 2 for Assets */}
                 {selectedAccountType1 === "1100" && (
                   <Select
                     label="Account Type (Level 2)"
@@ -978,7 +716,6 @@ export default function ChartOfAccounts() {
               onChange={(e) => setAccountName(e.currentTarget.value)}
             />
           </Group>
-
           <Group grow>
             <Select
               label="Type"
@@ -1027,9 +764,29 @@ export default function ChartOfAccounts() {
             />
           </Group>
           <Group justify="flex-end" mt="md">
-            <Button color="#0A6802" onClick={handleCreateOrUpdate}>
-              {editing ? "Update Account" : "Create Account"}
-            </Button>
+            <Tooltip
+              label={
+                formError ||
+                (!accountName || !accountCode
+                  ? "Fill all required fields"
+                  : "") ||
+                undefined
+              }
+              disabled={!formError && !!accountName && !!accountCode}
+            >
+              <Button
+                color="#0A6802"
+                onClick={handleCreateOrUpdate}
+                disabled={
+                  loading || !accountName || !accountCode || !!formError
+                }
+                leftSection={
+                  loading ? <Loader size={18} color="white" /> : null
+                }
+              >
+                {editing ? "Update Account" : "Create Account"}
+              </Button>
+            </Tooltip>
           </Group>
         </Stack>
       </Modal>
@@ -1052,3 +809,272 @@ export default function ChartOfAccounts() {
     </div>
   );
 }
+import { useState, useEffect } from "react";
+import {
+  Button,
+  Card,
+  Group,
+  Modal,
+  Stack,
+  Text,
+  TextInput,
+  Select,
+  Divider,
+  ActionIcon,
+  Checkbox,
+  Pagination,
+  Tooltip,
+  Loader,
+} from "@mantine/core";
+import {
+  IconEdit,
+  IconTrash,
+  IconBuildingBank,
+  IconCreditCard,
+  IconUsers,
+  IconChartBar,
+  IconCurrencyDollar,
+} from "@tabler/icons-react";
+import axios from "axios";
+import type { AccountNode } from "../../Context/ChartOfAccountsContext";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import type { JSX } from "react/jsx-runtime";
+
+type AccountType = "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
+type AccountGroupType = "Group" | "Detail";
+type FlattenedAccount = {
+  acc: AccountNode;
+  parent: string | null;
+  subaccount: string | null;
+  path: string;
+};
+
+function flattenAccounts(
+  accounts: AccountNode[],
+  allAccounts: AccountNode[]
+): FlattenedAccount[] {
+  const result: FlattenedAccount[] = [];
+  function walk(nodes: AccountNode[]) {
+    for (const acc of nodes) {
+      let parent = null;
+      if (acc.parentAccount) {
+        const parts = acc.parentAccount.split("-");
+        if (parts.length > 1) {
+          parent = parts.slice(1).join("-");
+        }
+      }
+      let subaccount = null;
+      if (acc.children && acc.children.length > 0) {
+        subaccount = acc.children.map((child) => child.accountName).join(", ");
+      }
+      const path = getAccountPath(allAccounts, acc.selectedCode);
+      result.push({ acc, parent, subaccount, path });
+      if (acc.children) walk(acc.children);
+    }
+  }
+  walk(accounts);
+  return result;
+}
+
+function getAccountPath(accounts: AccountNode[], code: string): string {
+  let result: string[] = [];
+  function dfs(nodes: AccountNode[], target: string, curr: string[]): boolean {
+    for (const acc of nodes) {
+      const next = [...curr, acc.accountName];
+      if (acc.selectedCode === target) {
+        result = next;
+        return true;
+      }
+      if (acc.children && dfs(acc.children, target, next)) return true;
+    }
+    return false;
+  }
+  dfs(accounts, code, []);
+  return result.length > 0 ? result.join(" > ") : "";
+}
+
+function countAccountsByParentCode(
+  accounts: AccountNode[],
+  parentCode: string
+): number {
+  let count = 0;
+  function walk(nodes: AccountNode[]) {
+    for (const acc of nodes) {
+      if (
+        acc.parentAccount &&
+        acc.parentAccount.split("-")[0].trim() === parentCode
+      ) {
+        count++;
+      }
+      if (acc.children) walk(acc.children);
+    }
+  }
+  walk(accounts);
+  return count;
+}
+
+async function fetchAccounts(setAccounts: (accs: AccountNode[]) => void) {
+  try {
+    const res = await axios.get("http://localhost:3000/chart-of-account");
+    if (Array.isArray(res.data)) {
+      setAccounts(res.data);
+    }
+  } catch (err) {
+    console.error("Failed to fetch accounts", err);
+  }
+}
+
+function renderAccountsTable(
+  accounts: AccountNode[],
+  allAccounts: AccountNode[],
+  onEdit: (acc: AccountNode) => void,
+  onDelete: (code: string) => void
+): JSX.Element {
+  const flat = flattenAccounts(accounts, allAccounts);
+  const level1Map: Record<string, string> = {
+    "1100": "Current Assets",
+    "1200": "Fixed Assets",
+    "1300": "Inventories",
+    "1400": "Receivables",
+    "1500": "Advances & Commissions",
+    "2100": "Captial",
+    "2200": "Current Liabilities",
+    "2300": "Other",
+    "2400": "Salesman Account",
+    "2500": "Bismillah",
+    "4100": "Sales Control Account",
+    "5100": "Administrative Expenses",
+    "5200": "Selling Expenses",
+    "5300": "Financial Charges",
+    "5400": "Other Charges",
+    "Share Capital": "Share Capital",
+  };
+  const level2Map: Record<string, string> = {
+    "1110": "Cash",
+    "1120": "Bank Accounts",
+    "1130": "Other Current Assets",
+    "1410": "Receivables Accounts",
+    "1510": "Salesman Account",
+    "2210": "Purchase Party",
+    "2220": "Advance Exp.",
+    "4110": "Sales",
+    "5110": "Salaries",
+    "5120": "Rent",
+    "5130": "Utilities",
+    "5140": "Depreciation",
+    "5210": "Advertising",
+    "5220": "Sales Commission",
+    "5310": "Bank Charges",
+    "5320": "Interest Expense",
+    "5410": "Miscellaneous",
+    "1121": "Meezan Bank",
+  };
+  const parentMap: Record<string, string> = {
+    "1000": "Assets",
+    "2000": "Liabilities",
+    "3000": "Equity",
+    "4000": "Revenue",
+    "5000": "Expenses",
+  };
+  const typeColor: Record<string, string> = {
+    Asset: "#e6f4ea",
+    Liability: "#fbeee6",
+    Equity: "#e6f0fb",
+    Revenue: "#e6f9fb",
+    Expense: "#fff6e6",
+  };
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <thead>
+        <tr>
+          <th style={{ textAlign: "left", padding: 4 }}>Sr No</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Account Code</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Account Name</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Level 1 Type</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Level 2 Type</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Parent</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Subaccount(s)</th>
+          <th style={{ textAlign: "left", padding: 4 }}>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {flat.map(({ acc, parent, subaccount }, idx) => {
+          const rowColor = typeColor[acc.accountType as string] || "white";
+          const level1Label =
+            acc.selectedAccountType1 && level1Map[acc.selectedAccountType1]
+              ? level1Map[acc.selectedAccountType1]
+              : acc.selectedAccountType1 || "-";
+          const level2Label =
+            acc.selectedAccountType2 && level2Map[acc.selectedAccountType2]
+              ? level2Map[acc.selectedAccountType2]
+              : acc.selectedAccountType2 || "-";
+          let parentLabel = "-";
+          if (parent) {
+            const parentAcc = allAccounts.find(
+              (a) => a.selectedCode === parent
+            );
+            if (parentAcc && parentAcc.accountName) {
+              parentLabel = parentAcc.accountName;
+            } else {
+              parentLabel =
+                parentMap[parent] ||
+                level1Map[parent] ||
+                level2Map[parent] ||
+                parent;
+            }
+          }
+          return (
+            <tr
+              key={`${acc.selectedCode}-${idx}`}
+              style={{ borderBottom: "1px solid #eee", background: rowColor }}
+            >
+              <td style={{ padding: 4 }}>{idx + 1}</td>
+              <td style={{ padding: 4 }}>{acc.accountCode}</td>
+              <td
+                style={{
+                  padding: 4,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                }}
+              >
+                <Tooltip label={getAccountPath(allAccounts, acc.selectedCode)}>
+                  <span>{acc.accountName}</span>
+                </Tooltip>
+              </td>
+              <td style={{ padding: 4 }}>{level1Label}</td>
+              <td style={{ padding: 4 }}>{level2Label}</td>
+              <td style={{ padding: 4 }}>{parentLabel}</td>
+              <td style={{ padding: 4 }}>{subaccount || "-"}</td>
+              <td style={{ padding: 4 }}>
+                <Tooltip label="Edit this account">
+                  <ActionIcon
+                    variant="subtle"
+                    color="blue"
+                    onClick={() => onEdit(acc)}
+                    title="Edit Account"
+                  >
+                    <IconEdit size={16} />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Delete this account">
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    onClick={() =>
+                      acc.selectedCode && onDelete(acc.selectedCode)
+                    }
+                    title="Delete Account"
+                  >
+                    <IconTrash size={16} />
+                  </ActionIcon>
+                </Tooltip>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+export default ChartOfAccounts;

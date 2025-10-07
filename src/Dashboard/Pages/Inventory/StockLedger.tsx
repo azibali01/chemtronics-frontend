@@ -27,6 +27,7 @@ type StockLedgerRow = {
   qtyBalance: number;
   rate: number;
   balance: number;
+  type: "Sale" | "Purchase";
 };
 
 const toDate = (s: string) => new Date(s + "T00:00:00");
@@ -41,59 +42,130 @@ export default function StockLedger() {
   const [stockLedgerData, setStockLedgerData] = useState<StockLedgerRow[]>([]);
   // Fetch sale invoices and map to stock ledger rows
   useEffect(() => {
-    const fetchAndMapInvoices = async () => {
+    const fetchAndMapData = async () => {
       try {
-        const res = await axios.get("http://localhost:3000/sale-invoice");
-        if (Array.isArray(res.data)) {
-          // Console log all sale invoices
-          console.log("All Sale Invoices:", res.data);
-          // Define types for invoice and item
-          type Invoice = {
-            id: string;
-            invoiceDate: string;
-            invoiceNumber: string;
-            accountTitle?: string;
-            products?: Array<{
-              id?: string | number;
-              code: string;
-              product: string;
-              qty?: number;
-              rate?: number;
-            }>;
-          };
-          const runningBalances: Record<string, number> = {};
-          const rows: StockLedgerRow[] = [];
-          (res.data as Invoice[]).forEach((inv) => {
-            if (Array.isArray(inv.products)) {
-              inv.products.forEach((item, idx) => {
-                const prevBalance = runningBalances[item.code] || 0;
-                const qtyOut = item.qty || 0;
-                const qtyIn = 0;
-                const qtyBalance = prevBalance - qtyOut;
-                runningBalances[item.code] = qtyBalance;
-                rows.push({
-                  id: inv.id + "-" + (item.id || idx),
-                  date: inv.invoiceDate,
-                  invid: inv.invoiceNumber,
-                  particulars: inv.accountTitle || "Sale Invoice",
-                  productCode: item.code,
-                  productName: item.product,
-                  qtyIn,
-                  qtyOut,
-                  qtyBalance,
-                  rate: item.rate || 0,
-                  balance: qtyBalance * (item.rate || 0),
-                });
-              });
-            }
+        // Fetch products, sales, and purchase invoices
+        const [productsRes, salesRes, purchaseRes] = await Promise.all([
+          axios.get("http://localhost:3000/products"),
+          axios.get("http://localhost:3000/sale-invoice"),
+          axios.get("http://localhost:3000/purchase-invoice"),
+        ]);
+        const products = Array.isArray(productsRes.data)
+          ? productsRes.data
+          : [];
+        const sales = Array.isArray(salesRes.data) ? salesRes.data : [];
+        const purchases = Array.isArray(purchaseRes.data)
+          ? purchaseRes.data
+          : [];
+        // Console log all data
+        console.log("All Products:", products);
+        console.log("All Sale Invoices:", sales);
+        console.log("All Purchase Invoices:", purchases);
+        // Types
+        type Product = {
+          code: string;
+          productName: string;
+          stockQuantity?: number;
+          rate?: number;
+        };
+        type Invoice = {
+          id: string;
+          invoiceDate: string;
+          invoiceNumber: string;
+          accountTitle?: string;
+          products?: Array<{
+            id?: string | number;
+            code: string;
+            product: string;
+            qty?: number;
+            rate?: number;
+          }>;
+        };
+        const runningBalances: Record<string, number> = {};
+        const rows: StockLedgerRow[] = [];
+        // Opening Balances: Qty In
+        products.forEach((prod: Product) => {
+          const qtyIn = prod.stockQuantity || 0;
+          const qtyOut = 0;
+          const qtyBalance = qtyIn;
+          runningBalances[prod.code] = qtyBalance;
+          rows.push({
+            id: "opening-" + prod.code,
+            date: "2025-01-01", // You can use a dynamic/project start date
+            invid: "",
+            particulars: "Opening Balance",
+            productCode: prod.code,
+            productName: prod.productName,
+            qtyIn,
+            qtyOut,
+            qtyBalance,
+            rate: prod.rate || 0,
+            balance: qtyBalance * (prod.rate || 0),
+            type: "Purchase", // Opening is treated as stock in
           });
-          setStockLedgerData(rows);
-        }
+        });
+        // Purchases: Qty In
+        (purchases as Invoice[]).forEach((inv) => {
+          if (Array.isArray(inv.products)) {
+            inv.products.forEach((item, idx) => {
+              const prevBalance = runningBalances[item.code] || 0;
+              const qtyIn = item.qty || 0;
+              const qtyOut = 0;
+              const qtyBalance = prevBalance + qtyIn;
+              runningBalances[item.code] = qtyBalance;
+              rows.push({
+                id: inv.id + "-" + (item.id || idx),
+                date: inv.invoiceDate,
+                invid: inv.invoiceNumber,
+                particulars: inv.accountTitle || "Purchase Invoice",
+                productCode: item.code,
+                productName: item.product,
+                qtyIn,
+                qtyOut,
+                qtyBalance,
+                rate: item.rate || 0,
+                balance: qtyBalance * (item.rate || 0),
+                type: "Purchase",
+              });
+            });
+          }
+        });
+        // Sales: Qty Out
+        (sales as Invoice[]).forEach((inv) => {
+          if (Array.isArray(inv.products)) {
+            inv.products.forEach((item, idx) => {
+              const prevBalance = runningBalances[item.code] || 0;
+              const qtyOut = item.qty || 0;
+              const qtyIn = 0;
+              const qtyBalance = prevBalance - qtyOut;
+              runningBalances[item.code] = qtyBalance;
+              rows.push({
+                id: inv.id + "-" + (item.id || idx),
+                date: inv.invoiceDate,
+                invid: inv.invoiceNumber,
+                particulars: inv.accountTitle || "Sale Invoice",
+                productCode: item.code,
+                productName: item.product,
+                qtyIn,
+                qtyOut,
+                qtyBalance,
+                rate: item.rate || 0,
+                balance: qtyBalance * (item.rate || 0),
+                type: "Sale",
+              });
+            });
+          }
+        });
+        // Sort by date ascending
+        rows.sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        setStockLedgerData(rows);
       } catch {
         setStockLedgerData([]);
       }
     };
-    fetchAndMapInvoices();
+    fetchAndMapData();
   }, []);
   // filters UI state
   const [productCode, setProductCode] = useState<string>("");
@@ -184,7 +256,8 @@ export default function StockLedger() {
       head: [
         [
           "Date",
-          "Invid",
+          "Invoice Number",
+          "Type",
           "Particulars",
           "Product Code",
           "Product Name",
@@ -198,6 +271,7 @@ export default function StockLedger() {
       body: filtered.map((r) => [
         r.date,
         r.invid,
+        r.type,
         r.particulars,
         r.productCode,
         r.productName,
@@ -305,6 +379,7 @@ export default function StockLedger() {
             <Table.Tr>
               <Table.Th>Date</Table.Th>
               <Table.Th>Invoice Number</Table.Th>
+              <Table.Th>Type</Table.Th>
               <Table.Th>Particulars</Table.Th>
               <Table.Th>Qty In</Table.Th>
               <Table.Th>Qty Out</Table.Th>
@@ -318,6 +393,7 @@ export default function StockLedger() {
               <Table.Tr key={r.id}>
                 <Table.Td>{r.date}</Table.Td>
                 <Table.Td>{r.invid}</Table.Td>
+                <Table.Td>{r.type}</Table.Td>
                 <Table.Td>{r.particulars}</Table.Td>
                 <Table.Td>{r.qtyIn}</Table.Td>
                 <Table.Td>{r.qtyOut}</Table.Td>

@@ -3,39 +3,64 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import axios from "axios";
 // Types
+
 export type AccountType =
+  | "1000-Assets"
+  | "1100-Current-Assets"
+  | "1110-Cash"
+  | "1120-Bank Accounts"
+  | "1130-Other Current Assets"
+  | "1200-Fixed Assets"
+  | "1300-Inventories"
+  | "1400-Receivables"
+  | "1410-Receivables Accounts"
+  | "1500-Advances & Commissions"
+  | "1510-Salesman Account"
+  | "1220-Furniture & Fixtures"
+  | "2000-Liabilities"
+  | "2100-Capital"
+  | "2200-Current Liabilities"
+  | "2210-Purchase Party"
+  | "2220-Advance Exp."
+  | "2300-Other"
+  | "2400-Salesman Account"
+  | "2500-Bismillah"
+  | "3100-Share Capital"
+  | "2110-AccountsPayable"
+  | "2120-AccuredExpenses"
+  | "2200-Long-Term Liabilites"
+  | "2210-Bank Loan"
+  | "3000-Equity"
+  | "3100-Owner's Equity"
+  | "3200-Retained Earnings"
+  | "4000-Revenue"
+  | "4100-Sales Control Account"
+  | "4110-Sales"
+  | "4200-Service Revenue"
+  | "5000-Expenses"
+  | "5100-Operating Expenses"
+  | "5110-Salaries"
+  | "5120-Rent"
+  | "5130-Utilities"
+  | "5140-Depreciation"
+  | "5100-Administrative Expenses"
+  | "5200-Selling Expenses"
+  | "5210-Advertising"
+  | "5220-Sales Commission"
+  | "5300-Financial Charges"
+  | "5320-Interest Charges"
+  | "5310-Bank Charges"
+  | "5400-Other Charges"
+  | "5500-Miscellaneous";
+
+export type AccountGroupType = "Group" | "Detail";
+
+export type ParentAccount =
   | "Asset"
   | "Liability"
   | "Equity"
   | "Revenue"
   | "Expense";
-
-export type AccountGroupType = "Group" | "Detail";
-
-// ParentAccount now does NOT include main parent codes (1000, 2000, 3000, 4000, 5000)
-export type ParentAccount =
-  | "1100-Current-Assets"
-  | "1110-CashInHands"
-  | "1120-CashAtBank"
-  | "1130-AccountsReceiveable"
-  | "1200-fixedAssets"
-  | "1220-Furniture & fixtures"
-  | "2100-current Liabilities"
-  | "2110-AccountsPayable"
-  | "2120-AccuredExpenses"
-  | "2200-Long-Term Liabilites"
-  | "2210-Bank Loan"
-  | "3100-Owner's Equity"
-  | "3200-Retained Earnings"
-  | "4100-sales revenue"
-  | "4200-serviceRevenue"
-  | "5100-operating Expenses"
-  | "5110-salaries & wages"
-  | "5120-Rent Expense"
-  | "5130-Utilities"
-  | "5200- administrative expenses"
-  | "5210-office supplies"
-  | "5220-professional fees";
 
 export interface AccountNode {
   code: string | number;
