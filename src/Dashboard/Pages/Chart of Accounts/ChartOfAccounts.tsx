@@ -174,7 +174,14 @@ function ChartOfAccounts() {
       ntn,
     };
     try {
-      await axios.post("http://localhost:3000/chart-of-account", payload);
+      if (editing && editing._id) {
+        await axios.put(
+          `http://localhost:3000/chart-of-account/${editing._id}`,
+          payload
+        );
+      } else {
+        await axios.post("http://localhost:3000/chart-of-account", payload);
+      }
       await fetchAccounts(setAccounts);
       if (!editing) {
         setSelectedCode("");
@@ -234,8 +241,8 @@ function ChartOfAccounts() {
     setOpened(true);
   };
 
-  const handleDelete = (code: string) => {
-    setDeleteId(code);
+  const handleDelete = (_id: string) => {
+    setDeleteId(_id);
   };
   const confirmDelete = async () => {
     if (deleteId) {
@@ -1090,9 +1097,7 @@ function renderAccountsTable(
                   <ActionIcon
                     variant="subtle"
                     color="red"
-                    onClick={() =>
-                      acc.selectedCode && onDelete(acc.selectedCode)
-                    }
+                    onClick={() => acc._id && onDelete(acc._id)}
                     title="Delete Account"
                   >
                     <IconTrash size={16} />

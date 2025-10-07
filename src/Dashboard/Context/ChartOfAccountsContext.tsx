@@ -63,6 +63,7 @@ export type ParentAccount =
   | "Expense";
 
 export interface AccountNode {
+  _id: string;
   code: string | number;
   name: string;
   selectedCode: string; // For main parents, this is 1000, 2000, 3000, 4000, 5000
