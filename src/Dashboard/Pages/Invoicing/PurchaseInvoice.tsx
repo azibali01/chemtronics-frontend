@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // import { useProducts } from "../../Context/Inventory/ProductsContext"; // Removed unused import
 import { useState, useEffect } from "react";
 import {
@@ -17,6 +18,7 @@ import {
   Pagination,
   Select,
 } from "@mantine/core";
+import { useCallback } from "react";
 import {
   IconSearch,
   IconDots,
@@ -85,9 +87,56 @@ export default function PurchaseInvoice() {
   const { accounts } = useChartOfAccounts(); // Add this line
 
   // Remove hardcoded data and add state for dynamic data
-  const [purchaseAccounts, setPurchaseAccounts] = useState<any[]>([]);
+  type Account = {
+    code: string | number;
+    name: string;
+    parentAccount?: string;
+    isParty?: boolean;
+    accountName?: string;
+    accountType?: string;
+    address?: string;
+    phoneNo?: string;
+    ntn?: string;
+    children?: Account[];
+  };
+  // (removed duplicate flattenAccounts declaration)
+  const [purchaseAccounts, setPurchaseAccounts] = useState<Account[]>([]);
+
+  // Move flattenAccounts above useEffect to avoid TDZ error
+  // (removed duplicate flattenAccounts definition)
 
   // Fetch all required data from backend on component mount
+  // (moved useEffect below flattenAccounts definition)
+
+  // --- flattenAccounts must be defined before this useEffect ---
+
+  // Helper function to flatten Chart of Accounts
+  const flattenAccounts = useCallback(
+    (nodes: (Account & { children?: Account[] })[]): Account[] => {
+      let result: Account[] = [];
+      nodes.forEach((node) => {
+        result.push({
+          code: node.code,
+          name: node.name,
+          parentAccount: node.parentAccount,
+          isParty: node.isParty,
+          accountName: node.accountName,
+          accountType: node.accountType,
+          address: node.address,
+          phoneNo: node.phoneNo,
+          ntn: node.ntn,
+        });
+        if (node.children && node.children.length > 0) {
+          result = result.concat(flattenAccounts(node.children));
+        }
+      });
+      return result;
+    },
+    []
+  );
+
+  // --- flattenAccounts must be defined before this useEffect ---
+
   useEffect(() => {
     const fetchAllData = async () => {
       try {
@@ -103,7 +152,7 @@ export default function PurchaseInvoice() {
         if (accounts && accounts.length > 0) {
           const flatAccounts = flattenAccounts(accounts);
           const purchaseAccountsList = flatAccounts.filter(
-            (account) =>
+            (account: Account) =>
               (typeof account.code === "string" &&
                 (account.code.startsWith("5") ||
                   account.code.startsWith("131"))) ||
@@ -123,34 +172,12 @@ export default function PurchaseInvoice() {
     };
 
     fetchAllData();
-  }, [setInvoices, accounts]);
-
-  // Helper function to flatten Chart of Accounts
-  const flattenAccounts = (nodes: any[]): any[] => {
-    let result: any[] = [];
-    nodes.forEach((node) => {
-      result.push({
-        code: node.code,
-        name: node.name,
-        parentAccount: node.parentAccount,
-        isParty: node.isParty,
-        accountName: node.accountName,
-        accountType: node.accountType,
-        address: node.address,
-        phoneNo: node.phoneNo,
-        ntn: node.ntn,
-      });
-      if (node.children && node.children.length > 0) {
-        result = result.concat(flattenAccounts(node.children));
-      }
-    });
-    return result;
-  };
+  }, [setInvoices, accounts, flattenAccounts]);
 
   const flatAccounts = flattenAccounts(accounts);
   console.log("Full flattened accounts:", flatAccounts);
   const supplierAccounts = flatAccounts.filter(
-    (acc) => acc.accountType === "2210"
+    (acc: Account) => acc.accountType === "2210"
   );
   console.log(
     "Filtered supplierAccounts (accountType === '2210'):",
@@ -160,26 +187,26 @@ export default function PurchaseInvoice() {
   const supplierSelectOptions =
     supplierAccounts.length > 0
       ? supplierAccounts
-          .filter((supplier) => supplier.accountName)
-          .map((supplier) => ({
-            value: supplier.accountName,
-            label: supplier.accountName,
+          .filter((supplier: Account) => supplier.accountName)
+          .map((supplier: Account) => ({
+            value: supplier.accountName ?? "",
+            label: supplier.accountName ?? supplier.name ?? "",
             data: supplier,
           }))
       : [{ value: "", label: "No supplier found", disabled: true }];
 
   const purchaseAccountOptions = purchaseAccounts.map((account) => ({
-    value: account.code,
+    value: String(account.code),
     label: `${account.code} - ${account.name}`,
   }));
 
   // Function to handle supplier selection
   const handleSupplierSelect = (selectedValue: string) => {
     const selectedSupplier = supplierAccounts.find(
-      (s: any) => s.accountName === selectedValue
+      (s: Account) => s.accountName === selectedValue
     );
     if (selectedSupplier) {
-      setSupplierNo(selectedSupplier.accountName);
+      setSupplierNo(selectedSupplier.accountName || "");
       setSupplierTitle(selectedSupplier.accountName || selectedSupplier.name);
       setNtnNo(selectedSupplier.ntn || "");
     }
@@ -188,7 +215,7 @@ export default function PurchaseInvoice() {
   // Function to handle purchase account selection
   const handlePurchaseAccountSelect = (selectedCode: string) => {
     const selectedAccount = purchaseAccounts.find(
-      (account) => account.code === selectedCode
+      (account: Account) => String(account.code) === selectedCode
     );
     if (selectedAccount) {
       setPurchaseAccount(selectedCode);
@@ -1151,11 +1178,24 @@ export default function PurchaseInvoice() {
                   }
                   setCreateOpen(false);
                 }
-              } catch (error: any) {
+              } catch (error) {
+                let errorMessage = "Failed to save invoice";
+                if (
+                  typeof error === "object" &&
+                  error !== null &&
+                  "response" in error &&
+                  typeof (error as any).response === "object" &&
+                  (error as any).response !== null &&
+                  "data" in (error as any).response &&
+                  typeof (error as any).response.data === "object" &&
+                  (error as any).response.data !== null &&
+                  "message" in (error as any).response.data
+                ) {
+                  errorMessage = (error as any).response.data.message;
+                }
                 notifications.show({
                   title: "Error",
-                  message:
-                    error.response?.data?.message || "Failed to save invoice",
+                  message: errorMessage,
                   color: "red",
                 });
                 console.error("Error saving invoice:", error);
@@ -1201,12 +1241,21 @@ export default function PurchaseInvoice() {
                   });
 
                   setDeleteInvoice(null);
-                } catch (error: any) {
+                } catch (error) {
                   notifications.show({
                     title: "Error",
                     message:
-                      error.response?.data?.message ||
-                      "Failed to delete invoice",
+                      typeof error === "object" &&
+                      error !== null &&
+                      "response" in error &&
+                      typeof (error as any).response === "object" &&
+                      (error as any).response !== null &&
+                      "data" in (error as any).response &&
+                      typeof (error as any).response.data === "object" &&
+                      (error as any).response.data !== null &&
+                      "message" in (error as any).response.data
+                        ? (error as any).response.data.message
+                        : "Failed to delete invoice",
                     color: "red",
                   });
                   console.error("Error deleting invoice:", error);

@@ -145,6 +145,8 @@ function getNextInvoiceNumber(invoices: Invoice[]) {
   return `INV-${next.toString().padStart(3, "0")}`;
 }
 
+// (Removed duplicate/unused getSalesAccounts function)
+
 export default function SalesInvoicePage() {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -261,9 +263,23 @@ export default function SalesInvoicePage() {
     fetchProductCodes();
   }, []);
 
+  // Get and process sales accounts
+  const salesAccountOptions = getSalesAccounts(accounts).sort((a, b) =>
+    a.label.localeCompare(b.label)
+  );
+
   useEffect(() => {
-    console.log("Chart of Accounts data:", accounts);
-  }, [accounts]);
+    if (accounts.length > 0) {
+      console.log("All accounts:", accounts);
+      console.log("Sales account options:", salesAccountOptions);
+
+      // Log accounts that start with 411
+      const salesRelatedAccounts = accounts.filter((acc) =>
+        acc.selectedCode?.startsWith("411")
+      );
+      console.log("Accounts starting with 411:", salesRelatedAccounts);
+    }
+  }, [accounts, salesAccountOptions]);
 
   const fetchSalesInvoices = async () => {
     try {
@@ -729,7 +745,7 @@ export default function SalesInvoicePage() {
     return result;
   }
 
-  // Helper: Collect all descendants of every node where selectedCode or accountCode is '4110'
+  // Helper: Get all sales accounts (children under 4110 - Sales)
   function getSalesAccounts(nodes: AccountNode[]): {
     value: string;
     label: string;
@@ -744,24 +760,51 @@ export default function SalesInvoicePage() {
       accountName: string;
       accountCode?: string;
     }[] = [];
-    function collectAll(n: AccountNode) {
-      result.push({
-        value: n.accountCode || n.selectedCode,
-        label: `${n.accountCode || n.selectedCode} - ${n.accountName}`,
-        code: n.accountCode || n.selectedCode,
-        accountName: n.accountName,
-        accountCode: n.accountCode,
-      });
-      if (n.children) n.children.forEach(collectAll);
-    }
-    function traverse(nodes: AccountNode[]) {
-      for (const node of nodes) {
-        if (node.selectedCode === "4110" || node.accountCode === "4110") {
-          collectAll(node);
-        } else if (node.children) {
-          traverse(node.children);
+
+    function walk(node: AccountNode) {
+      if (!node) return;
+
+      // Check if this is a sales account
+      if (node.selectedCode && node.accountName) {
+        const parentCode = node.parentAccount?.split(" - ")[0] || "";
+        const isChild = parentCode === "4110";
+        const isSalesAccount =
+          node.selectedCode.startsWith("411") && node.selectedCode !== "4110";
+
+        if (isChild || isSalesAccount) {
+          result.push({
+            value: node.selectedCode,
+            label: `${node.selectedCode} - ${node.accountName}`,
+            code: node.selectedCode,
+            accountName: node.accountName,
+            accountCode: node.selectedCode,
+          });
         }
       }
+
+      // Process children
+      if (node.children && node.children.length > 0) {
+        node.children.forEach(walk);
+      }
+    }
+
+    function traverse(nodes: AccountNode[]) {
+      if (!Array.isArray(nodes)) return;
+
+      nodes.forEach((node) => {
+        if (!node) return;
+        walk(node);
+
+        if (node.children && node.children.length > 0) {
+          traverse(node.children);
+        }
+      });
+    }
+
+    try {
+      traverse(nodes);
+    } catch (error) {
+      console.error("Error processing sales accounts:", error);
     }
     traverse(nodes);
     return result;
@@ -771,13 +814,9 @@ export default function SalesInvoicePage() {
   const allAccountsFlat = flattenAccountsWith1410(accounts as AccountNode[]);
   function isUnder1410(acc: { value: string; parentAccount?: string }) {
     if (acc.value === "1410") return true;
-    // Check if parentAccount chain includes 1410
     if (!acc.parentAccount) return false;
-    // parentAccount may be like "1400-Receivables" or "1410-Receivables Accounts"
-    return (
-      acc.parentAccount.split("-")[0] === "1410" ||
-      acc.parentAccount.includes("1410")
-    );
+    const parentCode = acc.parentAccount.split("-")[0];
+    return parentCode === "1410" || acc.parentAccount.includes("1410");
   }
   const receivablesAccounts = allAccountsFlat.filter(isUnder1410);
 
@@ -807,15 +846,7 @@ export default function SalesInvoicePage() {
     ).values()
   );
 
-  // Sale Account dropdown options: all accounts under 4110 (Sales)
-  const salesAccountOptionsRaw = getSalesAccounts(accounts as AccountNode[]);
-  const uniqueSalesAccountOptions = Array.from(
-    new Map(
-      salesAccountOptionsRaw
-        .filter((a) => a.value && a.label)
-        .map((a) => [a.value, a])
-    ).values()
-  );
+  // Sales account options are already formatted in getSalesAccounts
 
   return (
     <div className="p-6 space-y-6">
@@ -1135,19 +1166,33 @@ export default function SalesInvoicePage() {
             <Select
               label="Sale Account"
               placeholder="Select Sale Account"
-              data={uniqueSalesAccountOptions}
+              data={salesAccountOptions}
               value={newSaleAccount}
               onChange={(v) => {
                 setNewSaleAccount(v || "");
                 // Auto-fill Sale Account Title
-                const acc = uniqueSalesAccountOptions.find(
-                  (a) => a.value === v
-                );
-                setNewSaleAccountTitle(acc?.accountName || "");
+                const acc = salesAccountOptions.find((a) => a.value === v);
+                if (acc) {
+                  setNewSaleAccountTitle(acc.accountName);
+                } else {
+                  setNewSaleAccountTitle("");
+                }
               }}
+              description="Select from sales accounts under 4110 - Sales"
               clearable
+              searchable
+              error={
+                salesAccountOptions.length === 0
+                  ? "No sales accounts available. Create them in Chart of Accounts first."
+                  : undefined
+              }
             />
-            <TextInput label="Sale Account Title" value={newSaleAccountTitle} />
+            <TextInput
+              label="Sale Account Title"
+              value={newSaleAccountTitle}
+              readOnly
+              description="Auto-filled based on selected sale account"
+            />
             <TextInput
               label="NTN Number"
               value={newNtnNumber}

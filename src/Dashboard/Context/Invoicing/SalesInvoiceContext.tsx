@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -42,16 +43,6 @@ const SalesInvoiceContext = createContext<SalesInvoiceContextType | undefined>(
   undefined
 );
 
-export const useSalesInvoice = () => {
-  const context = useContext(SalesInvoiceContext);
-  if (!context) {
-    throw new Error(
-      "useSalesInvoice must be used within a SalesInvoiceProvider"
-    );
-  }
-  return context;
-};
-
 export const SalesInvoiceProvider = ({ children }: { children: ReactNode }) => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -68,4 +59,14 @@ export const SalesInvoiceProvider = ({ children }: { children: ReactNode }) => {
       {children}
     </SalesInvoiceContext.Provider>
   );
+};
+
+export const useSalesInvoice = () => {
+  const context = useContext(SalesInvoiceContext);
+  if (!context) {
+    throw new Error(
+      "useSalesInvoice must be used within a SalesInvoiceProvider"
+    );
+  }
+  return context;
 };
