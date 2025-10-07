@@ -148,10 +148,47 @@ function getNextInvoiceNumber(invoices: Invoice[]) {
 // (Removed duplicate/unused getSalesAccounts function)
 
 export default function SalesInvoicePage() {
-  const printRef = useRef<HTMLDivElement>(null);
-
+  // Always fetch latest Chart of Accounts on mount
+  const { setAccounts } = useChartOfAccounts();
+  useEffect(() => {
+    const fetchAccounts = async () => {
+      try {
+        const res = await axios.get("http://localhost:3000/chart-of-account");
+        if (Array.isArray(res.data)) {
+          setAccounts(res.data);
+        }
+      } catch {
+        setAccounts([]);
+      }
+    };
+    fetchAccounts();
+  }, [setAccounts]);
+  // ...existing code...
+  // ...existing code...
   const { invoices, setInvoices } = useSalesInvoice();
   const { accounts } = useChartOfAccounts();
+
+  // Debug: log only Revenue accounts when accounts change
+  useEffect(() => {
+    const allRevenueAccounts: AccountNode[] = [];
+    function collectRevenueAccounts(nodes: AccountNode[]) {
+      if (!Array.isArray(nodes)) return;
+      nodes.forEach((node) => {
+        if (!node) return;
+        if (node.accountType === "Revenue") {
+          allRevenueAccounts.push(node);
+        }
+        if (node.children && node.children.length > 0) {
+          collectRevenueAccounts(node.children);
+        }
+      });
+    }
+    collectRevenueAccounts(accounts);
+    console.log("All Revenue accounts:", allRevenueAccounts);
+  }, [accounts]);
+  const printRef = useRef<HTMLDivElement>(null);
+
+  // Debug: log only Revenue accounts when accounts change
 
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
   const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
@@ -264,21 +301,19 @@ export default function SalesInvoicePage() {
   }, []);
 
   // Get and process sales accounts
-  const salesAccountOptions = getSalesAccounts(accounts).sort((a, b) =>
-    a.label.localeCompare(b.label)
-  );
+  // Remove duplicate options by value (selectedCode)
+  // Use unique value (selectedCode + '-' + _id) so all revenue accounts show
+  // Use unique value (selectedCode + '-' + accountName) so all revenue accounts show
+  // Use unique value (code + '-' + accountName) so all revenue accounts show
+  const salesAccountOptions = getSalesAccounts(accounts)
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .map((a) => ({
+      ...a,
+      value: a.code && a.accountName ? `${a.code}-${a.accountName}` : a.value,
+    }));
 
   useEffect(() => {
-    if (accounts.length > 0) {
-      console.log("All accounts:", accounts);
-      console.log("Sales account options:", salesAccountOptions);
-
-      // Log accounts that start with 411
-      const salesRelatedAccounts = accounts.filter((acc) =>
-        acc.selectedCode?.startsWith("411")
-      );
-      console.log("Accounts starting with 411:", salesRelatedAccounts);
-    }
+    // (console.log removed)
   }, [accounts, salesAccountOptions]);
 
   const fetchSalesInvoices = async () => {
@@ -764,49 +799,31 @@ export default function SalesInvoicePage() {
     function walk(node: AccountNode) {
       if (!node) return;
 
-      // Check if this is a sales account
-      if (node.selectedCode && node.accountName) {
-        const parentCode = node.parentAccount?.split(" - ")[0] || "";
-        const isChild = parentCode === "4110";
-        const isSalesAccount =
-          node.selectedCode.startsWith("411") && node.selectedCode !== "4110";
-
-        if (isChild || isSalesAccount) {
-          result.push({
-            value: node.selectedCode,
-            label: `${node.selectedCode} - ${node.accountName}`,
-            code: node.selectedCode,
-            accountName: node.accountName,
-            accountCode: node.selectedCode,
-          });
-        }
+      // Map all accounts where selectedAccountType1 === '4100'
+      if (
+        node.selectedAccountType1 === "4100" &&
+        node.selectedCode &&
+        node.accountName
+      ) {
+        result.push({
+          value: node.selectedCode,
+          label: `${node.selectedCode} - ${node.accountName}`,
+          code: node.selectedCode,
+          accountName: node.accountName,
+          accountCode: node.selectedCode,
+        });
       }
 
-      // Process children
+      // Continue to children
       if (node.children && node.children.length > 0) {
         node.children.forEach(walk);
       }
     }
 
-    function traverse(nodes: AccountNode[]) {
-      if (!Array.isArray(nodes)) return;
-
-      nodes.forEach((node) => {
-        if (!node) return;
-        walk(node);
-
-        if (node.children && node.children.length > 0) {
-          traverse(node.children);
-        }
-      });
+    // Traverse all nodes (including root level)
+    if (Array.isArray(nodes)) {
+      nodes.forEach(walk);
     }
-
-    try {
-      traverse(nodes);
-    } catch (error) {
-      console.error("Error processing sales accounts:", error);
-    }
-    traverse(nodes);
     return result;
   }
 
