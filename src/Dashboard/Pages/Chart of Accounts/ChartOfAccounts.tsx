@@ -1,6 +1,41 @@
+import { useState, useEffect } from "react";
+import {
+  Button,
+  Card,
+  Group,
+  Modal,
+  Stack,
+  Text,
+  TextInput,
+  Select,
+  Divider,
+  ActionIcon,
+  Checkbox,
+  Pagination,
+  Tooltip,
+  Loader,
+  Tabs,
+} from "@mantine/core";
+import {
+  IconEdit,
+  IconTrash,
+  IconBuildingBank,
+  IconCreditCard,
+  IconUsers,
+  IconChartBar,
+  IconCurrencyDollar,
+} from "@tabler/icons-react";
+// Tree view component for hierarchy
+import axios from "axios";
+import type { AccountNode } from "../../Context/ChartOfAccountsContext";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import type { JSX } from "react/jsx-runtime";
+
 function ChartOfAccounts() {
   const { accounts, setAccounts } = useChartOfAccounts();
+  // Tree view expand/collapse logic
   const PAGE_SIZE = 15;
+  const [tab, setTab] = useState<string>("assets");
   const [opened, setOpened] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedCode, setSelectedCode] = useState("");
@@ -217,14 +252,20 @@ function ChartOfAccounts() {
     setDeleteId(null);
   };
 
-  let filteredAccounts = filterParent
-    ? accounts.filter((acc) => {
-        if (!acc.parentAccount) return false;
-        const parentCode = acc.parentAccount.split("-")[0];
-        return parentCode === filterParent;
-      })
-    : accounts;
-
+  // Tab-based filtering
+  const tabParentCodes: Record<string, string> = {
+    assets: "1000",
+    liability: "2000",
+    equity: "3000",
+    revenue: "4000",
+    expenses: "5000",
+  };
+  const currentParentCode = tabParentCodes[tab];
+  let filteredAccounts = accounts.filter(
+    (acc) =>
+      acc.selectedCode === currentParentCode ||
+      acc.parentAccount?.split("-")[0] === currentParentCode
+  );
   if (search.trim() !== "") {
     const searchLower = search.trim().toLowerCase();
     filteredAccounts = filteredAccounts.filter(
@@ -232,7 +273,13 @@ function ChartOfAccounts() {
         acc.accountName && acc.accountName.toLowerCase().includes(searchLower)
     );
   }
-
+  if (filterParent) {
+    filteredAccounts = filteredAccounts.filter((acc) => {
+      if (!acc.parentAccount) return false;
+      const parentCode = acc.parentAccount.split("-")[0];
+      return parentCode === filterParent;
+    });
+  }
   const totalPages = Math.ceil(filteredAccounts.length / PAGE_SIZE) || 1;
   const paginatedAccounts = filteredAccounts.slice(
     (page - 1) * PAGE_SIZE,
@@ -390,6 +437,19 @@ function ChartOfAccounts() {
       <Card withBorder padding="lg">
         <Stack>
           <Text fw={600}>Account Structure</Text>
+          <Tabs
+            value={tab}
+            onChange={(value) => setTab(value || "assets")}
+            mb="md"
+          >
+            <Tabs.List>
+              <Tabs.Tab value="assets">Assets</Tabs.Tab>
+              <Tabs.Tab value="liability">Liability</Tabs.Tab>
+              <Tabs.Tab value="equity">Equity</Tabs.Tab>
+              <Tabs.Tab value="revenue">Revenue</Tabs.Tab>
+              <Tabs.Tab value="expenses">Expenses</Tabs.Tab>
+            </Tabs.List>
+          </Tabs>
           <Group grow mt="sm">
             <TextInput
               label="Search"
@@ -809,36 +869,6 @@ function ChartOfAccounts() {
     </div>
   );
 }
-import { useState, useEffect } from "react";
-import {
-  Button,
-  Card,
-  Group,
-  Modal,
-  Stack,
-  Text,
-  TextInput,
-  Select,
-  Divider,
-  ActionIcon,
-  Checkbox,
-  Pagination,
-  Tooltip,
-  Loader,
-} from "@mantine/core";
-import {
-  IconEdit,
-  IconTrash,
-  IconBuildingBank,
-  IconCreditCard,
-  IconUsers,
-  IconChartBar,
-  IconCurrencyDollar,
-} from "@tabler/icons-react";
-import axios from "axios";
-import type { AccountNode } from "../../Context/ChartOfAccountsContext";
-import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
-import type { JSX } from "react/jsx-runtime";
 
 type AccountType = "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
 type AccountGroupType = "Group" | "Detail";
