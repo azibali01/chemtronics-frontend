@@ -16,7 +16,7 @@ import { useNavigate } from "react-router";
 import axios from "axios";
 
 const Login = () => {
-  const { login, user } = useAuth();
+  const { login } = useAuth();
   const [visible, { toggle }] = useDisclosure(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
