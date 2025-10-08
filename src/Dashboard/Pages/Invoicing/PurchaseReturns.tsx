@@ -732,8 +732,8 @@ export default function PurchaseReturnModal() {
           setProductCodes(
             res.data.map((p: Product) => ({
               value: p.code,
-              label: `${p.code} - ${p.productName || p.name || ""}`,
-              productName: p.productName || p.name || "",
+              label: `${p.code} - ${p.productName || ""}`,
+              productName: p.productName || "",
               description: p.productDescription || p.description || "",
               rate: p.unitPrice || 0,
             }))
