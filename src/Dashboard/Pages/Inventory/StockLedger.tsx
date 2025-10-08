@@ -46,12 +46,10 @@ export default function StockLedger() {
       try {
         // Fetch products, sales, and purchase invoices
         const [productsRes, salesRes, purchaseRes] = await Promise.all([
-          axios.get("https://chemtronics-frontend-4ada.vercel.app/products"),
+          axios.get("https://chemtronics-backend.onrender.com/products"),
+          axios.get("https://chemtronics-backend.onrender.com/sale-invoice"),
           axios.get(
-            "https://chemtronics-frontend-4ada.vercel.app/sale-invoice"
-          ),
-          axios.get(
-            "https://chemtronics-frontend-4ada.vercel.app/purchase-invoice/all-purchase-invoices"
+            "https://chemtronics-backend.onrender.com/purchase-invoice/all-purchase-invoices"
           ),
         ]);
         const products = Array.isArray(productsRes.data)

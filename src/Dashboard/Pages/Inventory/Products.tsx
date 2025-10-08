@@ -121,7 +121,7 @@ function ProductsInner() {
     try {
       setLoading(true);
       const response = await axios.get(
-        "https://chemtronics-frontend-4ada.vercel.app/products"
+        "https://chemtronics-backend.onrender.com/products"
       );
 
       if (response.data && Array.isArray(response.data)) {

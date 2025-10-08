@@ -155,7 +155,7 @@ export default function SalesInvoicePage() {
     const fetchAccounts = async () => {
       try {
         const res = await axios.get(
-          "https://chemtronics-frontend-4ada.vercel.app/chart-of-account"
+          "https://chemtronics-backend.onrender.com/chart-of-account"
         );
         if (Array.isArray(res.data)) {
           setAccounts(res.data);
@@ -285,7 +285,7 @@ export default function SalesInvoicePage() {
     const fetchProductCodes = async () => {
       try {
         const res = await axios.get(
-          "https://chemtronics-frontend-4ada.vercel.app/products"
+          "https://chemtronics-backend.onrender.com/products"
         );
         if (Array.isArray(res.data)) {
           setProductCodes(
@@ -319,7 +319,7 @@ export default function SalesInvoicePage() {
   const fetchSalesInvoices = async () => {
     try {
       const response = await axios.get(
-        "https://chemtronics-frontend-4ada.vercel.app/sale-invoice"
+        "https://chemtronics-backend.onrender.com/sale-invoice"
       );
       // Map backend 'products' to frontend 'items' for table compatibility
       const mapped = Array.isArray(response.data)
@@ -373,7 +373,7 @@ export default function SalesInvoicePage() {
       };
 
       const response = await axios.post(
-        "https://chemtronics-frontend-4ada.vercel.app/sale-invoice",
+        "https://chemtronics-backend.onrender.com/sale-invoice",
         payload
       );
 
@@ -428,7 +428,7 @@ export default function SalesInvoicePage() {
       };
 
       const response = await axios.put(
-        `https://chemtronics-frontend-4ada.vercel.app/sale-invoice/${editInvoice?.id}`,
+        `https://chemtronics-backend.onrender.com/sale-invoice/${editInvoice?.id}`,
         payload
       );
 
@@ -477,7 +477,7 @@ export default function SalesInvoicePage() {
   const deleteSalesInvoice = async (invoiceId: number) => {
     try {
       await axios.delete(
-        `https://chemtronics-frontend-4ada.vercel.app/sale-invoice/${invoiceId}`
+        `https://chemtronics-backend.onrender.com/sale-invoice/${invoiceId}`
       );
 
       setInvoices((prev) => prev.filter((i) => i.id !== invoiceId));
