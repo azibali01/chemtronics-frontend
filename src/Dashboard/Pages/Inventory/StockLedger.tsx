@@ -48,7 +48,9 @@ export default function StockLedger() {
         const [productsRes, salesRes, purchaseRes] = await Promise.all([
           axios.get("http://localhost:3000/products"),
           axios.get("http://localhost:3000/sale-invoice"),
-          axios.get("http://localhost:3000/purchase-invoice"),
+          axios.get(
+            "http://localhost:3000/purchase-invoice/all-purchase-invoices"
+          ),
         ]);
         const products = Array.isArray(productsRes.data)
           ? productsRes.data
@@ -74,6 +76,13 @@ export default function StockLedger() {
           invoiceNumber: string;
           accountTitle?: string;
           products?: Array<{
+            id?: string | number;
+            code: string;
+            product: string;
+            qty?: number;
+            rate?: number;
+          }>;
+          items?: Array<{
             id?: string | number;
             code: string;
             product: string;
@@ -130,31 +139,34 @@ export default function StockLedger() {
             });
           }
         });
-        // Sales: Qty Out
+        // Sales: Qty Out (support both 'products' and 'items' arrays)
         (sales as Invoice[]).forEach((inv) => {
-          if (Array.isArray(inv.products)) {
-            inv.products.forEach((item, idx) => {
-              const prevBalance = runningBalances[item.code] || 0;
-              const qtyOut = item.qty || 0;
-              const qtyIn = 0;
-              const qtyBalance = prevBalance - qtyOut;
-              runningBalances[item.code] = qtyBalance;
-              rows.push({
-                id: inv.id + "-" + (item.id || idx),
-                date: inv.invoiceDate,
-                invid: inv.invoiceNumber,
-                particulars: inv.accountTitle || "Sale Invoice",
-                productCode: item.code,
-                productName: item.product,
-                qtyIn,
-                qtyOut,
-                qtyBalance,
-                rate: item.rate || 0,
-                balance: qtyBalance * (item.rate || 0),
-                type: "Sale",
-              });
+          const saleItems = Array.isArray(inv.products)
+            ? inv.products
+            : Array.isArray(inv.items)
+            ? inv.items
+            : [];
+          saleItems.forEach((item, idx) => {
+            const prevBalance = runningBalances[item.code] || 0;
+            const qtyOut = item.qty || 0;
+            const qtyIn = 0;
+            const qtyBalance = prevBalance - qtyOut;
+            runningBalances[item.code] = qtyBalance;
+            rows.push({
+              id: inv.id + "-" + (item.id || idx),
+              date: inv.invoiceDate,
+              invid: inv.invoiceNumber,
+              particulars: inv.accountTitle || "Sale Invoice",
+              productCode: item.code,
+              productName: item.product,
+              qtyIn,
+              qtyOut,
+              qtyBalance,
+              rate: item.rate || 0,
+              balance: qtyBalance * (item.rate || 0),
+              type: "Sale",
             });
-          }
+          });
         });
         // Sort by date ascending
         rows.sort(
