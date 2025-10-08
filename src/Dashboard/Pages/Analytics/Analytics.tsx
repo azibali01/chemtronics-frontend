@@ -1,4 +1,4 @@
-import { useRef } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Card, Group, Button, Select, Tabs, Text } from "@mantine/core";
 import { IconDownload } from "@tabler/icons-react";
 import { jsPDF } from "jspdf";
