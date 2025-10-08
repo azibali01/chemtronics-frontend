@@ -113,31 +113,34 @@ export default function StockLedger() {
             type: "Purchase", // Opening is treated as stock in
           });
         });
-        // Purchases: Qty In
+        // Purchases: Qty In (support both 'products' and 'items' arrays)
         (purchases as Invoice[]).forEach((inv) => {
-          if (Array.isArray(inv.products)) {
-            inv.products.forEach((item, idx) => {
-              const prevBalance = runningBalances[item.code] || 0;
-              const qtyIn = item.qty || 0;
-              const qtyOut = 0;
-              const qtyBalance = prevBalance + qtyIn;
-              runningBalances[item.code] = qtyBalance;
-              rows.push({
-                id: inv.id + "-" + (item.id || idx),
-                date: inv.invoiceDate,
-                invid: inv.invoiceNumber,
-                particulars: inv.accountTitle || "Purchase Invoice",
-                productCode: item.code,
-                productName: item.product,
-                qtyIn,
-                qtyOut,
-                qtyBalance,
-                rate: item.rate || 0,
-                balance: qtyBalance * (item.rate || 0),
-                type: "Purchase",
-              });
+          const purchaseItems = Array.isArray(inv.products)
+            ? inv.products
+            : Array.isArray(inv.items)
+            ? inv.items
+            : [];
+          purchaseItems.forEach((item, idx) => {
+            const prevBalance = runningBalances[item.code] || 0;
+            const qtyIn = item.qty || 0;
+            const qtyOut = 0;
+            const qtyBalance = prevBalance + qtyIn;
+            runningBalances[item.code] = qtyBalance;
+            rows.push({
+              id: inv.id + "-" + (item.id || idx),
+              date: inv.invoiceDate,
+              invid: inv.invoiceNumber,
+              particulars: inv.accountTitle || "Purchase Invoice",
+              productCode: item.code,
+              productName: item.product,
+              qtyIn,
+              qtyOut,
+              qtyBalance,
+              rate: item.rate || 0,
+              balance: qtyBalance * (item.rate || 0),
+              type: "Purchase",
             });
-          }
+          });
         });
         // Sales: Qty Out (support both 'products' and 'items' arrays)
         (sales as Invoice[]).forEach((inv) => {
