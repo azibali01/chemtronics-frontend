@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from "react";
 
 import {
@@ -56,8 +57,7 @@ interface ReturnEntry {
   items: ReturnItem[];
   supplierNumber: string;
   supplierTitle: string;
-  purchaseAccount: string;
-  purchaseTitle: string;
+  // purchaseAccount and purchaseTitle removed
 }
 
 // Helper to get next invoice number
@@ -88,8 +88,7 @@ export default function PurchaseReturnModal() {
   const [notes, setNotes] = useState<string>("");
   const [supplierNumber, setSupplierNumber] = useState("");
   const [supplierTitle, setSupplierTitle] = useState("");
-  const [purchaseAccount, setPurchaseAccount] = useState("");
-  const [purchaseTitle, setPurchaseTitle] = useState("");
+  // purchaseAccount and purchaseTitle state removed
   const [invoice, setInvoice] = useState("");
 
   // --- Supplier mapping logic (same as PurchaseInvoice) ---
@@ -161,25 +160,24 @@ export default function PurchaseReturnModal() {
   };
 
   // --- Sale Account mapping logic (same as SaleReturns) ---
-  const saleAccountTitleMap: Record<string, string> = {
-    "4111": "Sales Of Chemicals",
-    "4112": "Sale Of Equipments",
-    "4113": "Services",
-    "4114": "Sale Of Chemicals and Equipments",
-  };
+  // const saleAccountTitleMap: Record<string, string> = {
+  //   "4111": "Sales Of Chemicals",
+  //   "4112": "Sale Of Equipments",
+  //   "4113": "Services",
+  //   "4114": "Sale Of Chemicals and Equipments",
+  // };
 
-  const saleAccountOptions = Object.entries(saleAccountTitleMap).map(
-    ([code, title]) => ({
-      value: code,
-      label: `${code} - ${title}`,
-    })
-  );
+  // const saleAccountOptions = Object.entries(saleAccountTitleMap).map(
+  //   ([code, title]) => ({
+  //     value: code,
+  //     label: `${code} - ${title}`,
+  //   })
+  // );
 
   // Function to handle sale account selection
-  const handleSaleAccountSelect = (selectedValue: string) => {
-    setPurchaseAccount(selectedValue);
-    setPurchaseTitle(saleAccountTitleMap[selectedValue] || "");
-  };
+  // const handleSaleAccountSelect = (selectedValue: string) => {
+  // purchaseAccount and purchaseTitle logic removed
+  // };
 
   const [search, setSearch] = useState<string>("");
   const [fromDate, setFromDate] = useState("");
@@ -230,41 +228,60 @@ export default function PurchaseReturnModal() {
   // Function to create purchase return in backend
   const createPurchaseReturn = async (returnData: ReturnEntry) => {
     try {
+      // Extract numeric part from invoice string (e.g., 'PR-1' -> 1)
+      const invoiceNumber = returnData.invoice
+        ? parseInt(String(returnData.invoice).replace(/\D/g, ""), 10)
+        : null;
       const payload = {
-        invoice: returnData.invoice,
-        date: returnData.date,
-        supplierNumber: returnData.supplierNumber,
+        invoiceNumber,
+        invoiceDate: returnData.date,
+        supplier: { name: returnData.supplierNumber },
         supplierTitle: returnData.supplierTitle,
-        purchaseAccount: returnData.purchaseAccount,
-        purchaseTitle: returnData.purchaseTitle,
-        amount: returnData.amount,
+        products: returnData.items.map((item) => ({
+          code: item.code,
+          productName: item.product,
+          unit: item.unit,
+          quantity: item.quantity,
+          rate: item.rate,
+          amount: item.amount,
+        })),
         notes: returnData.notes,
-        products: returnData.items,
+        amount: returnData.amount,
       };
 
       const response = await axios.post(
-        "http://localhost:3000/purchase-return", // Changed path
+        "http://localhost:3000/purchase-return",
         payload
       );
 
       if (response.data) {
-        // Add to local state after successful backend save
         setReturns((prev) => [response.data, ...prev]);
-
         notifications.show({
           title: "Success",
           message: "Purchase return created successfully",
           color: "green",
         });
-
         setOpened(false);
         resetForm();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      let message = "Failed to create purchase return";
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "response" in error &&
+        typeof (error as any).response === "object" &&
+        (error as any).response !== null &&
+        "data" in (error as any).response &&
+        typeof (error as any).response.data === "object" &&
+        (error as any).response.data !== null &&
+        "message" in (error as any).response.data
+      ) {
+        message = (error as any).response.data.message;
+      }
       notifications.show({
         title: "Error",
-        message:
-          error.response?.data?.message || "Failed to create purchase return",
+        message,
         color: "red",
       });
       console.error("Error creating purchase return:", error);
@@ -274,35 +291,41 @@ export default function PurchaseReturnModal() {
   // Function to update purchase return
   const updatePurchaseReturn = async (returnData: ReturnEntry) => {
     try {
+      // Extract numeric part from invoice string (e.g., 'PR-1' -> 1)
+      const invoiceNumber = returnData.invoice
+        ? parseInt(String(returnData.invoice).replace(/\D/g, ""), 10)
+        : null;
       const payload = {
-        invoice: returnData.invoice,
-        date: returnData.date,
-        supplierNumber: returnData.supplierNumber,
+        invoiceNumber,
+        invoiceDate: returnData.date,
+        supplier: { name: returnData.supplierNumber },
         supplierTitle: returnData.supplierTitle,
-        purchaseAccount: returnData.purchaseAccount,
-        purchaseTitle: returnData.purchaseTitle,
-        amount: returnData.amount,
+        products: returnData.items.map((item) => ({
+          code: item.code,
+          productName: item.product,
+          unit: item.unit,
+          quantity: item.quantity,
+          rate: item.rate,
+          amount: item.amount,
+        })),
         notes: returnData.notes,
-        products: returnData.items,
+        amount: returnData.amount,
       };
 
       const response = await axios.put(
-        `http://localhost:3000/purchase-return/${returnData.id}`, // Changed path
+        `http://localhost:3000/purchase-return/${returnData.id}`,
         payload
       );
 
       if (response.data) {
-        // Update local state after successful backend update
         setReturns((prev) =>
           prev.map((r) => (r.id === returnData.id ? response.data : r))
         );
-
         notifications.show({
           title: "Success",
           message: "Purchase return updated successfully",
           color: "green",
         });
-
         setEditOpened(false);
         setEditingReturn(null);
       }
@@ -350,8 +373,7 @@ export default function PurchaseReturnModal() {
     setReturnDate(new Date().toISOString().slice(0, 10));
     setSupplierNumber("");
     setSupplierTitle("");
-    setPurchaseAccount("");
-    setPurchaseTitle("");
+    // purchaseAccount and purchaseTitle reset removed
     setNotes("");
     setItems([
       {
@@ -436,10 +458,9 @@ export default function PurchaseReturnModal() {
         amount: items.reduce((acc, i) => acc + i.amount, 0),
         supplierNumber,
         supplierTitle,
-        purchaseAccount,
-        purchaseTitle,
       };
 
+      // Map to backend DTO before sending
       await createPurchaseReturn(newReturn);
     } catch (error) {
       console.error("Error in handleSubmit:", error);
@@ -460,8 +481,7 @@ export default function PurchaseReturnModal() {
         amount: items.reduce((acc, i) => acc + i.amount, 0),
         supplierNumber,
         supplierTitle,
-        purchaseAccount,
-        purchaseTitle,
+        // purchaseAccount and purchaseTitle removed
       };
 
       await updatePurchaseReturn(updated);
@@ -512,8 +532,7 @@ export default function PurchaseReturnModal() {
         ["Date", entry.date],
         ["Supplier Number", entry.supplierNumber || ""],
         ["Supplier Title", entry.supplierTitle],
-        ["Purchase Account", entry.purchaseAccount],
-        ["Purchase Title", entry.purchaseTitle],
+
         ["Notes", entry.notes],
       ],
       styles: { fontSize: 10 },
@@ -671,8 +690,6 @@ export default function PurchaseReturnModal() {
     setReturnDate(new Date().toISOString().slice(0, 10)); // set today's date
     setSupplierNumber("");
     setSupplierTitle("");
-    setPurchaseAccount("");
-    setPurchaseTitle("");
     setNotes("");
     setItems([
       {
@@ -787,8 +804,7 @@ export default function PurchaseReturnModal() {
     setReturnDate(entry.date);
     setSupplierNumber(entry.supplierNumber || "");
     setSupplierTitle(entry.supplierTitle);
-    setPurchaseAccount(entry.purchaseAccount);
-    setPurchaseTitle(entry.purchaseTitle);
+
     setNotes(entry.notes);
     setItems(entry.items);
     setEditOpened(true);
@@ -1043,7 +1059,7 @@ export default function PurchaseReturnModal() {
             value={supplierTitle}
             onChange={(e) => setSupplierTitle(e.currentTarget.value)}
           />
-          <TextInput
+          {/* <TextInput
             label="Purchase Account"
             placeholder="Enter purchase account"
             value={purchaseAccount}
@@ -1054,7 +1070,7 @@ export default function PurchaseReturnModal() {
             placeholder="Enter purchase title"
             value={purchaseTitle}
             onChange={(e) => setPurchaseTitle(e.currentTarget.value)}
-          />
+          /> */}
         </Group>
         <ReturnForm
           notes={notes}
@@ -1082,8 +1098,8 @@ export default function PurchaseReturnModal() {
                 amount: items.reduce((acc, i) => acc + i.amount, 0),
                 supplierNumber,
                 supplierTitle,
-                purchaseAccount,
-                purchaseTitle,
+                // purchaseAccount,
+                // purchaseTitle,
               })
             }
             leftSection={<IconPrinter size={16} />}
@@ -1134,7 +1150,7 @@ export default function PurchaseReturnModal() {
             value={supplierTitle}
             onChange={(e) => setSupplierTitle(e.currentTarget.value)}
           />
-          <TextInput
+          {/* <TextInput
             label="Purchase Account"
             placeholder="Enter purchase account"
             value={purchaseAccount}
@@ -1145,7 +1161,7 @@ export default function PurchaseReturnModal() {
             placeholder="Enter purchase title"
             value={purchaseTitle}
             onChange={(e) => setPurchaseTitle(e.currentTarget.value)}
-          />
+          /> */}
         </Group>
         <ReturnForm
           notes={notes}
@@ -1205,12 +1221,12 @@ function PurchaseReturnPrintTemplate({ entry }: { entry: ReturnEntry }) {
             <td style={{ fontWeight: "bold" }}>Supplier Title</td>
             <td>{entry.supplierTitle}</td>
           </tr>
-          <tr>
+          {/* <tr>
             <td style={{ fontWeight: "bold" }}>Purchase Account</td>
             <td>{entry.purchaseAccount}</td>
             <td style={{ fontWeight: "bold" }}>Purchase Title</td>
             <td>{entry.purchaseTitle}</td>
-          </tr>
+          </tr> */}
         </tbody>
       </table>
       <table
@@ -1300,8 +1316,7 @@ function ReturnForm({
   addItem,
   removeItem,
   productCodes,
-  productCodeOptions,
-  productNameOptions,
+
   netTotal, // <-- Add this line
 }: ReturnFormProps) {
   return (
