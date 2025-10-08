@@ -100,7 +100,7 @@ export default function PurchaseInvoice() {
     children?: Account[];
   };
   // (removed duplicate flattenAccounts declaration)
-  const [purchaseAccounts, setPurchaseAccounts] = useState<Account[]>([]);
+  // const [purchaseAccounts, setPurchaseAccounts] = useState<Account[]>([]);
 
   // Move flattenAccounts above useEffect to avoid TDZ error
   // (removed duplicate flattenAccounts definition)
@@ -149,18 +149,18 @@ export default function PurchaseInvoice() {
         }
 
         // Extract Purchase Accounts and Supplier Accounts from Chart of Accounts
-        if (accounts && accounts.length > 0) {
-          const flatAccounts = flattenAccounts(accounts);
-          const purchaseAccountsList = flatAccounts.filter(
-            (account: Account) =>
-              (typeof account.code === "string" &&
-                (account.code.startsWith("5") ||
-                  account.code.startsWith("131"))) ||
-              account.name?.toLowerCase().includes("purchase") ||
-              account.name?.toLowerCase().includes("stock")
-          );
-          setPurchaseAccounts(purchaseAccountsList);
-        }
+        // if (accounts && accounts.length > 0) {
+        //   const flatAccounts = flattenAccounts(accounts);
+        //   const purchaseAccountsList = flatAccounts.filter(
+        //     (account: Account) =>
+        //       (typeof account.code === "string" &&
+        //         (account.code.startsWith("5") ||
+        //           account.code.startsWith("131"))) ||
+        //       account.name?.toLowerCase().includes("purchase") ||
+        //       account.name?.toLowerCase().includes("stock")
+        //   );
+        //   setPurchaseAccounts(purchaseAccountsList);
+        // }
       } catch (error) {
         console.error("Error fetching data:", error);
         notifications.show({
@@ -195,10 +195,10 @@ export default function PurchaseInvoice() {
           }))
       : [{ value: "", label: "No supplier found", disabled: true }];
 
-  const purchaseAccountOptions = purchaseAccounts.map((account) => ({
-    value: String(account.code),
-    label: `${account.code} - ${account.name}`,
-  }));
+  // const purchaseAccountOptions = purchaseAccounts.map((account) => ({
+  //   value: String(account.code),
+  //   label: `${account.code} - ${account.name}`,
+  // }));
 
   // Function to handle supplier selection
   const handleSupplierSelect = (selectedValue: string) => {
@@ -213,15 +213,15 @@ export default function PurchaseInvoice() {
   };
 
   // Function to handle purchase account selection
-  const handlePurchaseAccountSelect = (selectedCode: string) => {
-    const selectedAccount = purchaseAccounts.find(
-      (account: Account) => String(account.code) === selectedCode
-    );
-    if (selectedAccount) {
-      setPurchaseAccount(selectedCode);
-      setPurchaseTitle(selectedAccount.name);
-    }
-  };
+  // const handlePurchaseAccountSelect = (selectedCode: string) => {
+  //   const selectedAccount = purchaseAccounts.find(
+  //     (account: Account) => String(account.code) === selectedCode
+  //   );
+  //   if (selectedAccount) {
+  //     setPurchaseAccount(selectedCode);
+  //     setPurchaseTitle(selectedAccount.name);
+  //   }
+  // };
 
   // Fetch invoices from backend on component mount
   useEffect(() => {
@@ -836,7 +836,7 @@ export default function PurchaseInvoice() {
             />
           </Grid.Col>
 
-          {/* Updated Purchase Account with Chart of Accounts data */}
+          {/*
           <Grid.Col span={4}>
             <Select
               label="Purchase Account"
@@ -863,6 +863,7 @@ export default function PurchaseInvoice() {
               }}
             />
           </Grid.Col>
+          */}
           <Grid.Col span={4}>
             <TextInput
               label="NTN No"
@@ -1126,15 +1127,16 @@ export default function PurchaseInvoice() {
                   invoiceDate: date,
                   partyBillNo,
                   partyBillDate,
-                  supplierNo,
-                  supplierTitle,
+                  supplier: {
+                    name: supplierTitle,
+                    code: supplierNo,
+                  },
                   purchaseAccount,
                   purchaseTitle,
-                  ntnNo,
-                  amount: total,
                   items,
                   notes,
                   gst: includeGST,
+                  totalAmount: total,
                 };
 
                 if (editInvoice) {
