@@ -60,6 +60,7 @@ export interface Invoice {
 }
 
 import type { AccountNode as ChartAccountNode } from "../../Context/ChartOfAccountsContext";
+import { getReceivableAccounts } from "../../utils/receivableAccounts";
 type AccountNode = ChartAccountNode;
 
 const saleAccountTitleMap: Record<string, string> = {
@@ -175,7 +176,7 @@ export default function SalesInvoicePage() {
       if (!Array.isArray(nodes)) return;
       nodes.forEach((node) => {
         if (!node) return;
-        if (node.accountType === "Revenue") {
+        if (String(node.accountType) === "REVENUE") {
           allRevenueAccounts.push(node);
         }
         if (node.children && node.children.length > 0) {
@@ -313,8 +314,19 @@ export default function SalesInvoicePage() {
 
   const fetchSalesInvoices = async () => {
     try {
-      const response = await axios.get("http://localhost:3000/sale-invoice"); // Changed path
-      setInvoices(response.data);
+      const response = await axios.get("http://localhost:3000/sale-invoice");
+      // Map backend 'products' to frontend 'items' for table compatibility
+      const mapped = Array.isArray(response.data)
+        ? response.data.map((inv) => ({
+            ...inv,
+            id: inv._id ? String(inv._id) : String(inv.id),
+            items: inv.products || [], // Map products to items
+            invoiceDate: inv.invoiceDate ? inv.invoiceDate.slice(0, 10) : "",
+            deliveryDate: inv.deliveryDate ? inv.deliveryDate.slice(0, 10) : "",
+            poDate: inv.poDate ? inv.poDate.slice(0, 10) : "",
+          }))
+        : [];
+      setInvoices(mapped);
     } catch (error) {
       console.error("Error fetching sales invoices:", error);
       notifications.show({
@@ -360,7 +372,14 @@ export default function SalesInvoicePage() {
       );
 
       if (response.data) {
-        setInvoices((prev) => [response.data, ...prev]);
+        // Map _id to id for new invoice
+        const newInvoice = {
+          ...response.data,
+          id: response.data._id
+            ? String(response.data._id)
+            : String(response.data.id),
+        };
+        setInvoices((prev) => [newInvoice, ...prev]);
 
         notifications.show({
           title: "Success",
@@ -408,8 +427,15 @@ export default function SalesInvoicePage() {
       );
 
       if (response.data) {
+        // Map _id to id for updated invoice
+        const updatedInvoice = {
+          ...response.data,
+          id: response.data._id
+            ? String(response.data._id)
+            : String(response.data.id),
+        };
         setInvoices((prev) =>
-          prev.map((i) => (i.id === editInvoice?.id ? response.data : i))
+          prev.map((i) => (i.id === editInvoice?.id ? updatedInvoice : i))
         );
 
         notifications.show({
@@ -737,44 +763,6 @@ export default function SalesInvoicePage() {
     setCreateModal(true);
   };
 
-  function flattenAccountsWith1410(
-    nodes: AccountNode[],
-    parentChain: string[] = []
-  ): {
-    value: string;
-    label: string;
-    code: string;
-    parentAccount?: string;
-    accountName: string;
-    accountCode?: string;
-  }[] {
-    let result: {
-      value: string;
-      label: string;
-      code: string;
-      parentAccount?: string;
-      accountName: string;
-      accountCode?: string;
-    }[] = [];
-    for (const node of nodes) {
-      const newParentChain = [...parentChain, node.selectedCode];
-      result.push({
-        value: node.accountCode || node.selectedCode,
-        label: `${node.accountCode || node.selectedCode} - ${node.accountName}`,
-        code: node.accountCode || node.selectedCode,
-        parentAccount: node.parentAccount,
-        accountName: node.accountName,
-        accountCode: node.accountCode,
-      });
-      if (node.children) {
-        result = result.concat(
-          flattenAccountsWith1410(node.children, newParentChain)
-        );
-      }
-    }
-    return result;
-  }
-
   // Helper: Get all sales accounts (children under 4110 - Sales)
   function getSalesAccounts(nodes: AccountNode[]): {
     value: string;
@@ -797,15 +785,15 @@ export default function SalesInvoicePage() {
       // Map all accounts where selectedAccountType1 === '4100'
       if (
         node.selectedAccountType1 === "4100" &&
-        node.selectedCode &&
+        node.accountCode &&
         node.accountName
       ) {
         result.push({
-          value: node.selectedCode,
-          label: `${node.selectedCode} - ${node.accountName}`,
-          code: node.selectedCode,
+          value: node.accountCode,
+          label: `${node.accountCode} - ${node.accountName}`,
+          code: node.accountCode,
           accountName: node.accountName,
-          accountCode: node.selectedCode,
+          accountCode: node.accountCode,
         });
       }
 
@@ -822,41 +810,37 @@ export default function SalesInvoicePage() {
     return result;
   }
 
-  // Get all accounts, then filter for those under 1410 (including 1410 itself)
-  const allAccountsFlat = flattenAccountsWith1410(accounts as AccountNode[]);
-  function isUnder1410(acc: { value: string; parentAccount?: string }) {
-    if (acc.value === "1410") return true;
-    if (!acc.parentAccount) return false;
-    const parentCode = acc.parentAccount.split("-")[0];
-    return parentCode === "1410" || acc.parentAccount.includes("1410");
-  }
-  const receivablesAccounts = allAccountsFlat.filter(isUnder1410);
+  // Use utility to get all receivable accounts (1410 and children)
+  const receivablesAccounts = getReceivableAccounts(accounts as AccountNode[]);
 
-  const accountNoOptions = receivablesAccounts.map((acc) => ({
-    value: acc.accountCode || acc.code,
-    label: `${acc.accountCode || acc.code} - ${acc.accountName}`,
+  const accountNoOptions = receivablesAccounts.map((acc: AccountNode) => ({
+    value: acc.accountCode || acc.selectedCode,
+    label: `${acc.accountCode || acc.selectedCode} - ${acc.accountName}`,
   }));
-  const accountTitleOptions = receivablesAccounts.map((acc) => ({
+  const accountTitleOptions = receivablesAccounts.map((acc: AccountNode) => ({
     value: acc.accountName,
     label: acc.accountName,
-    code: acc.accountCode || acc.code,
+    code: acc.accountCode || acc.selectedCode,
   }));
 
   // Remove empty/duplicate/invalid options for account selects
-  const uniqueAccountNoOptions = Array.from(
+  const uniqueAccountNoOptions: { value: string; label: string }[] = Array.from(
     new Map(
       accountNoOptions
-        .filter((a) => a.value && a.label)
-        .map((a) => [a.value, a])
+        .filter((a: { value: string; label: string }) => a.value && a.label)
+        .map((a: { value: string; label: string }) => [a.value, a])
     ).values()
-  );
+  ) as { value: string; label: string }[];
   const uniqueAccountTitleOptions = Array.from(
     new Map(
       accountTitleOptions
-        .filter((a) => a.value && a.label)
-        .map((a) => [a.value, a])
+        .filter((a: { value: string; label: string }) => a.value && a.label)
+        .map((a: { value: string; label: string; code: string }) => [
+          a.value,
+          a,
+        ])
     ).values()
-  );
+  ) as { value: string; label: string; code: string }[];
 
   // Sales account options are already formatted in getSalesAccounts
 
@@ -1145,7 +1129,7 @@ export default function SalesInvoicePage() {
                 setNewAccountNumber(v || "");
                 // Find account by accountCode from receivablesAccounts
                 const acc = receivablesAccounts.find(
-                  (a) => (a.accountCode || a.code) === v
+                  (a: AccountNode) => (a.accountCode || a.code) === v
                 );
                 if (acc) {
                   setNewAccountTitle(acc.accountName || "");
@@ -1164,10 +1148,16 @@ export default function SalesInvoicePage() {
                 setNewAccountTitle(v || "");
                 // Find account by name from receivablesAccounts
                 const acc = receivablesAccounts.find(
-                  (a) => a.accountName === v
+                  (a: AccountNode) => a.accountName === v
                 );
                 if (acc) {
-                  setNewAccountNumber(acc.accountCode || acc.code || "");
+                  setNewAccountNumber(
+                    acc.accountCode !== undefined
+                      ? String(acc.accountCode)
+                      : acc.code !== undefined
+                      ? String(acc.code)
+                      : ""
+                  );
                 } else {
                   setNewAccountNumber("");
                 }

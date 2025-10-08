@@ -1,3 +1,4 @@
+// Receivable accounts utility moved to utils/receivableAccounts.ts
 import { useState, useEffect } from "react";
 import {
   Button,
