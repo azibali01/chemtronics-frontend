@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   ActionIcon,
   Badge,
@@ -119,7 +120,9 @@ function ProductsInner() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await axios.get("http://localhost:3000/products");
+      const response = await axios.get(
+        "https://chemtronics-frontend-4ada.vercel.app/products"
+      );
 
       if (response.data && Array.isArray(response.data)) {
         // Transform backend data to match frontend Product type if needed
