@@ -61,12 +61,12 @@ function SaleReturnsInner() {
   const { products = [] } = useProducts();
 
   // Prepare dropdown options for code and product name
-  const productCodeOptions = products.map((p: { code: string }) => ({
+  const productCodeOptions = products.map((p) => ({
     value: p.code,
     label: p.code,
   }));
 
-  const productNameOptions = products.map((p: any) => ({
+  const productNameOptions = products.map((p) => ({
     value: p.productName,
     label: p.productName,
   }));
