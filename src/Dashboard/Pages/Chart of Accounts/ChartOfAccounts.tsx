@@ -177,11 +177,14 @@ function ChartOfAccounts() {
     try {
       if (editing && editing._id) {
         await axios.put(
-          `http://localhost:3000/chart-of-account/${editing._id}`,
+          `https://chemtronics-frontend-4ada.vercel.app/chart-of-account/${editing._id}`,
           payload
         );
       } else {
-        await axios.post("http://localhost:3000/chart-of-account", payload);
+        await axios.post(
+          "https://chemtronics-frontend-4ada.vercel.app/chart-of-account",
+          payload
+        );
       }
       await fetchAccounts(setAccounts);
       if (!editing) {
@@ -249,7 +252,7 @@ function ChartOfAccounts() {
     if (deleteId) {
       try {
         await axios.delete(
-          `http://localhost:3000/chart-of-account/${deleteId}`
+          `https://chemtronics-frontend-4ada.vercel.app/chart-of-account/${deleteId}`
         );
         await fetchAccounts(setAccounts);
       } catch (err) {
@@ -953,7 +956,9 @@ function countAccountsByParentCode(
 
 async function fetchAccounts(setAccounts: (accs: AccountNode[]) => void) {
   try {
-    const res = await axios.get("http://localhost:3000/chart-of-account");
+    const res = await axios.get(
+      "https://chemtronics-frontend-4ada.vercel.app/chart-of-account"
+    );
     if (Array.isArray(res.data)) {
       setAccounts(res.data);
     }

@@ -312,7 +312,7 @@ function ProductsInner() {
         });
       } else {
         const response = await axios.post(
-          "http://localhost:3000/Products/create-product",
+          "https://chemtronics-frontend-4ada.vercel.app/Products/create-product",
           payload
         );
 

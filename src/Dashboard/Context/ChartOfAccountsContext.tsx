@@ -114,7 +114,9 @@ export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({
     // Fetch accounts from backend API (correct route)
     const fetchAccounts = async () => {
       try {
-        const res = await axios.get("http://localhost:3000/chart-of-account");
+        const res = await axios.get(
+          "https://chemtronics-frontend-4ada.vercel.app/chart-of-account"
+        );
         if (Array.isArray(res.data)) {
           setAccounts(res.data);
         }

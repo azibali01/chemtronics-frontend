@@ -62,7 +62,10 @@ const AccountsOpeningBalances: React.FC = () => {
       credit: balances[acc.code]?.credit || 0,
     }));
     try {
-      await axios.post("http://localhost:3000/opening-balances", payload);
+      await axios.post(
+        "https://chemtronics-frontend-4ada.vercel.app/opening-balances",
+        payload
+      );
       // Optionally show success notification here
     } catch (error) {
       // Optionally show error notification here

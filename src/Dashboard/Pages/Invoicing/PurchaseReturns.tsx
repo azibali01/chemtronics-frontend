@@ -116,15 +116,17 @@ export default function PurchaseReturnModal() {
   };
 
   useEffect(() => {
-    axios.get("http://localhost:3000/chart-of-account/all").then((res) => {
-      console.log("Raw accounts response:", res.data);
-      if (Array.isArray(res.data)) {
-        setAccounts(res.data);
-        // Flatten and console all accounts
-        const allAccounts = flattenAccounts(res.data);
-        console.log("All found accounts in Purchase Return:", allAccounts);
-      }
-    });
+    axios
+      .get("https://chemtronics-frontend-4ada.vercel.app/chart-of-account/all")
+      .then((res) => {
+        console.log("Raw accounts response:", res.data);
+        if (Array.isArray(res.data)) {
+          setAccounts(res.data);
+          // Flatten and console all accounts
+          const allAccounts = flattenAccounts(res.data);
+          console.log("All found accounts in Purchase Return:", allAccounts);
+        }
+      });
   }, []);
 
   const flatAccounts = flattenAccounts(accounts);
@@ -213,7 +215,9 @@ export default function PurchaseReturnModal() {
   // Function to fetch all purchase returns from backend
   const fetchPurchaseReturns = async () => {
     try {
-      const response = await axios.get("http://localhost:3000/purchase-return"); // Changed path
+      const response = await axios.get(
+        "https://chemtronics-frontend-4ada.vercel.app/purchase-return"
+      ); // Changed path
       setReturns(response.data);
     } catch (error) {
       console.error("Error fetching purchase returns:", error);
@@ -250,7 +254,7 @@ export default function PurchaseReturnModal() {
       };
 
       const response = await axios.post(
-        "http://localhost:3000/purchase-return",
+        "https://chemtronics-frontend-4ada.vercel.app/purchase-return",
         payload
       );
 
@@ -313,7 +317,7 @@ export default function PurchaseReturnModal() {
       };
 
       const response = await axios.put(
-        `http://localhost:3000/purchase-return/${returnData.id}`,
+        `https://chemtronics-frontend-4ada.vercel.app/purchase-return/${returnData.id}`,
         payload
       );
 
@@ -343,7 +347,9 @@ export default function PurchaseReturnModal() {
   // Function to delete purchase return
   const deletePurchaseReturn = async (returnId: string) => {
     try {
-      await axios.delete(`http://localhost:3000/purchase-return/${returnId}`); // Changed path
+      await axios.delete(
+        `https://chemtronics-frontend-4ada.vercel.app/purchase-return/${returnId}`
+      ); // Changed path
 
       // Remove from local state after successful backend deletion
       setReturns((prev) => prev.filter((r) => r.id !== returnId));
@@ -727,7 +733,9 @@ export default function PurchaseReturnModal() {
     }
     const fetchProductCodes = async () => {
       try {
-        const res = await axios.get("http://localhost:3000/products");
+        const res = await axios.get(
+          "https://chemtronics-frontend-4ada.vercel.app/products"
+        );
         if (Array.isArray(res.data)) {
           setProductCodes(
             res.data.map((p: Product) => ({

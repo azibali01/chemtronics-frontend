@@ -321,7 +321,9 @@ function SaleReturnsInner() {
   // Function to fetch all sale returns from backend
   const fetchSaleReturns = async () => {
     try {
-      const response = await axios.get("http://localhost:3000/sale-return"); // Changed path
+      const response = await axios.get(
+        "https://chemtronics-frontend-4ada.vercel.app/sale-return"
+      ); // Changed path
       setReturns(response.data);
     } catch (error) {
       console.error("Error fetching sale returns:", error);
@@ -350,7 +352,7 @@ function SaleReturnsInner() {
       };
 
       const response = await axios.post(
-        "http://localhost:3000/sale-return", // Changed path
+        "https://chemtronics-frontend-4ada.vercel.app/sale-return", // Changed path
         payload
       );
 
@@ -395,7 +397,7 @@ function SaleReturnsInner() {
       };
 
       const response = await axios.put(
-        `http://localhost:3000/sale-return/${returnData.id}`, // Changed path
+        `https://chemtronics-frontend-4ada.vercel.app/sale-return/${returnData.id}`, // Changed path
         payload
       );
 
@@ -428,7 +430,9 @@ function SaleReturnsInner() {
   // Function to delete sale return
   const deleteSaleReturn = async (returnId: string) => {
     try {
-      await axios.delete(`http://localhost:3000/sale-return/${returnId}`); // Changed path
+      await axios.delete(
+        `https://chemtronics-frontend-4ada.vercel.app/sale-return/${returnId}`
+      ); // Changed path
 
       // Remove from local state after successful backend deletion
       setReturns((prev) => prev.filter((r) => r.id !== returnId));

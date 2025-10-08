@@ -142,7 +142,7 @@ export default function PurchaseInvoice() {
       try {
         // Fetch Purchase Invoices
         const invoicesResponse = await axios.get(
-          "http://localhost:3000/purchase-invoice/all-purchase-invoices"
+          "https://chemtronics-frontend-4ada.vercel.app/purchase-invoice/all-purchase-invoices"
         );
         if (invoicesResponse.data && Array.isArray(invoicesResponse.data)) {
           setInvoices(invoicesResponse.data);
@@ -228,7 +228,7 @@ export default function PurchaseInvoice() {
     const fetchInvoices = async () => {
       try {
         const response = await axios.get(
-          "http://localhost:3000/purchase-invoice/all-purchase-invoices" // Changed path
+          "https://chemtronics-frontend-4ada.vercel.app/purchase-invoice/all-purchase-invoices" // Changed path
         );
         if (response.data && Array.isArray(response.data)) {
           setInvoices(response.data);
@@ -267,7 +267,9 @@ export default function PurchaseInvoice() {
     }
     const fetchProductCodes = async () => {
       try {
-        const res = await axios.get("http://localhost:3000/products");
+        const res = await axios.get(
+          "https://chemtronics-frontend-4ada.vercel.app/products"
+        );
         if (Array.isArray(res.data)) {
           setProductCodes(
             res.data.map((p: Product) => ({
@@ -1142,7 +1144,7 @@ export default function PurchaseInvoice() {
                 if (editInvoice) {
                   // Update existing invoice
                   const response = await axios.put(
-                    `http://localhost:3000/purchase-invoice/update-purchase-invoice/${editInvoice.id}`, // Changed path
+                    `https://chemtronics-frontend-4ada.vercel.app/purchase-invoice/update-purchase-invoice/${editInvoice.id}`, // Changed path
                     payload
                   );
 
@@ -1162,7 +1164,7 @@ export default function PurchaseInvoice() {
                 } else {
                   // Create new invoice
                   const response = await axios.post(
-                    "http://localhost:3000/purchase-invoice/create-purchase-invoice", // Changed path
+                    "https://chemtronics-frontend-4ada.vercel.app/purchase-invoice/create-purchase-invoice", // Changed path
                     payload
                   );
 
@@ -1229,7 +1231,7 @@ export default function PurchaseInvoice() {
               if (deleteInvoice) {
                 try {
                   await axios.delete(
-                    `http://localhost:3000/purchase-invoice/delete-purchase-invoice/${deleteInvoice.id}` // Changed path
+                    `https://chemtronics-frontend-4ada.vercel.app/purchase-invoice/delete-purchase-invoice/${deleteInvoice.id}` // Changed path
                   );
 
                   setInvoices((prev) =>

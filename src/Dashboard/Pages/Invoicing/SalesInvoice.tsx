@@ -154,7 +154,9 @@ export default function SalesInvoicePage() {
   useEffect(() => {
     const fetchAccounts = async () => {
       try {
-        const res = await axios.get("http://localhost:3000/chart-of-account");
+        const res = await axios.get(
+          "https://chemtronics-frontend-4ada.vercel.app/chart-of-account"
+        );
         if (Array.isArray(res.data)) {
           setAccounts(res.data);
         }
@@ -282,7 +284,9 @@ export default function SalesInvoicePage() {
     }
     const fetchProductCodes = async () => {
       try {
-        const res = await axios.get("http://localhost:3000/products");
+        const res = await axios.get(
+          "https://chemtronics-frontend-4ada.vercel.app/products"
+        );
         if (Array.isArray(res.data)) {
           setProductCodes(
             res.data.map((p: Product) => ({
@@ -314,7 +318,9 @@ export default function SalesInvoicePage() {
 
   const fetchSalesInvoices = async () => {
     try {
-      const response = await axios.get("http://localhost:3000/sale-invoice");
+      const response = await axios.get(
+        "https://chemtronics-frontend-4ada.vercel.app/sale-invoice"
+      );
       // Map backend 'products' to frontend 'items' for table compatibility
       const mapped = Array.isArray(response.data)
         ? response.data.map((inv) => ({
@@ -367,7 +373,7 @@ export default function SalesInvoicePage() {
       };
 
       const response = await axios.post(
-        "http://localhost:3000/sale-invoice",
+        "https://chemtronics-frontend-4ada.vercel.app/sale-invoice",
         payload
       );
 
@@ -422,7 +428,7 @@ export default function SalesInvoicePage() {
       };
 
       const response = await axios.put(
-        `http://localhost:3000/sale-invoice/${editInvoice?.id}`,
+        `https://chemtronics-frontend-4ada.vercel.app/sale-invoice/${editInvoice?.id}`,
         payload
       );
 
@@ -470,7 +476,9 @@ export default function SalesInvoicePage() {
 
   const deleteSalesInvoice = async (invoiceId: number) => {
     try {
-      await axios.delete(`http://localhost:3000/sale-invoice/${invoiceId}`);
+      await axios.delete(
+        `https://chemtronics-frontend-4ada.vercel.app/sale-invoice/${invoiceId}`
+      );
 
       setInvoices((prev) => prev.filter((i) => i.id !== invoiceId));
 
