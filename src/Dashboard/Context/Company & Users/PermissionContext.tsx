@@ -94,24 +94,34 @@ const PermissionContext = createContext<PermissionContextType | undefined>(
 );
 
 export function PermissionProvider({ children }: { children: ReactNode }) {
-  const [selectedRole, setSelectedRole] = useState<Role>(rolesData[0]);
+  const firstRole = rolesData?.[0];
+  const [selectedRole, setSelectedRole] = useState<Role | null>(firstRole ?? null);
+
   const [enabledPermissions, setEnabledPermissions] = useState<string[]>(
-    rolesData[0].permissions.map((p) => p.name)
+    firstRole?.permissions
+      ?.filter((p) => p?.name)
+      ?.map((p) => p.name) ?? []
   );
 
   const togglePermission = (perm: string) => {
     setEnabledPermissions((prev) =>
-      prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]
+      prev.includes(perm)
+        ? prev.filter((p) => p !== perm)
+        : [...prev, perm]
     );
   };
+
+  if (!selectedRole) {
+    return <div>Loading permissions...</div>;
+  }
 
   return (
     <PermissionContext.Provider
       value={{
         roles: rolesData,
         selectedRole,
-        enabledPermissions,
         setSelectedRole,
+        enabledPermissions,
         togglePermission,
       }}
     >
@@ -119,6 +129,7 @@ export function PermissionProvider({ children }: { children: ReactNode }) {
     </PermissionContext.Provider>
   );
 }
+
 
 export const usePermissionContext = () => {
   const ctx = useContext(PermissionContext);
