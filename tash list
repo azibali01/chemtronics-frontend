@@ -39,7 +39,7 @@
 [32m+[m[32m      try {[m
 [32m+[m[32m        // Fetch Purchase Invoices[m
 [32m+[m[32m        const invoicesResponse = await axios.get([m
-[32m+[m[32m          "https://chemtronics-backend.onrender.com//purchase-invoice/all-purchase-invoices"[m
+[32m+[m[32m          "https://chemtronics-backend.onrender.com/purchase-invoice/all-purchase-invoices"[m
 [32m+[m[32m        );[m
 [32m+[m[32m        if (invoicesResponse.data && Array.isArray(invoicesResponse.data)) {[m
 [32m+[m[32m          setInvoices(invoicesResponse.data);[m
@@ -47,7 +47,7 @@
 [32m+[m
 [32m+[m[32m        // Fetch Suppliers from backend[m
 [32m+[m[32m        const suppliersResponse = await axios.get([m
-[32m+[m[32m          "https://chemtronics-backend.onrender.com//suppliers"[m
+[32m+[m[32m          "https://chemtronics-backend.onrender.com/suppliers"[m
 [32m+[m[32m        );[m
 [32m+[m[32m        if (suppliersResponse.data && Array.isArray(suppliersResponse.data)) {[m
 [32m+[m[32m          setSuppliers(suppliersResponse.data);[m
@@ -134,8 +134,8 @@
      const fetchInvoices = async () => {[m
        try {[m
          const response = await axios.get([m
-[31m-          "https://chemtronics-backend.onrender.com//purchase-invoices"[m
-[32m+[m[32m          "https://chemtronics-backend.onrender.com//purchase-invoice/all-purchase-invoices" // Changed path[m
+[31m-          "https://chemtronics-backend.onrender.com/purchase-invoices"[m
+[32m+[m[32m          "https://chemtronics-backend.onrender.com/purchase-invoice/all-purchase-invoices" // Changed path[m
          );[m
          if (response.data && Array.isArray(response.data)) {[m
            setInvoices(response.data);[m

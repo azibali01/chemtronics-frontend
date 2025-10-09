@@ -142,7 +142,7 @@ export default function PurchaseInvoice() {
       try {
         // Fetch Purchase Invoices
         const invoicesResponse = await axios.get(
-          "https://chemtronics-backend.onrender.com//purchase-invoice/all-purchase-invoices"
+          "https://chemtronics-backend.onrender.com/purchase-invoice/all-purchase-invoices"
         );
         if (invoicesResponse.data && Array.isArray(invoicesResponse.data)) {
           setInvoices(invoicesResponse.data);
@@ -228,7 +228,7 @@ export default function PurchaseInvoice() {
     const fetchInvoices = async () => {
       try {
         const response = await axios.get(
-          "https://chemtronics-backend.onrender.com//purchase-invoice/all-purchase-invoices" // Changed path
+          "https://chemtronics-backend.onrender.com/purchase-invoice/all-purchase-invoices" // Changed path
         );
         if (response.data && Array.isArray(response.data)) {
           setInvoices(response.data);
@@ -268,7 +268,7 @@ export default function PurchaseInvoice() {
     const fetchProductCodes = async () => {
       try {
         const res = await axios.get(
-          "https://chemtronics-backend.onrender.com//products"
+          "https://chemtronics-backend.onrender.com/products"
         );
         if (Array.isArray(res.data)) {
           setProductCodes(
@@ -1144,7 +1144,7 @@ export default function PurchaseInvoice() {
                 if (editInvoice) {
                   // Update existing invoice
                   const response = await axios.put(
-                    `https://chemtronics-backend.onrender.com//purchase-invoice/update-purchase-invoice/${editInvoice.id}`, // Changed path
+                    `https://chemtronics-backend.onrender.com/purchase-invoice/update-purchase-invoice/${editInvoice.id}`, // Changed path
                     payload
                   );
 
@@ -1164,7 +1164,7 @@ export default function PurchaseInvoice() {
                 } else {
                   // Create new invoice
                   const response = await axios.post(
-                    "https://chemtronics-backend.onrender.com//purchase-invoice/create-purchase-invoice", // Changed path
+                    "https://chemtronics-backend.onrender.com/purchase-invoice/create-purchase-invoice", // Changed path
                     payload
                   );
 
@@ -1231,7 +1231,7 @@ export default function PurchaseInvoice() {
               if (deleteInvoice) {
                 try {
                   await axios.delete(
-                    `https://chemtronics-backend.onrender.com//purchase-invoice/delete-purchase-invoice/${deleteInvoice.id}` // Changed path
+                    `https://chemtronics-backend.onrender.com/purchase-invoice/delete-purchase-invoice/${deleteInvoice.id}` // Changed path
                   );
 
                   setInvoices((prev) =>
