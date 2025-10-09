@@ -18,19 +18,19 @@ import axios from "axios";
 const Login = () => {
   const { login } = useAuth();
   const [visible, { toggle }] = useDisclosure(false);
-  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
   const handleLogin = async () => {
     try {
-      const res = await axios.post("/login", { email, password });
-      if (res.status === 200) {
-        login({ id: "1", email, name: "User" });
-        navigate("/dashboard");
-      } else {
-        notifications.show({ message: "Login failed", color: "red" });
-      }
+      const res = await axios.post("https://chemtronics-backend.onrender.com/auth/login", {
+        fullName,
+        password,
+      });
+      login(res.data);
+      navigate("/dashboard");
+      notifications.show({ message: "Login successful", color: "green" });
     } catch {
       notifications.show({ message: "Login failed", color: "red" });
     }
@@ -77,8 +77,8 @@ const Login = () => {
           >
             <Stack gap="md">
               <TextInput
-                value={email}
-                onChange={(event) => setEmail(event.currentTarget.value)}
+                value={fullName}
+                onChange={(event) => setFullName(event.currentTarget.value)}
                 label="Email"
                 placeholder="Enter your email"
                 styles={{
