@@ -109,6 +109,14 @@ export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({ chi
         const res = await axios.get(
           "https://chemtronics-backend-zbf6.onrender.com/chart-of-account"
         );
+        console.log("API response:", res.data);
+        
+          if (Array.isArray(res.data)) {
+    setAccounts(res.data);
+  } else {
+    console.warn("Unexpected API shape:", res.data);
+  }
+
 
         const data = Array.isArray(res.data)
           ? res.data
