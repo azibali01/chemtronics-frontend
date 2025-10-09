@@ -322,7 +322,7 @@ function SaleReturnsInner() {
   const fetchSaleReturns = async () => {
     try {
       const response = await axios.get(
-        "https://chemtronics-backend-zbf6.onrender.com/sale-return"
+        "https://chemtronics-backend.onrender.com//sale-return"
       ); // Changed path
       setReturns(response.data);
     } catch (error) {
@@ -352,7 +352,7 @@ function SaleReturnsInner() {
       };
 
       const response = await axios.post(
-        "https://chemtronics-backend-zbf6.onrender.com/sale-return", // Changed path
+        "https://chemtronics-backend.onrender.com//sale-return", // Changed path
         payload
       );
 
@@ -397,7 +397,7 @@ function SaleReturnsInner() {
       };
 
       const response = await axios.put(
-        `https://chemtronics-backend-zbf6.onrender.com/sale-return/${returnData.id}`, // Changed path
+        `https://chemtronics-backend.onrender.com//sale-return/${returnData.id}`, // Changed path
         payload
       );
 
@@ -431,7 +431,7 @@ function SaleReturnsInner() {
   const deleteSaleReturn = async (returnId: string) => {
     try {
       await axios.delete(
-        `https://chemtronics-backend-zbf6.onrender.com/sale-return/${returnId}`
+        `https://chemtronics-backend.onrender.com//sale-return/${returnId}`
       ); // Changed path
 
       // Remove from local state after successful backend deletion

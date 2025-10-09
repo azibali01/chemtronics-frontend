@@ -107,7 +107,7 @@ export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({ chi
     const fetchAccounts = async () => {
       try {
         const res = await axios.get(
-          "https://chemtronics-backend-zbf6.onrender.com/chart-of-account"
+          "https://chemtronics-backend.onrender.com//chart-of-account"
         );
         console.log("API response:", res.data);
         

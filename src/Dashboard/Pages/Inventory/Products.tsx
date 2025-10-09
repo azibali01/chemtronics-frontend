@@ -121,7 +121,7 @@ function ProductsInner() {
     try {
       setLoading(true);
       const response = await axios.get(
-        "https://chemtronics-backend-zbf6.onrender.com/products"
+        "https://chemtronics-backend.onrender.com//products"
       );
 
       if (response.data && Array.isArray(response.data)) {
@@ -312,7 +312,7 @@ function ProductsInner() {
         });
       } else {
         const response = await axios.post(
-          "https://chemtronics-backend-zbf6.onrender.com/products/create-product",
+          "https://chemtronics-backend.onrender.com//products/create-product",
           payload
         );
 
