@@ -115,7 +115,7 @@ export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({
     const fetchAccounts = async () => {
       try {
         const res = await axios.get(
-          "https://chemtronics-backend.onrender.com/chart-of-account"
+          "https://chemtronics-backend-zbf6.onrender.com/chart-of-account"
         );
         if (Array.isArray(res.data)) {
           setAccounts(res.data);

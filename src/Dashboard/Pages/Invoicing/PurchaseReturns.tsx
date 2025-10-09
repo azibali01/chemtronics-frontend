@@ -117,7 +117,7 @@ export default function PurchaseReturnModal() {
 
   useEffect(() => {
     axios
-      .get("https://chemtronics-backend.onrender.com/chart-of-account/all")
+      .get("https://chemtronics-backend-zbf6.onrender.com/chart-of-account/all")
       .then((res) => {
         console.log("Raw accounts response:", res.data);
         if (Array.isArray(res.data)) {
@@ -216,7 +216,7 @@ export default function PurchaseReturnModal() {
   const fetchPurchaseReturns = async () => {
     try {
       const response = await axios.get(
-        "https://chemtronics-backend.onrender.com/purchase-return"
+        "https://chemtronics-backend-zbf6.onrender.com/purchase-return"
       ); // Changed path
       setReturns(response.data);
     } catch (error) {
@@ -254,7 +254,7 @@ export default function PurchaseReturnModal() {
       };
 
       const response = await axios.post(
-        "https://chemtronics-backend.onrender.com/purchase-return",
+        "https://chemtronics-backend-zbf6.onrender.com/purchase-return",
         payload
       );
 
@@ -317,7 +317,7 @@ export default function PurchaseReturnModal() {
       };
 
       const response = await axios.put(
-        `https://chemtronics-backend.onrender.com/purchase-return/${returnData.id}`,
+        `https://chemtronics-backend-zbf6.onrender.com/purchase-return/${returnData.id}`,
         payload
       );
 
@@ -348,7 +348,7 @@ export default function PurchaseReturnModal() {
   const deletePurchaseReturn = async (returnId: string) => {
     try {
       await axios.delete(
-        `https://chemtronics-backend.onrender.com/purchase-return/${returnId}`
+        `https://chemtronics-backend-zbf6.onrender.com/purchase-return/${returnId}`
       ); // Changed path
 
       // Remove from local state after successful backend deletion
@@ -734,7 +734,7 @@ export default function PurchaseReturnModal() {
     const fetchProductCodes = async () => {
       try {
         const res = await axios.get(
-          "https://chemtronics-backend.onrender.com/products"
+          "https://chemtronics-backend-zbf6.onrender.com/products"
         );
         if (Array.isArray(res.data)) {
           setProductCodes(

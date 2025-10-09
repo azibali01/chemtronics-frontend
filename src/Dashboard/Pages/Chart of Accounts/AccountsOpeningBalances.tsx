@@ -63,7 +63,7 @@ const AccountsOpeningBalances: React.FC = () => {
     }));
     try {
       await axios.post(
-        "https://chemtronics-backend.onrender.com/opening-balances",
+        "https://chemtronics-backend-zbf6.onrender.com/opening-balances",
         payload
       );
       // Optionally show success notification here
