@@ -2,7 +2,8 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import axios from "axios";
-// Types
+ 
+ 
 
 export type AccountType =
   | "1000-Assets"
@@ -53,27 +54,25 @@ export type AccountType =
   | "5400-Other Charges"
   | "5500-Miscellaneous";
 
-export type AccountGroupType = "Group" | "Detail";
+/* eslint-disable react-refresh/only-export-components */
 
-export type ParentAccount =
-  | "Asset"
-  | "Liability"
-  | "Equity"
-  | "Revenue"
-  | "Expense";
+// Types
+ 
+export type AccountGroupType = "Group" | "Detail";
+export type ParentAccount = "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
 
 export interface AccountNode {
   _id: string;
   code: string | number;
   name: string;
-  selectedCode: string; // For main parents, this is 1000, 2000, 3000, 4000, 5000
+  selectedCode: string;
   selectedAccountType1?: string;
   selectedAccountType2?: string;
   accountCode: string;
   level: string;
   accountName: string;
   accountType: AccountType;
-  parentAccount: ParentAccount | string; // For main parents, this is empty
+  parentAccount: ParentAccount | string;
   type: AccountGroupType;
   isParty: boolean;
   address?: string;
@@ -91,47 +90,44 @@ interface ChartOfAccountsContextType {
   setExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
 }
 
-const ChartOfAccountsContext = createContext<
-  ChartOfAccountsContextType | undefined
->(undefined);
+const ChartOfAccountsContext = createContext<ChartOfAccountsContextType | undefined>(undefined);
 
 export const useChartOfAccounts = () => {
   const context = useContext(ChartOfAccountsContext);
   if (!context)
-    throw new Error(
-      "useChartOfAccounts must be used within ChartOfAccountsProvider"
-    );
+    throw new Error("useChartOfAccounts must be used within ChartOfAccountsProvider");
   return context;
 };
 
-export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({
-  children,
-}) => {
+export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [accounts, setAccounts] = useState<AccountNode[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    // Fetch accounts from backend API (correct route)
     const fetchAccounts = async () => {
       try {
         const res = await axios.get(
           "https://chemtronics-backend-zbf6.onrender.com/chart-of-account"
         );
-        if (Array.isArray(res.data)) {
-          setAccounts(res.data);
-        }
-      } catch {
-        // Optionally handle error
+
+        const data = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.data?.data)
+          ? res.data.data
+          : [];
+
+        setAccounts(data);
+      } catch (err) {
+        console.error("Failed to fetch accounts:", err);
         setAccounts([]);
       }
     };
+
     fetchAccounts();
   }, []);
 
   return (
-    <ChartOfAccountsContext.Provider
-      value={{ accounts, setAccounts, expanded, setExpanded }}
-    >
+    <ChartOfAccountsContext.Provider value={{ accounts, setAccounts, expanded, setExpanded }}>
       {children}
     </ChartOfAccountsContext.Provider>
   );
