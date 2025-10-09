@@ -47,10 +47,11 @@ export default function ManageUsers() {
 
 
   const payload = {
-    name: fullName,
+    fullName: fullName,
     password: password,
     role: role,
   };
+  
   const handleCreateUser = async () => {
     try{ if (!fullName || !role || !password) return;
 
@@ -68,7 +69,7 @@ export default function ManageUsers() {
 
   const handleEditUser = (index: number) => {
     const user = users[index];
-    setFullName(user.name);
+    setFullName(user.fullName);
     setRole(user.role);
     setPassword(user.password || "");
     setEditingUserIndex(index);
@@ -79,7 +80,7 @@ export default function ManageUsers() {
     if (editingUserIndex === null) return;
 
     const updatedUser = {
-      name: fullName,
+      fullName: fullName,
       role: role || "",
       roleColor: roleColors[role || "Staff"],
       status: status || "active",
@@ -96,10 +97,12 @@ export default function ManageUsers() {
     setFullName("");
     setRole(null);
   };
-
+  console.log(users);
+  
   const filteredUsers = users.filter((user) => {
+    console.log(user);
     const matchesSearch =
-      user.name.toLowerCase().includes(search.toLowerCase())
+      user.fullName.toLowerCase().includes(search.toLowerCase());
 
     const matchesRole = roleFilter ? user.role === roleFilter : true;
 
