@@ -12,6 +12,7 @@ import {
   ActionIcon,
   Flex,
   Modal,
+  PasswordInput,
 } from "@mantine/core";
 import {
   IconSearch,
@@ -21,6 +22,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useUserContext } from "../../Context/Company & Users/UserContext";
+import axios from "axios";
 
 export default function ManageUsers() {
   const { users, addUser, updateUser, deleteUser } = useUserContext();
@@ -31,10 +33,8 @@ export default function ManageUsers() {
   const [editOpen, setEditOpen] = useState(false);
 
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [role, setRole] = useState<string | null>(null);
-  const [company, setCompany] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>("active");
 
   const [editingUserIndex, setEditingUserIndex] = useState<number | null>(null);
 
@@ -45,32 +45,32 @@ export default function ManageUsers() {
     Staff: "gray",
   };
 
-  const handleCreateUser = () => {
-    if (!fullName || !email || !role || !company) return;
 
-    const newUser = {
-      name: fullName,
-      email,
-      role,
-      roleColor: roleColors[role],
-      company,
-      status: status || "active",
-      lastLogin: new Date().toLocaleDateString(),
-    };
+  const payload = {
+    name: fullName,
+    password: password,
+    role: role,
+  };
+  const handleCreateUser = async () => {
+    try{ if (!fullName || !role || !password) return;
 
-    addUser(newUser);
+    const newUser = await axios.post("https://chemtronics-backend.onrender.com/auth/create-user", payload);
+
+    addUser(newUser.data);
     resetForm();
     setOpen(false);
-  };
+  } 
+  
+  catch (error) {
+    console.error("Error creating user:", error);
+  }
+};
 
-  // Edit user
   const handleEditUser = (index: number) => {
     const user = users[index];
     setFullName(user.name);
-    setEmail(user.email);
     setRole(user.role);
-    setCompany(user.company);
-    setStatus(user.status);
+    setPassword(user.password || "");
     setEditingUserIndex(index);
     setEditOpen(true);
   };
@@ -80,10 +80,8 @@ export default function ManageUsers() {
 
     const updatedUser = {
       name: fullName,
-      email,
       role: role || "",
       roleColor: roleColors[role || "Staff"],
-      company: company || "",
       status: status || "active",
       lastLogin: users[editingUserIndex].lastLogin,
     };
@@ -96,16 +94,12 @@ export default function ManageUsers() {
 
   const resetForm = () => {
     setFullName("");
-    setEmail("");
     setRole(null);
-    setCompany(null);
-    setStatus("active");
   };
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
-      user.name.toLowerCase().includes(search.toLowerCase()) ||
-      user.email.toLowerCase().includes(search.toLowerCase());
+      user.name.toLowerCase().includes(search.toLowerCase())
 
     const matchesRole = roleFilter ? user.role === roleFilter : true;
 
@@ -177,12 +171,7 @@ export default function ManageUsers() {
                       <Avatar size="sm" color="gray" radius="xl">
                         <IconUser size={16} />
                       </Avatar>
-                      <div>
-                        <Text fw={500}>{user.name}</Text>
-                        <Text fz="sm" c="dimmed">
-                          {user.email}
-                        </Text>
-                      </div>
+                    
                     </Flex>
                   </Table.Td>
                   <Table.Td>
@@ -190,15 +179,8 @@ export default function ManageUsers() {
                       {user.role}
                     </Badge>
                   </Table.Td>
-                  <Table.Td>{user.company}</Table.Td>
-                  <Table.Td>
-                    <Badge
-                      color={user.status === "active" ? "#819E00" : "gray"}
-                      variant="filled"
-                    >
-                      {user.status}
-                    </Badge>
-                  </Table.Td>
+                
+              
                   <Table.Td>{user.lastLogin}</Table.Td>
                   <Table.Td>
                     <Group gap="xs">
@@ -249,10 +231,10 @@ export default function ManageUsers() {
           onChange={(e) => setFullName(e.currentTarget.value)}
           mb="md"
         />
-        <TextInput
-          label="Email"
-          value={email}
-          onChange={(e) => setEmail(e.currentTarget.value)}
+        <PasswordInput
+          label="Password"
+          value={password}
+          onChange={(e) => setPassword(e.currentTarget.value)}
           mb="md"
         />
         <Select
@@ -262,24 +244,7 @@ export default function ManageUsers() {
           onChange={setRole}
           mb="md"
         />
-        <Select
-          label="Company"
-          data={[
-            "Acme Corporation",
-            "TechStart Solutions",
-            "Global Enterprises",
-          ]}
-          value={company}
-          onChange={setCompany}
-          mb="md"
-        />
-        <Select
-          label="Status"
-          data={["active", "inactive"]}
-          value={status}
-          onChange={setStatus}
-          mb="md"
-        />
+       
         <Group justify="flex-end" mt="lg">
           <Button color="green" onClick={handleCreateUser}>
             Create User
@@ -303,12 +268,7 @@ export default function ManageUsers() {
           onChange={(e) => setFullName(e.currentTarget.value)}
           mb="md"
         />
-        <TextInput
-          label="Email"
-          value={email}
-          onChange={(e) => setEmail(e.currentTarget.value)}
-          mb="md"
-        />
+      
         <Select
           label="Role"
           data={["Super Admin", "Company Admin", "Accounts User", "Staff"]}
@@ -316,24 +276,8 @@ export default function ManageUsers() {
           onChange={setRole}
           mb="md"
         />
-        <Select
-          label="Company"
-          data={[
-            "Acme Corporation",
-            "TechStart Solutions",
-            "Global Enterprises",
-          ]}
-          value={company}
-          onChange={setCompany}
-          mb="md"
-        />
-        <Select
-          label="Status"
-          data={["active", "inactive"]}
-          value={status}
-          onChange={setStatus}
-          mb="md"
-        />
+      
+     
         <Group justify="flex-end" mt="lg">
           <Button color="blue" onClick={handleUpdateUser}>
             Update User

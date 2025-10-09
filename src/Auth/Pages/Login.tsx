@@ -24,7 +24,7 @@ const Login = () => {
 
   const handleLogin = async () => {
     try {
-      const res = await axios.post("/api/login", { email, password });
+      const res = await axios.post("/login", { email, password });
       if (res.status === 200) {
         login({ id: "1", email, name: "User" });
         navigate("/dashboard");
