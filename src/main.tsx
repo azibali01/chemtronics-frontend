@@ -18,10 +18,12 @@ import { AccountsOpeningBalancesProvider } from "./Dashboard/Context/AccountsOpe
 import { DashboardHomeProvider } from "./Dashboard/Context/DashboardHomeContext";
 import { ProductsProvider } from "./Dashboard/Context/Inventory/ProductsContext";
 import { StockReportsProvider } from "./Dashboard/Context/Inventory/StockReportsContext";
+import { BrandProvider } from "./Dashboard/Context/BrandContext.tsx";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
       <AuthProvider>
+          <BrandProvider>
         <CompanyProvider>
           <UserProvider>
             <PermissionProvider>
@@ -53,6 +55,7 @@ createRoot(document.getElementById("root")!).render(
             </PermissionProvider>
           </UserProvider>
         </CompanyProvider>
+        </BrandProvider>
       </AuthProvider>
     </ThemeProvider>
   </StrictMode>

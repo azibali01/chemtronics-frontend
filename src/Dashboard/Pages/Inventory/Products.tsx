@@ -56,7 +56,6 @@ function stockStatus(p: { quantity: number; minimumStockLevel: number }) {
   return { label: "Good", color: "green" as const };
 }
 
-// Helper to generate next product code (just number: 1, 2, 3, ...)
 function getNextProductCode(products: Array<{ code: string }>) {
   if (!products.length) return "1";
   const numbers = products
@@ -70,7 +69,6 @@ function getNextProductCode(products: Array<{ code: string }>) {
 }
 
 function ProductsInner() {
-  // All state and setters come from context now!
   const {
     products,
     setProducts,
@@ -116,16 +114,14 @@ function ProductsInner() {
     setLoading,
   } = useProducts();
 
-  // Fetch products from backend
   const fetchProducts = async () => {
     try {
       setLoading(true);
       const response = await axios.get(
-        "https://chemtronics-backend.onrender.com/products"
+        "/products"
       );
 
       if (response.data && Array.isArray(response.data)) {
-        // Transform backend data to match frontend Product type if needed
         const transformedProducts: Product[] = response.data.map(
           (product: any) => ({
             id:
@@ -157,7 +153,6 @@ function ProductsInner() {
 
         setProducts(transformedProducts);
 
-        // Extract unique categories from products
         const uniqueCategories = Array.from(
           new Set(transformedProducts.map((p) => p.category).filter(Boolean))
         );
@@ -312,7 +307,7 @@ function ProductsInner() {
         });
       } else {
         const response = await axios.post(
-          "https://chemtronics-backend.onrender.com/products/create-product",
+          "/products/create-product",
           payload
         );
 

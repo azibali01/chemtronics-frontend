@@ -55,7 +55,7 @@ export default function ManageUsers() {
   const handleCreateUser = async () => {
     try{ if (!fullName || !role || !password) return;
 
-    const newUser = await axios.post("https://chemtronics-backend.onrender.com/auth/create-user", payload);
+    const newUser = await axios.post("/auth/create-user", payload);
 
     addUser(newUser.data);
     resetForm();

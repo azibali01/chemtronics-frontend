@@ -24,7 +24,7 @@ const Login = () => {
 
   const handleLogin = async () => {
     try {
-      const res = await axios.post("https://chemtronics-backend.onrender.com/auth/login", {
+      const res = await axios.post("/auth/login", {
         fullName,
         password,
       });

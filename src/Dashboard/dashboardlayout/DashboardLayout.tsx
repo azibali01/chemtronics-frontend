@@ -26,6 +26,7 @@ import {
   IconHome,
 } from "@tabler/icons-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
+import BrandToggle from "../../toggle/BrandToggle";
 
 type MenuChild = {
   label: string;
@@ -39,7 +40,6 @@ type MenuItem = {
   children?: MenuChild[];
   path?: string;
 };
-
 const menuItems: MenuItem[] = [
   {
     label: "Dashboard",
@@ -229,16 +229,7 @@ const menuItems: MenuItem[] = [
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/analytics",
       },
-      // {
-      //   label: "Stock Movement",
-      //   icon: <IconArrowRight size={16} />,
-      //   path: "/dashboard/user-rights",
-      // },
-      // {
-      //   label: "GST Analysis",
-      //   icon: <IconArrowRight size={16} />,
-      //   path: "/dashboard/gst-analysis",
-      // },
+     
     ],
   },
 ];
@@ -247,7 +238,6 @@ export default function DashboardLayout() {
   const [opened, setOpened] = useState<{ [key: string]: boolean }>({});
   const location = useLocation();
 
-  // Dynamically determine base path for sidebar links
   const basePath = "/dashboard";
 
   const toggle = (label: string) => {
@@ -321,6 +311,7 @@ export default function DashboardLayout() {
               }
             `}
           </style>
+            <BrandToggle />
           <Button
             size="xs"
             mr={100}
@@ -330,7 +321,13 @@ export default function DashboardLayout() {
           >
             Logout
           </Button>
+       
+       
+          
+            
+         
         </Group>
+       
       </AppShell.Header>
 
       <AppShell.Navbar p="xs" bg={"#F1FCF0"}>
