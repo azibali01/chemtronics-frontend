@@ -36,7 +36,6 @@ import {
 } from "@tabler/icons-react";
 import { useMemo, useEffect } from "react";
 import { notifications } from "@mantine/notifications";
-import axios from "axios";
 import {
   ProductsProvider,
   type Product,
@@ -118,7 +117,7 @@ function ProductsInner() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(
+      const response = await api.get(
         "/products"
       );
 
