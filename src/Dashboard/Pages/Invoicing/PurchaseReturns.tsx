@@ -116,7 +116,7 @@ export default function PurchaseReturnModal() {
   };
 
   useEffect(() => {
-    axios
+    api
       .get("/chart-of-account/all")
       .then((res) => {
         console.log("Raw accounts response:", res.data);
