@@ -42,6 +42,7 @@ import {
   type Product,
 } from "../../Context/Inventory/ProductsContext";
 import { useProducts } from "../../Context/Inventory/ProductsContext";
+import api from "../../../api_configuration/api";
 const money = (n: number) =>
   `${n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -306,7 +307,7 @@ function ProductsInner() {
           color: "green",
         });
       } else {
-        const response = await axios.post(
+        const response = await api.post(
           "/products/create-product",
           payload
         );
