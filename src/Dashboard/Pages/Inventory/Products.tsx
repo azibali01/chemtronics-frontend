@@ -310,7 +310,7 @@ function ProductsInner() {
           "/products/create-product",
           payload
         );
-
+        console.log("Create product response:", response);
         if (response.data) {
           const newProduct: Product = {
             id:
