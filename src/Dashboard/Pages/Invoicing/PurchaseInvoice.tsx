@@ -28,7 +28,7 @@ import {
   IconShoppingCart,
 } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import axios from "axios";
+import api from "../../../api_configuration/api";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { usePurchaseInvoice } from "../../Context/Invoicing/PurchaseInvoiceContext";
@@ -141,7 +141,7 @@ export default function PurchaseInvoice() {
     const fetchAllData = async () => {
       try {
         // Fetch Purchase Invoices
-        const invoicesResponse = await axios.get(
+        const invoicesResponse = await api.get(
           "/purchase-invoice/all-purchase-invoices"
         );
         if (invoicesResponse.data && Array.isArray(invoicesResponse.data)) {
@@ -227,7 +227,7 @@ export default function PurchaseInvoice() {
   useEffect(() => {
     const fetchInvoices = async () => {
       try {
-        const response = await axios.get(
+        const response = await api.get(
           "/purchase-invoice/all-purchase-invoices" // Changed path
         );
         if (response.data && Array.isArray(response.data)) {
@@ -267,7 +267,7 @@ export default function PurchaseInvoice() {
     }
     const fetchProductCodes = async () => {
       try {
-        const res = await axios.get(
+        const res = await api.get(
           "/products"
         );
         if (Array.isArray(res.data)) {
@@ -1143,7 +1143,7 @@ export default function PurchaseInvoice() {
 
                 if (editInvoice) {
                   // Update existing invoice
-                  const response = await axios.put(
+                  const response = await api.put(
                     `/purchase-invoice/update-purchase-invoice/${editInvoice.id}`, // Changed path
                     payload
                   );
@@ -1163,7 +1163,7 @@ export default function PurchaseInvoice() {
                   setEditInvoice(null);
                 } else {
                   // Create new invoice
-                  const response = await axios.post(
+                  const response = await api.post(
                     "/purchase-invoice/create-purchase-invoice", // Changed path
                     payload
                   );
@@ -1230,7 +1230,7 @@ export default function PurchaseInvoice() {
             onClick={async () => {
               if (deleteInvoice) {
                 try {
-                  await axios.delete(
+                  await api.delete(
                     `/purchase-invoice/delete-purchase-invoice/${deleteInvoice.id}` // Changed path
                   );
 

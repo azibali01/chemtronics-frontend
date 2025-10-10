@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import axios from "axios";
+import api from "../../../api_configuration/api";
 import {
   Table,
   Button,
@@ -62,7 +62,7 @@ const AccountsOpeningBalances: React.FC = () => {
       credit: balances[acc.code]?.credit || 0,
     }));
     try {
-      await axios.post(
+      await api.post(
         "/opening-balances",
         payload
       );

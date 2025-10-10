@@ -25,7 +25,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useSalesInvoice } from "../../Context/Invoicing/SalesInvoiceContext";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
-import axios from "axios";
+import api from "../../../api_configuration/api";
 import { notifications } from "@mantine/notifications";
 
 export interface InvoiceItem {
@@ -154,7 +154,7 @@ export default function SalesInvoicePage() {
   useEffect(() => {
     const fetchAccounts = async () => {
       try {
-        const res = await axios.get(
+        const res = await api.get(
           "/chart-of-account"
         );
         if (Array.isArray(res.data)) {
@@ -284,7 +284,7 @@ export default function SalesInvoicePage() {
     }
     const fetchProductCodes = async () => {
       try {
-        const res = await axios.get(
+        const res = await api.get(
           "/products"
         );
         if (Array.isArray(res.data)) {
@@ -318,7 +318,7 @@ export default function SalesInvoicePage() {
 
   const fetchSalesInvoices = async () => {
     try {
-      const response = await axios.get(
+      const response = await api.get(
         "/sale-invoice"
       );
       // Map backend 'products' to frontend 'items' for table compatibility
@@ -372,7 +372,7 @@ export default function SalesInvoicePage() {
         products: items,
       };
 
-      const response = await axios.post(
+      const response = await api.post(
         "/sale-invoice",
         payload
       );
@@ -427,7 +427,7 @@ export default function SalesInvoicePage() {
         province,
       };
 
-      const response = await axios.put(
+      const response = await api.put(
         `/sale-invoice/${editInvoice?.id}`,
         payload
       );
@@ -476,7 +476,7 @@ export default function SalesInvoicePage() {
 
   const deleteSalesInvoice = async (invoiceId: number) => {
     try {
-      await axios.delete(
+      await api.delete(
         `/sale-invoice/${invoiceId}`
       );
 

@@ -38,7 +38,7 @@
 [32m+[m[32m    const fetchAllData = async () => {[m
 [32m+[m[32m      try {[m
 [32m+[m[32m        // Fetch Purchase Invoices[m
-[32m+[m[32m        const invoicesResponse = await axios.get([m
+[32m+[m[32m        const invoicesResponse = await api.get([m
 [32m+[m[32m          "/purchase-invoice/all-purchase-invoices"[m
 [32m+[m[32m        );[m
 [32m+[m[32m        if (invoicesResponse.data && Array.isArray(invoicesResponse.data)) {[m
@@ -46,7 +46,7 @@
 [32m+[m[32m        }[m
 [32m+[m
 [32m+[m[32m        // Fetch Suppliers from backend[m
-[32m+[m[32m        const suppliersResponse = await axios.get([m
+[32m+[m[32m        const suppliersResponse = await api.get([m
 [32m+[m[32m          "/suppliers"[m
 [32m+[m[32m        );[m
 [32m+[m[32m        if (suppliersResponse.data && Array.isArray(suppliersResponse.data)) {[m
@@ -133,7 +133,7 @@
    useEffect(() => {[m
      const fetchInvoices = async () => {[m
        try {[m
-         const response = await axios.get([m
+         const response = await api.get([m
 [31m-          "/purchase-invoices"[m
 [32m+[m[32m          "/purchase-invoice/all-purchase-invoices" // Changed path[m
          );[m

@@ -11,7 +11,7 @@ import {
 } from "@mantine/core";
 import { IconDownload } from "@tabler/icons-react";
 import { useMemo, useState, useEffect } from "react";
-import axios from "axios";
+import api from "../../../api_configuration/api";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -46,9 +46,9 @@ export default function StockLedger() {
       try {
         // Fetch products, sales, and purchase invoices
         const [productsRes, salesRes, purchaseRes] = await Promise.all([
-          axios.get("/products"),
-          axios.get("/sale-invoice"),
-          axios.get(
+          api.get("/products"),
+          api.get("/sale-invoice"),
+          api.get(
             "/purchase-invoice/all-purchase-invoices"
           ),
         ]);

@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import axios from "axios";
+import api from "../../../api_configuration/api";
  
  
 
@@ -106,7 +106,7 @@ export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({ chi
   useEffect(() => {
     const fetchAccounts = async () => {
       try {
-        const res = await axios.get(
+        const res = await api.get(
           "/chart-of-account"
         );
         console.log("API response:", res.data);

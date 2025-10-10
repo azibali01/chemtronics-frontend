@@ -27,7 +27,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { usePurchaseReturns } from "../../Context/Invoicing/PurchaseReturnsContext";
 import { useProducts } from "../../Context/Inventory/ProductsContext";
-import axios from "axios";
+import api from "../../../api_configuration/api";
 import { notifications } from "@mantine/notifications";
 
 declare module "jspdf" {
@@ -215,7 +215,7 @@ export default function PurchaseReturnModal() {
   // Function to fetch all purchase returns from backend
   const fetchPurchaseReturns = async () => {
     try {
-      const response = await axios.get(
+      const response = await api.get(
         "/purchase-return"
       ); // Changed path
       setReturns(response.data);
@@ -253,7 +253,7 @@ export default function PurchaseReturnModal() {
         amount: returnData.amount,
       };
 
-      const response = await axios.post(
+      const response = await api.post(
         "/purchase-return",
         payload
       );
@@ -316,7 +316,7 @@ export default function PurchaseReturnModal() {
         amount: returnData.amount,
       };
 
-      const response = await axios.put(
+      const response = await api.put(
         `/purchase-return/${returnData.id}`,
         payload
       );
@@ -347,7 +347,7 @@ export default function PurchaseReturnModal() {
   // Function to delete purchase return
   const deletePurchaseReturn = async (returnId: string) => {
     try {
-      await axios.delete(
+      await api.delete(
         `/purchase-return/${returnId}`
       ); // Changed path
 
@@ -733,7 +733,7 @@ export default function PurchaseReturnModal() {
     }
     const fetchProductCodes = async () => {
       try {
-        const res = await axios.get(
+        const res = await api.get(
           "/products"
         );
         if (Array.isArray(res.data)) {

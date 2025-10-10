@@ -27,10 +27,10 @@ import {
   IconCurrencyDollar,
 } from "@tabler/icons-react";
 // Tree view component for hierarchy
-import axios from "axios";
 import type { AccountNode } from "../../Context/ChartOfAccountsContext";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import type { JSX } from "react/jsx-runtime";
+import api from "../../../api_configuration/api";
 
 function ChartOfAccounts() {
   const { accounts, setAccounts } = useChartOfAccounts();
@@ -176,12 +176,12 @@ function ChartOfAccounts() {
     };
     try {
       if (editing && editing._id) {
-        await axios.put(
+        await api.put(
           `/chart-of-account/${editing._id}`,
           payload
         );
       } else {
-        await axios.post(
+        await api.post(
           "/chart-of-account",
           payload
         );
@@ -254,7 +254,7 @@ function ChartOfAccounts() {
   const confirmDelete = async () => {
     if (deleteId) {
       try {
-        await axios.delete(
+        await api.delete(
           `/chart-of-account/${deleteId}`
         );
         await fetchAccounts(setAccounts);
@@ -949,7 +949,7 @@ function countAccountsByParentCode(
 
 async function fetchAccounts(setAccounts: (accs: AccountNode[]) => void) {
   try {
-    const res = await axios.get(
+    const res = await api.get(
       "/chart-of-account"
     );
     if (Array.isArray(res.data)) {

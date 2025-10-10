@@ -13,7 +13,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { useState } from "react";
 import { useAuth } from "../Context/AuthContext";
 import { useNavigate } from "react-router";
-import axios from "axios";
+import api from "../../api_configuration/api";
 
 const Login = () => {
   const { login } = useAuth();
@@ -24,7 +24,7 @@ const Login = () => {
 
   const handleLogin = async () => {
     try {
-      const res = await axios.post("/auth/login", {
+      const res = await api.post("/auth/login", {
         fullName,
         password,
       });

@@ -22,7 +22,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useUserContext } from "../../Context/Company & Users/UserContext";
-import axios from "axios";
+import api from "../../../api_configuration/api";
 
 export default function ManageUsers() {
   const { users, addUser, updateUser, deleteUser } = useUserContext();
@@ -55,7 +55,7 @@ export default function ManageUsers() {
   const handleCreateUser = async () => {
     try{ if (!fullName || !role || !password) return;
 
-    const newUser = await axios.post("/auth/create-user", payload);
+    const newUser = await api.post("/auth/create-user", payload);
 
     addUser(newUser.data);
     resetForm();

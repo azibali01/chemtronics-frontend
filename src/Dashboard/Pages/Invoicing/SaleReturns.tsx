@@ -33,7 +33,7 @@ import {
   type SaleReturnItem,
 } from "../../Context/Invoicing/SaleReturnsContext";
 import { useProducts } from "../../Context/Inventory/ProductsContext";
-import axios from "axios";
+import api from "../../../api_configuration/api";
 import { notifications } from "@mantine/notifications";
 
 function SaleReturnsInner() {
@@ -321,7 +321,7 @@ function SaleReturnsInner() {
   // Function to fetch all sale returns from backend
   const fetchSaleReturns = async () => {
     try {
-      const response = await axios.get(
+      const response = await api.get(
         "/sale-return"
       ); // Changed path
       setReturns(response.data);
@@ -351,7 +351,7 @@ function SaleReturnsInner() {
         amount: returnData.amount,
       };
 
-      const response = await axios.post(
+      const response = await api.post(
         "/sale-return", // Changed path
         payload
       );
@@ -396,7 +396,7 @@ function SaleReturnsInner() {
         amount: returnData.amount,
       };
 
-      const response = await axios.put(
+      const response = await api.put(
         `/sale-return/${returnData.id}`, // Changed path
         payload
       );
@@ -430,7 +430,7 @@ function SaleReturnsInner() {
   // Function to delete sale return
   const deleteSaleReturn = async (returnId: string) => {
     try {
-      await axios.delete(
+      await api.delete(
         `/sale-return/${returnId}`
       ); // Changed path
 
