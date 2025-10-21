@@ -13,8 +13,8 @@ const BrandToggle: React.FC = () => {
 
   return (
     <Group align="center" gap="sm">
-      <Text fw={!isHydroworx ? 700 : 400} c={!isHydroworx ? "blue" : "gray"}>
-        Chemtronics
+      <Text fw={!isHydroworx ? 700 : 400} c={!isHydroworx ? "#0A6802" : "gray"}>
+        Chemtronix
       </Text>
       <Switch
         checked={isHydroworx}

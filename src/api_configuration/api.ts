@@ -1,7 +1,9 @@
- import axios from "axios";
+// src/api_configuration/api.ts
+import axios from "axios";
 
 const api = axios.create({
   baseURL: "https://chemtronics-backend.onrender.com",
+  withCredentials: true, // ✅ Important for CORS + cookies
 });
 
 api.interceptors.request.use((config) => {

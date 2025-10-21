@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Card,
   Group,
@@ -321,9 +320,7 @@ function SaleReturnsInner() {
   // Function to fetch all sale returns from backend
   const fetchSaleReturns = async () => {
     try {
-      const response = await api.get(
-        "/sale-return"
-      ); // Changed path
+      const response = await api.get("/sale-return"); // Changed path
       setReturns(response.data);
     } catch (error) {
       console.error("Error fetching sale returns:", error);
@@ -430,9 +427,7 @@ function SaleReturnsInner() {
   // Function to delete sale return
   const deleteSaleReturn = async (returnId: string) => {
     try {
-      await api.delete(
-        `/sale-return/${returnId}`
-      ); // Changed path
+      await api.delete(`/sale-return/${returnId}`); // Changed path
 
       // Remove from local state after successful backend deletion
       setReturns((prev) => prev.filter((r) => r.id !== returnId));

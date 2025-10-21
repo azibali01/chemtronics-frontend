@@ -229,7 +229,6 @@ const menuItems: MenuItem[] = [
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/analytics",
       },
-     
     ],
   },
 ];
@@ -311,7 +310,7 @@ export default function DashboardLayout() {
               }
             `}
           </style>
-            <BrandToggle />
+
           <Button
             size="xs"
             mr={100}
@@ -321,13 +320,7 @@ export default function DashboardLayout() {
           >
             Logout
           </Button>
-       
-       
-          
-            
-         
         </Group>
-       
       </AppShell.Header>
 
       <AppShell.Navbar p="xs" bg={"#F1FCF0"}>
@@ -421,6 +414,7 @@ export default function DashboardLayout() {
             </div>
           ))}
         </ScrollArea>
+        <BrandToggle />
       </AppShell.Navbar>
 
       <AppShell.Main>

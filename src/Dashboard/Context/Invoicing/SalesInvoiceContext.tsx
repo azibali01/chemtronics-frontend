@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
 
 type InvoiceItem = {
-  id: number;
+  id: string;
   code: string; // <-- string, not number
   product: string;
   hsCode: string;
@@ -15,7 +15,7 @@ type InvoiceItem = {
 };
 
 type Invoice = {
-  id: number;
+  id: string;
   invoiceNumber: string;
   invoiceDate: string;
   deliveryNumber?: string; // <-- changed

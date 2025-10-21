@@ -1,67 +1,51 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// import { useProducts } from "../../Context/Inventory/ProductsContext"; // Removed unused import
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  Card,
-  Text,
-  Group,
   Button,
-  Table,
-  Menu,
-  ActionIcon,
-  TextInput,
-  Grid,
   Modal,
-  NumberInput,
+  TextInput,
   Textarea,
-  Switch,
-  Pagination,
+  Group,
   Select,
+  Table,
+  Text,
 } from "@mantine/core";
-import { useCallback } from "react";
-import {
-  IconSearch,
-  IconDots,
-  IconTrash,
-  IconPencil,
-  IconDownload,
-  IconShoppingCart,
-} from "@tabler/icons-react";
-import { notifications } from "@mantine/notifications";
+import { IconPencil, IconPrinter, IconTrash } from "@tabler/icons-react";
 import api from "../../../api_configuration/api";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import { usePurchaseInvoice } from "../../Context/Invoicing/PurchaseInvoiceContext";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
-type Invoice = {
-  id: number;
-  number: string;
-  date: string;
+import type { AccountNode } from "../../Context/ChartOfAccountsContext";
+import { notifications } from "@mantine/notifications";
+import type { JSX } from "react/jsx-runtime";
+
+type Province = "Punjab" | "Sindh";
+
+interface Item {
+  id: string | number;
+  code?: string;
+  product?: string;
+  description?: string;
+  hsCode?: string;
+  qty?: number;
+  rate?: number;
+  exGSTRate?: number;
+  exGSTAmount?: number;
+}
+interface Invoice {
+  id?: string | number;
+  number?: string;
+  date?: string;
   supplierNo?: string;
   supplierTitle?: string;
   purchaseAccount?: string;
   purchaseTitle?: string;
   items?: Item[];
-  notes?: string;
-  gst?: boolean;
   amount?: number;
-  ntnNo?: string; // <-- Add NTN No here
-  partyBillNo?: string; // <-- Add this line
-  partyBillDate?: string; // <-- Add this line
-};
+  discount?: number;
+  ntnNo?: string;
+  partyBillNo?: string;
+  partyBillDate?: string;
+  notes?: string;
+}
 
-type Item = {
-  id: number;
-  code: number;
-  hsCode: string; // <-- Add this line
-  product: string;
-  description: string;
-  unit: string;
-  qty: number;
-  rate: number;
-};
-
-// HS Code mapping and GST logic
 const hsCodeTypeMap: Record<
   string,
   "Chemicals" | "Equipments" | "Pumps" | "Services"
@@ -72,7 +56,8 @@ const hsCodeTypeMap: Record<
   "9833": "Services",
 };
 
-function getTaxRate(hsCode: string, province: "Punjab" | "Sindh") {
+function getTaxRate(hsCode: string | undefined, province: Province) {
+  if (!hsCode) return 0;
   const type = hsCodeTypeMap[hsCode];
   if (!type) return 0;
   if (type === "Services") {
@@ -80,1204 +65,1079 @@ function getTaxRate(hsCode: string, province: "Punjab" | "Sindh") {
   }
   return 18;
 }
+const hsOptions = Object.entries(hsCodeTypeMap).map(([code, type]) => ({
+  value: code,
+  label: `${code} — ${type}`,
+}));
+const numberToWordsLocal = (n: number) =>
+  n ? String(n).toUpperCase() : "ZERO";
 
-export default function PurchaseInvoice() {
-  const { invoices, setInvoices } = usePurchaseInvoice();
-  // Removed unused products destructuring from useProducts
-  const { accounts } = useChartOfAccounts(); // Add this line
-
-  // Remove hardcoded data and add state for dynamic data
-  type Account = {
-    code: string | number;
-    name: string;
-    parentAccount?: string;
-    isParty?: boolean;
-    accountName?: string;
-    accountType?: string;
-    address?: string;
-    phoneNo?: string;
-    ntn?: string;
-    children?: Account[];
-  };
-  // (removed duplicate flattenAccounts declaration)
-  // const [purchaseAccounts, setPurchaseAccounts] = useState<Account[]>([]);
-
-  // Move flattenAccounts above useEffect to avoid TDZ error
-  // (removed duplicate flattenAccounts definition)
-
-  // Fetch all required data from backend on component mount
-  // (moved useEffect below flattenAccounts definition)
-
-  // --- flattenAccounts must be defined before this useEffect ---
-
-  // Helper function to flatten Chart of Accounts
-  const flattenAccounts = useCallback(
-    (nodes: (Account & { children?: Account[] })[]): Account[] => {
-      let result: Account[] = [];
-      nodes.forEach((node) => {
-        result.push({
-          code: node.code,
-          name: node.name,
-          parentAccount: node.parentAccount,
-          isParty: node.isParty,
-          accountName: node.accountName,
-          accountType: node.accountType,
-          address: node.address,
-          phoneNo: node.phoneNo,
-          ntn: node.ntn,
-        });
-        if (node.children && node.children.length > 0) {
-          result = result.concat(flattenAccounts(node.children));
-        }
-      });
-      return result;
-    },
-    []
-  );
-
-  // --- flattenAccounts must be defined before this useEffect ---
-
-  useEffect(() => {
-    const fetchAllData = async () => {
-      try {
-        // Fetch Purchase Invoices
-        const invoicesResponse = await api.get(
-          "/purchase-invoice/all-purchase-invoices"
-        );
-        if (invoicesResponse.data && Array.isArray(invoicesResponse.data)) {
-          setInvoices(invoicesResponse.data);
-        }
-
-        // Extract Purchase Accounts and Supplier Accounts from Chart of Accounts
-        // if (accounts && accounts.length > 0) {
-        //   const flatAccounts = flattenAccounts(accounts);
-        //   const purchaseAccountsList = flatAccounts.filter(
-        //     (account: Account) =>
-        //       (typeof account.code === "string" &&
-        //         (account.code.startsWith("5") ||
-        //           account.code.startsWith("131"))) ||
-        //       account.name?.toLowerCase().includes("purchase") ||
-        //       account.name?.toLowerCase().includes("stock")
-        //   );
-        //   setPurchaseAccounts(purchaseAccountsList);
-        // }
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        notifications.show({
-          title: "Error",
-          message: "Failed to fetch required data",
-          color: "red",
-        });
-      }
-    };
-
-    fetchAllData();
-  }, [setInvoices, accounts, flattenAccounts]);
-
-  const flatAccounts = flattenAccounts(accounts);
-  console.log("Full flattened accounts:", flatAccounts);
-  const supplierAccounts = flatAccounts.filter(
-    (acc: Account) => acc.accountType === "2210"
-  );
-  console.log(
-    "Filtered supplierAccounts (accountType === '2210'):",
-    supplierAccounts
-  );
-  // Supplier select options from backend supplierAccounts
-  const supplierSelectOptions =
-    supplierAccounts.length > 0
-      ? supplierAccounts
-          .filter((supplier: Account) => supplier.accountName)
-          .map((supplier: Account) => ({
-            value: supplier.accountName ?? "",
-            label: supplier.accountName ?? supplier.name ?? "",
-            data: supplier,
-          }))
-      : [{ value: "", label: "No supplier found", disabled: true }];
-
-  // const purchaseAccountOptions = purchaseAccounts.map((account) => ({
-  //   value: String(account.code),
-  //   label: `${account.code} - ${account.name}`,
-  // }));
-
-  // Function to handle supplier selection
-  const handleSupplierSelect = (selectedValue: string) => {
-    const selectedSupplier = supplierAccounts.find(
-      (s: Account) => s.accountName === selectedValue
-    );
-    if (selectedSupplier) {
-      setSupplierNo(selectedSupplier.accountName || "");
-      setSupplierTitle(selectedSupplier.accountName || selectedSupplier.name);
-      setNtnNo(selectedSupplier.ntn || "");
-    }
-  };
-
-  // Function to handle purchase account selection
-  // const handlePurchaseAccountSelect = (selectedCode: string) => {
-  //   const selectedAccount = purchaseAccounts.find(
-  //     (account: Account) => String(account.code) === selectedCode
-  //   );
-  //   if (selectedAccount) {
-  //     setPurchaseAccount(selectedCode);
-  //     setPurchaseTitle(selectedAccount.name);
-  //   }
-  // };
-
-  // Fetch invoices from backend on component mount
-  useEffect(() => {
-    const fetchInvoices = async () => {
-      try {
-        const response = await api.get(
-          "/purchase-invoice/all-purchase-invoices" // Changed path
-        );
-        if (response.data && Array.isArray(response.data)) {
-          setInvoices(response.data);
-        }
-      } catch (error) {
-        console.error("Error fetching invoices:", error);
-        notifications.show({
-          title: "Error",
-          message: "Failed to fetch purchase invoices",
-          color: "red",
-        });
-      }
-    };
-
-    fetchInvoices();
-  }, [setInvoices]);
-
-  const [productCodes, setProductCodes] = useState<
+export default function PurchaseInvoice(): JSX.Element {
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const { accounts } = useChartOfAccounts() as { accounts: AccountNode[] };
+  const [productOptions, setProductOptions] = useState<
     {
       value: string;
       label: string;
       productName: string;
-      description: string;
-      rate: number;
+      description?: string;
+      rate?: number;
     }[]
   >([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Invoice | null>(null);
+
+  const [invoiceNumber, setInvoiceNumber] = useState("PUR-001");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [supplierNo, setSupplierNo] = useState("");
+  const [supplierTitle, setSupplierTitle] = useState("");
+  const [purchaseTitle, setPurchaseTitle] = useState("");
+  const [purchaseAccount, setPurchaseAccount] = useState("");
+  const [ntnNo, setNtnNo] = useState("");
+  const [discount, setDiscount] = useState<number>(0);
+  const [partyBillNo, setPartyBillNo] = useState("");
+  const [partyBillDate, setPartyBillDate] = useState("");
+  const [items, setItems] = useState<Item[]>([]);
+  const [notes, setNotes] = useState("");
+  const [province, setProvince] = useState<Province>("Punjab");
+
+  // derive Purchase Party accounts for supplier select
+  const purchasePartyOptions = (() => {
+    const results: {
+      value: string;
+      label: string;
+      account: { code: string; name: string };
+    }[] = [];
+    function walk(nodes: AccountNode[]) {
+      if (!Array.isArray(nodes)) return;
+      for (const n of nodes) {
+        if (!n) continue;
+        const accType = String(n.accountType || "").toLowerCase();
+        const accName = String(n.accountName ?? n.name ?? "").toLowerCase();
+        const accCode = String(
+          n.accountCode ?? n.code ?? n.selectedCode ?? ""
+        ).toString();
+        const parentCode = String((n as any).parentAccount ?? "").toLowerCase();
+        // broaden detection: include nodes that mention purchase/party/supplier in type or name,
+        // or have account codes (or parent codes) starting with '22' which is common for purchase parties
+        const isPurchaseParty =
+          accType.includes("purchase") ||
+          accType.includes("purchase party") ||
+          accType.includes("party") ||
+          accType.includes("supplier") ||
+          accName.includes("purchase") ||
+          accName.includes("purchase party") ||
+          accName.includes("party") ||
+          accName.includes("supplier") ||
+          accCode.startsWith("22") ||
+          parentCode.startsWith("22");
+        if (isPurchaseParty) {
+          results.push({
+            value: String(
+              n.accountCode ?? n.code ?? n.selectedCode ?? n._id ?? ""
+            ),
+            label: `${n.accountCode ?? n.code ?? ""} - ${
+              n.accountName ?? n.name ?? n.accountName ?? ""
+            }`,
+            account: {
+              code: String(n.accountCode ?? n.code ?? ""),
+              name: String(n.accountName ?? n.name ?? ""),
+            },
+          });
+        }
+        if (Array.isArray(n.children) && n.children.length)
+          walk(n.children as AccountNode[]);
+      }
+    }
+    walk(accounts as AccountNode[]);
+    // remove duplicate values (Mantine Select throws on duplicate option values)
+    return results.filter(
+      (r, idx, arr) => arr.findIndex((x) => x.value === r.value) === idx
+    );
+  })();
+
+  // derive Inventory accounts (Assets -> Inventories) for Purchase Account select
+  const inventoryOptions = (() => {
+    const results: {
+      value: string;
+      label: string;
+      account: { code: string; name: string };
+    }[] = [];
+    function walk(nodes: AccountNode[]) {
+      if (!Array.isArray(nodes)) return;
+      for (const n of nodes) {
+        if (!n) continue;
+        const isInventory =
+          String(n.accountType || "")
+            .toLowerCase()
+            .includes("inventory") ||
+          String(n.accountCode || n.code || "")
+            .toString()
+            .startsWith("13") ||
+          String(n.accountType || "")
+            .toLowerCase()
+            .includes("inventories");
+        if (isInventory) {
+          results.push({
+            value: String(
+              n.accountCode ?? n.code ?? n.selectedCode ?? n._id ?? ""
+            ),
+            label: `${n.accountCode ?? n.code ?? ""} - ${
+              n.accountName ?? n.name ?? n.accountName ?? ""
+            }`,
+            account: {
+              code: String(n.accountCode ?? n.code ?? ""),
+              name: String(n.accountName ?? n.name ?? ""),
+            },
+          });
+        }
+        if (Array.isArray(n.children) && n.children.length)
+          walk(n.children as AccountNode[]);
+      }
+    }
+    walk(accounts as AccountNode[]);
+    // remove duplicate values (Mantine Select throws on duplicate option values)
+    return results.filter(
+      (r, idx, arr) => arr.findIndex((x) => x.value === r.value) === idx
+    );
+  })();
+
+  const printRef = useRef<HTMLDivElement | null>(null);
+
+  const deleteInvoice = async (id: string | number) => {
+    // confirm deletion
+    // assumption: backend exposes DELETE /purchase-invoice/delete-purchase-invoice/:id
+    const ok = window.confirm("Delete this invoice? This cannot be undone.");
+    if (!ok) return;
+    try {
+      await api.delete(`/purchase-invoice/delete-purchase-invoice/${id}`);
+      notifications.show({
+        title: "Deleted",
+        message: "Invoice deleted",
+        color: "green",
+      });
+      // refresh list
+      await fetchInvoices();
+    } catch (err) {
+      console.error(err);
+      notifications.show({
+        title: "Error",
+        message: "Delete failed",
+        color: "red",
+      });
+    }
+  };
+
+  const fetchInvoices = async () => {
+    try {
+      const res = await api.get("/purchase-invoice/all-purchase-invoices");
+      if (Array.isArray(res.data)) {
+        const mapped = (res.data as unknown[]).map((rRaw) => {
+          const r = rRaw as Record<string, unknown>;
+          const itemsRaw = Array.isArray(r.items)
+            ? (r.items as unknown[])
+            : Array.isArray(r.products)
+            ? (r.products as unknown[])
+            : [];
+          const items = (itemsRaw as Record<string, unknown>[]).map(
+            (itRaw, idx) => {
+              const it = itRaw as Record<string, unknown>;
+              return {
+                id: (it.id ?? it._id ?? idx) as string | number,
+                code: String(
+                  it.code ?? it.productCode ?? it.sku ?? it.barcode ?? ""
+                ),
+                product: String(
+                  it.product ?? it.productName ?? it.name ?? it.title ?? ""
+                ),
+                description: String(
+                  it.description ?? it.productDescription ?? ""
+                ),
+                hsCode: String(it.hsCode ?? it.hs_code ?? ""),
+                qty: Number(it.qty ?? it.quantity ?? 0),
+                rate: Number(it.rate ?? it.unitPrice ?? it.price ?? 0),
+              } as Item;
+            }
+          );
+          return {
+            id: (r.id ?? r._id ?? Date.now()) as string | number,
+            number: String(r.number ?? r.invoiceNumber ?? r.invoiceNo ?? ""),
+            date: String(r.date ?? r.invoiceDate ?? r.invoice_date ?? ""),
+            // typed supplier object
+            supplierNo: String(
+              (r.supplier as Record<string, unknown> | undefined)?.code ??
+                (r.supplier as Record<string, unknown> | undefined)
+                  ?.accountCode ??
+                r.supplierNo ??
+                ""
+            ),
+            supplierTitle: String(
+              (r.supplier as Record<string, unknown> | undefined)?.name ??
+                (r.supplier as Record<string, unknown> | undefined)
+                  ?.accountName ??
+                r.supplierTitle ??
+                ""
+            ),
+            purchaseAccount: String(
+              r.purchaseAccount ??
+                r.purchase_account ??
+                (r.supplier as Record<string, unknown> | undefined)
+                  ?.purchaseAccount ??
+                (r.supplier as Record<string, unknown> | undefined)
+                  ?.purchase_account ??
+                ""
+            ),
+            purchaseTitle: String(
+              r.purchaseTitle ??
+                r.purchase_account ??
+                (r.supplier as Record<string, unknown> | undefined)
+                  ?.purchaseTitle ??
+                (r.supplier as Record<string, unknown> | undefined)
+                  ?.purchase_title ??
+                ""
+            ),
+            items,
+            amount: Number(r.totalAmount ?? r.amount ?? 0),
+            ntnNo: String(r.ntnNo ?? r.ntn ?? ""),
+            partyBillNo: String(r.partyBillNo ?? r.party_bill_no ?? ""),
+            partyBillDate: String(r.partyBillDate ?? r.party_bill_date ?? ""),
+            notes: String(r.notes ?? r.remarks ?? ""),
+          } as Invoice;
+        });
+        setInvoices(mapped);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
-    interface Product {
-      code: string;
-      productName?: string;
-      name?: string;
-      productDescription?: string;
-      description?: string;
-      unitPrice?: number;
-    }
-    const fetchProductCodes = async () => {
+    void fetchInvoices();
+    // fetch product options for dropdowns
+    const fetchProducts = async () => {
+      type Product = {
+        code?: string;
+        productCode?: string;
+        sku?: string;
+        productName?: string;
+        name?: string;
+        productDescription?: string;
+        description?: string;
+        unitPrice?: number;
+        price?: number;
+      };
       try {
-        const res = await api.get(
-          "/products"
-        );
+        const res = await api.get("/products");
         if (Array.isArray(res.data)) {
-          setProductCodes(
-            res.data.map((p: Product) => ({
-              value: p.code,
-              label: `${p.code} - ${p.productName || p.name || ""}`,
-              productName: p.productName || p.name || "",
-              description: p.productDescription || p.description || "",
-              rate: p.unitPrice || 0,
+          setProductOptions(
+            (res.data as Product[]).map((p) => ({
+              value: String(p.code ?? p.productCode ?? p.sku ?? ""),
+              label: `${p.code ?? p.productCode ?? p.sku ?? ""} - ${
+                p.productName ?? p.name ?? ""
+              }`,
+              productName: p.productName ?? p.name ?? "",
+              description: p.productDescription ?? p.description ?? "",
+              rate: Number(p.unitPrice ?? p.price ?? 0),
             }))
           );
         }
       } catch {
-        setProductCodes([]);
+        setProductOptions([]);
       }
     };
-    fetchProductCodes();
+    void fetchProducts();
   }, []);
 
-  // Removed unused productCodeOptions, productNameOptions, getProductByCode, getProductByName, handleProductCodeChange, handleProductNameChange
-
-  // Helper for header/footer
-  function addHeaderFooter(doc: jsPDF, title: string) {
-    doc.setFontSize(18);
-    doc.text("CHEMTRONIX ENGINEERING SOLUTION", 14, 14);
-    doc.setFontSize(12);
-    doc.text(title, 14, 24);
-
-    const pageHeight = doc.internal.pageSize.height || 297;
-    doc.setFontSize(10);
-    doc.text(
-      "*Computer generated invoice. No need for signature",
-      14,
-      pageHeight - 20
+  const resetForm = () => {
+    setEditing(null);
+    setInvoiceNumber(
+      `PUR-${(invoices.length + 1).toString().padStart(3, "0")}`
     );
-    doc.setFontSize(11);
-    doc.text(
-      "HEAD OFFICE: 552 Mujtaba Canal View, Main Qasimpur Canal Road, Multan",
-      14,
-      pageHeight - 14
-    );
-    doc.text(
-      "PLANT SITE: 108-1 Tufailabad Industrial Estate Multan",
-      14,
-      pageHeight - 8
-    );
-  }
-
-  // Export filtered invoices to PDF
-  const exportFilteredPDF = () => {
-    const doc = new jsPDF();
-    addHeaderFooter(doc, "Purchase Invoices");
-
-    autoTable(doc, {
-      startY: 32,
-      head: [
-        [
-          "Invoice #",
-          "Date",
-          "Supplier No",
-          "Supplier Title",
-          "Purchase Account",
-          "Purchase Title",
-          "GST",
-          "Amount",
-        ],
-      ],
-      body: filteredInvoices.map((inv) => [
-        inv.number || "",
-        inv.date,
-        inv.supplierNo || "",
-        inv.supplierTitle || "",
-        inv.purchaseAccount || "",
-        inv.purchaseTitle || "",
-        inv.gst ? "Yes" : "No",
-        inv.amount !== undefined ? inv.amount.toFixed(2) : "0.00",
-      ]),
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: [10, 104, 2] },
-      theme: "grid",
-      margin: { left: 14, right: 14 },
-      didDrawPage: (data) => {
-        const finalY = (data.cursor?.y ?? 60) + 8;
-        doc.setFontSize(12);
-        doc.text(`Total Invoices: ${filteredInvoices.length}`, 14, finalY);
-        doc.text(
-          `Total Amount: ${filteredInvoices
-            .reduce((sum, i) => sum + (i.amount || 0), 0)
-            .toFixed(2)}`,
-          80,
-          finalY
-        );
-      },
-    });
-
-    doc.save("purchase_invoices.pdf");
+    setDate(new Date().toISOString().slice(0, 10));
+    setSupplierNo("");
+    setSupplierTitle("");
+    setPurchaseTitle("");
+    setPurchaseAccount("");
+    setNtnNo("");
+    setPartyBillNo("");
+    setPartyBillDate("");
+    setItems([]);
+    setNotes("");
+    setModalOpen(true);
   };
 
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [search, setSearch] = useState("");
-  const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const openEdit = (raw: any) => {
+    const rawItems = raw.items ?? raw.products ?? [];
+    type RawItem = {
+      id?: string | number;
+      _id?: string | number;
+      product?: string;
+      productName?: string;
+      name?: string;
+      title?: string;
+      description?: string;
+      productDescription?: string;
+      hsCode?: string;
+      hs_code?: string;
+      qty?: number | string;
+      quantity?: number | string;
+      rate?: number | string;
+      unitPrice?: number | string;
+      price?: number | string;
+    };
+    const mapped: Item[] = (Array.isArray(rawItems) ? rawItems : []).map(
+      (it: RawItem & { code?: string; productCode?: string }, i: number) => ({
+        id: it.id ?? it._id ?? i,
+        code: it.code ?? it.productCode ?? "",
+        product: it.product ?? it.productName ?? it.name ?? it.title ?? "",
+        description: it.description ?? it.productDescription ?? "",
+        hsCode: it.hsCode ?? it.hs_code ?? "",
+        qty: Number(it.qty ?? it.quantity ?? 0),
+        rate: Number(it.rate ?? it.unitPrice ?? it.price ?? 0),
+      })
+    );
+    const supplierObj = raw.supplier ?? raw.party ?? {};
+    setInvoiceNumber(raw.number ?? raw.invoiceNumber ?? raw.invoiceNo ?? "");
+    setDate(
+      raw.date ??
+        raw.invoiceDate ??
+        raw.invoice_date ??
+        new Date().toISOString().slice(0, 10)
+    );
+    setSupplierNo(
+      raw.supplierNo ?? supplierObj.code ?? supplierObj.accountCode ?? ""
+    );
+    setSupplierTitle(
+      raw.supplierTitle ?? supplierObj.name ?? supplierObj.accountName ?? ""
+    );
+    setPurchaseTitle(
+      raw.purchaseTitle ??
+        raw.purchase_account ??
+        supplierObj.purchaseTitle ??
+        ""
+    );
+    setPurchaseAccount(
+      raw.purchaseAccount ??
+        raw.purchase_account ??
+        supplierObj.purchaseAccount ??
+        ""
+    );
+    setNtnNo(raw.ntnNo ?? supplierObj.ntn ?? supplierObj.salesTaxNo ?? "");
+    setDiscount(Number(raw.discount ?? 0));
+    setPartyBillNo(raw.partyBillNo ?? raw.party_bill_no ?? "");
+    setPartyBillDate(raw.partyBillDate ?? raw.party_bill_date ?? "");
+    setItems(mapped);
+    setNotes(raw.notes ?? raw.remarks ?? "");
+    setEditing({
+      id: raw.id ?? raw._id,
+      number: raw.number ?? raw.invoiceNumber ?? "",
+      date: raw.date ?? raw.invoiceDate ?? "",
+      supplierNo: supplierObj.code ?? "",
+      supplierTitle: supplierObj.name ?? "",
+      purchaseAccount:
+        supplierObj.purchaseAccount ??
+        raw.purchaseAccount ??
+        raw.purchase_account ??
+        "",
+      purchaseTitle: supplierObj.purchaseTitle ?? raw.purchaseTitle ?? "",
+      items: mapped,
+      amount: raw.totalAmount ?? raw.amount ?? 0,
+    });
+    setModalOpen(true);
+  };
 
-  const [invoiceNumber, setInvoiceNumber] = useState("PUR-004");
-  // const [vendor, setVendor] = useState(""); // Removed unused vendor state
-  const [date, setDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().slice(0, 10); // YYYY-MM-DD
-  });
-  // const [dueDate, setDueDate] = useState(""); // Removed unused dueDate state
-  const [includeGST, setIncludeGST] = useState(true);
-  const [province, setProvince] = useState<"Punjab" | "Sindh">("Punjab");
-  const [items, setItems] = useState<Item[]>([]);
-  const [notes, setNotes] = useState("");
-  const [supplierNo, setSupplierNo] = useState("");
-  const [supplierTitle, setSupplierTitle] = useState("");
-  const [purchaseAccount, setPurchaseAccount] = useState("");
-  const [purchaseTitle, setPurchaseTitle] = useState("");
-  const [ntnNo, setNtnNo] = useState(""); // <-- Add NTN No state
-
-  // Add state for Party Bill No and Party Bill Date
-  const [partyBillNo, setPartyBillNo] = useState("");
-  const [partyBillDate, setPartyBillDate] = useState("");
-
-  const totalPurchases = invoices.length;
-
-  const addItem = () => {
-    setItems([
-      ...items,
+  const addItem = () =>
+    setItems((s) => [
+      ...s,
       {
         id: Date.now(),
-        code: 1,
-        hsCode: "",
+        code: "",
         product: "",
         description: "",
-        unit: "",
+        hsCode: "",
         qty: 0,
         rate: 0,
+        exGSTRate: 0,
+        exGSTAmount: 0,
       },
     ]);
+  const updateItem = <K extends keyof Item>(
+    id: string | number,
+    field: K,
+    value: Item[K]
+  ) =>
+    setItems((s) =>
+      s.map((it) => (it.id === id ? { ...it, [field]: value } : it))
+    );
+  const removeItem = (id: string | number) =>
+    setItems((s) => s.filter((i) => i.id !== id));
+
+  const buildPrintableHtml = (invoice: Invoice) => {
+    const itemsList = invoice.items || [];
+    const subtotal = itemsList.reduce(
+      (s, it) => s + (it.qty || 0) * (it.rate || 0),
+      0
+    );
+    const salesTax = itemsList.reduce(
+      (s, it) =>
+        s +
+        ((it.qty || 0) * (it.rate || 0) * getTaxRate(it.hsCode, province)) /
+          100,
+      0
+    );
+    const grandTotal = subtotal + salesTax;
+
+    const rowsHtml = itemsList
+      .map((item, idx) => {
+        const gst = getTaxRate(item.hsCode, province);
+        const net = (item.qty || 0) * (item.rate || 0);
+        return `<tr><td style="border:1px solid #000;padding:8px;text-align:center">${
+          idx + 1
+        }</td><td style="border:1px solid #000;padding:8px">${String(
+          item.product || item.description || ""
+        ).replace(
+          /</g,
+          "&lt;"
+        )}</td><td style="border:1px solid #000;padding:8px;text-align:center">${
+          item.hsCode || ""
+        }</td><td style="border:1px solid #000;padding:8px;text-align:center">${gst.toFixed(
+          2
+        )}</td><td style="border:1px solid #000;padding:8px;text-align:center">${(
+          item.rate || 0
+        ).toFixed(
+          2
+        )}</td><td style="border:1px solid #000;padding:8px;text-align:center">${(
+          item.qty || 0
+        ).toFixed(
+          2
+        )}</td><td style="border:1px solid #000;padding:8px;text-align:right">${net.toFixed(
+          2
+        )}</td></tr>`;
+      })
+      .join("");
+
+    const desiredRows = 8;
+    const paddingCount = Math.max(0, desiredRows - itemsList.length);
+    const paddingRows = Array.from({ length: paddingCount })
+      .map(
+        () =>
+          `<tr><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td></tr>`
+      )
+      .join("");
+
+    const html =
+      `<!doctype html><html><head><meta charset="utf-8"/><title>Invoice</title><style>body{font-family:Arial,sans-serif;color:#222;margin:24px}table{width:100%;border-collapse:collapse;border:2px solid #000}th,td{border:1px solid #000;padding:8px;font-size:12px;vertical-align:top}thead th:nth-child(2),tbody td:nth-child(2){width:40%}tbody tr{height:48px}.right{text-align:right}.muted{color:#666;font-size:12px}</style></head><body>` +
+      `<div style="padding:0;margin-bottom:12px"><img src="/Header.jpg" style="display:block;width:100%;height:auto;max-height:120px;object-fit:contain"/></div>` +
+      `<div style="display:flex;justify-content:space-between;margin-bottom:12px"><div style="border:1px solid #222;padding:8px;flex:1;margin-right:8px"><div><strong>Title:</strong> ${
+        invoice.supplierTitle || ""
+      }</div><div><strong>NTN:</strong> ${
+        invoice.ntnNo || ""
+      }</div></div><div style="width:320px;border:1px solid #222;padding:8px"><div><strong>Invoice No:</strong> ${
+        invoice.number || ""
+      }</div><div><strong>Invoice Date:</strong> ${
+        invoice.date || ""
+      }</div><div><strong>Supplier No:</strong> ${
+        invoice.supplierNo || ""
+      }</div></div></div>` +
+      `<table><thead><tr><th>SR No</th><th>Description</th><th>HS Code</th><th>GST %</th><th>Rate</th><th>Qty</th><th>Net Amount</th></tr></thead><tbody>` +
+      rowsHtml +
+      paddingRows +
+      `</tbody></table>` +
+      `<div style="margin-top:8px;font-size:12px;color:#666">*Computer generated invoice. No need for signature</div>` +
+      `<div style="margin-top:12px;display:flex;justify-content:flex-end"><div style="width:360px;border:1px solid #222;padding:12px"><div style="display:flex;justify-content:space-between"><div>Gross Total:</div><div>${subtotal.toFixed(
+        2
+      )}</div></div><div style="display:flex;justify-content:space-between"><div>Sales Tax:</div><div>${salesTax.toFixed(
+        2
+      )}</div></div><div style="display:flex;justify-content:space-between"><div>Discount:</div><div>${(
+        invoice.discount ?? 0
+      ).toFixed(
+        2
+      )}</div></div><hr/><div style="display:flex;justify-content:space-between;font-weight:bold"><div>Grand Total Inclusive Tax:</div><div>${(
+        grandTotal - (invoice.discount ?? 0)
+      ).toFixed(
+        2
+      )}</div></div><div style="margin-top:10px;font-size:12px">Amount in words: ${numberToWordsLocal(
+        Math.round(grandTotal - (invoice.discount ?? 0))
+      )}</div></div></div>` +
+      `<div style="margin-top:18px;page-break-inside:avoid"><img src="/Footer.jpg" style="width:100%;max-height:120px;object-fit:contain"/></div>` +
+      `</body></html>`;
+
+    return html;
   };
 
-  // Subtotal, GST, etc. calculations
-  const subtotal = items.reduce((sum, item) => sum + item.qty * item.rate, 0);
-  const gst = includeGST ? subtotal * 0.18 : 0;
-  const total = subtotal + gst;
-
-  // Ex Gst Amount and Total GST (auto-calculated per item)
-  const exGstAmount = items.reduce(
-    (acc, item) =>
-      acc +
-      (item.qty * item.rate * getTaxRate(item.hsCode ?? "", province)) / 100,
-    0
-  );
-  const totalGst = items.reduce(
-    (acc, item) => acc + getTaxRate(item.hsCode ?? "", province),
-    0
-  );
-
-  const removeItem = (id: number) => {
-    setItems(items.filter((i) => i.id !== id));
+  const handlePrintWindow = (invoice: Invoice) => {
+    const html = buildPrintableHtml(invoice);
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => {
+      try {
+        w.focus();
+        w.print();
+      } catch (err) {
+        console.error(err);
+      }
+    }, 250);
   };
 
-  const updateItem = (
-    id: number,
-    field: keyof Item,
-    value: Item[keyof Item]
-  ) => {
-    setItems(items.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
+  const onModalPrint = () => {
+    const printable: Invoice = {
+      id: editing?.id ?? Date.now(),
+      number: invoiceNumber,
+      date,
+      supplierNo,
+      supplierTitle,
+      items,
+      amount: items.reduce((s, it) => s + (it.qty || 0) * (it.rate || 0), 0),
+      discount,
+      ntnNo,
+      partyBillNo,
+      partyBillDate,
+      notes,
+    };
+    handlePrintWindow(printable);
   };
 
-  const filteredInvoices = invoices.filter(
-    (inv) =>
-      (inv.number || "").toLowerCase().includes(search.toLowerCase()) &&
-      (!fromDate || new Date(inv.date) >= new Date(fromDate)) &&
-      (!toDate || new Date(inv.date) <= new Date(toDate))
-  );
-
-  // Single Invoice PDF
-  const exportPDF = (invoice: Invoice) => {
-    const doc = new jsPDF();
-    addHeaderFooter(doc, `Purchase Invoice: ${invoice.number}`);
-
-    autoTable(doc, {
-      startY: 32,
-      head: [["Field", "Value"]],
-      body: [
-        ["Invoice #", invoice.number],
-        ["Date", invoice.date],
-        ["Supplier No", invoice.supplierNo || ""],
-        ["Supplier Title", invoice.supplierTitle || ""],
-        ["Purchase Account", invoice.purchaseAccount || ""],
-        ["Purchase Title", invoice.purchaseTitle || ""],
-        ["GST", invoice.gst ? "Yes" : "No"],
-        ["Notes", invoice.notes || ""],
-        [
-          "Amount",
-          invoice.amount !== undefined ? invoice.amount.toFixed(2) : "0.00",
-        ],
-      ],
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: [10, 104, 2] },
-      theme: "grid",
-      margin: { left: 14, right: 14 },
-    });
-
-    if (invoice.items && invoice.items.length > 0) {
-      autoTable(doc, {
-        startY: (doc as jsPDF & { lastAutoTable?: { finalY?: number } })
-          .lastAutoTable?.finalY
-          ? ((doc as jsPDF & { lastAutoTable?: { finalY?: number } })
-              .lastAutoTable?.finalY ?? 60) + 8
-          : 60,
-        head: [
-          [
-            "Code",
-            "Product Name",
-            "Description",
-            "Unit",
-            "Qty",
-            "Rate",
-            "Amount",
-          ],
-        ],
-        body: (invoice.items ?? []).map((item) => [
-          item.code,
-          item.product,
-          item.description,
-          item.unit,
-          item.qty,
-          item.rate,
-          (item.qty * item.rate).toFixed(2),
-        ]),
-        styles: { fontSize: 10 },
-        headStyles: { fillColor: [10, 104, 2] },
-        theme: "grid",
-        margin: { left: 14, right: 14 },
-        didDrawPage: (data) => {
-          const finalY = (data.cursor?.y ?? 68) + 8;
-          doc.setFontSize(12);
-          doc.text(
-            `Subtotal: ${(invoice.items ?? [])
-              .reduce((sum, i) => sum + i.qty * i.rate, 0)
-              .toFixed(2)}`,
-            14,
-            finalY
-          );
-
-          doc.text(
-            `GST (18%): ${
-              invoice.gst
-                ? (
-                    (invoice.items ?? []).reduce(
-                      (sum, i) => sum + i.qty * i.rate,
-                      0
-                    ) * 0.18 || 0
-                  ).toFixed(2)
-                : "0.00"
-            }`,
-            110,
-            finalY
-          );
-          doc.text(
-            `Total: ${
-              invoice.amount !== undefined ? invoice.amount.toFixed(2) : "0.00"
-            }`,
-            170,
-            finalY
-          );
+  const save = async () => {
+    try {
+      const payload = {
+        invoiceNumber,
+        invoiceDate: date,
+        partyBillNo,
+        partyBillDate,
+        supplier: {
+          name: supplierTitle,
+          code: supplierNo,
+          purchaseAccount,
+          purchaseTitle,
         },
+        items,
+        notes,
+        discount,
+        totalAmount:
+          items.reduce((s, it) => s + (it.qty || 0) * (it.rate || 0), 0) -
+          (discount || 0),
+      };
+      if (editing) {
+        await api.put(
+          `/purchase-invoice/update-purchase-invoice/${editing.id}`,
+          payload
+        );
+        notifications.show({
+          title: "Success",
+          message: "Updated",
+          color: "green",
+        });
+      } else {
+        await api.post(`/purchase-invoice/create-purchase-invoice`, payload);
+        notifications.show({
+          title: "Success",
+          message: "Created",
+          color: "green",
+        });
+      }
+      setModalOpen(false);
+      try {
+        const res = await api.get("/purchase-invoice/all-purchase-invoices");
+        if (Array.isArray(res.data)) {
+          type RawInvoice = Record<string, unknown>;
+          const mapped = (res.data as unknown[]).map((r: unknown) => {
+            const obj = r as RawInvoice;
+            const id = (obj.id ?? obj._id ?? Date.now()) as string | number;
+            const number = (obj.number ??
+              obj.invoiceNumber ??
+              obj.invoiceNo ??
+              "") as string;
+            const date = (obj.date ??
+              obj.invoiceDate ??
+              obj.invoice_date ??
+              "") as string;
+            const supplierObj =
+              (obj.supplier as Record<string, unknown> | undefined) ??
+              undefined;
+            const supplierTitle =
+              (supplierObj && (supplierObj.name ?? supplierObj.accountName)) ??
+              obj.supplierTitle ??
+              "";
+            const supplierNo =
+              (supplierObj && (supplierObj.code ?? supplierObj.accountCode)) ??
+              obj.supplierNo ??
+              "";
+            const itemsRaw = Array.isArray(obj.items)
+              ? (obj.items as unknown[])
+              : Array.isArray(obj.products)
+              ? (obj.products as unknown[])
+              : [];
+            type RawItem = {
+              id?: string | number;
+              _id?: string | number;
+              code?: string;
+              productCode?: string;
+              sku?: string;
+              product?: string;
+              productName?: string;
+              name?: string;
+              description?: string;
+              productDescription?: string;
+              hsCode?: string;
+              hs_code?: string;
+              qty?: number;
+              quantity?: number;
+              rate?: number;
+              unitPrice?: number;
+              price?: number;
+            };
+            const items = (itemsRaw as RawItem[]).map(
+              (it: RawItem, idx: number) => {
+                return {
+                  id: it.id ?? it._id ?? idx,
+                  code: it.code ?? it.productCode ?? it.sku ?? "",
+                  product: it.product ?? it.productName ?? it.name ?? "",
+                  description: it.description ?? it.productDescription ?? "",
+                  hsCode: it.hsCode ?? it.hs_code ?? "",
+                  qty: Number(it.qty ?? it.quantity ?? 0),
+                  rate: Number(it.rate ?? it.unitPrice ?? it.price ?? 0),
+                };
+              }
+            );
+            const amount = (obj.totalAmount ?? obj.amount ?? 0) as number;
+
+            return {
+              id,
+              number,
+              date,
+              supplierTitle: String(supplierTitle),
+              supplierNo: String(supplierNo),
+              items,
+              amount,
+            } as Invoice;
+          });
+          setInvoices(mapped);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    } catch (e) {
+      console.error(e);
+      notifications.show({
+        title: "Error",
+        message: "Save failed",
+        color: "red",
       });
     }
-
-    doc.save(`${invoice.number}.pdf`);
   };
-
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
-  const paginatedInvoices = filteredInvoices.slice(
-    (page - 1) * pageSize,
-    page * pageSize
-  );
 
   return (
     <div>
-      <Group justify="space-between" mb="lg">
+      <Group justify="space-between" style={{ marginBottom: 12 }}>
         <Text size="xl" fw={700}>
           Purchase Invoice
         </Text>
-        <Button
-          color="#0A6802"
-          onClick={() => {
-            setInvoiceNumber(
-              "PUR-" + (invoices.length + 1).toString().padStart(3, "0")
-            );
-            // setVendor(""); // Removed reference to setVendor
-            setDate(new Date().toISOString().slice(0, 10)); // <-- Fix: set current date
-            // setDueDate(""); // Removed reference to setDueDate
-            setIncludeGST(true);
-            setItems([]);
-            setNotes("");
-            setCreateOpen(true);
-          }}
-        >
-          + Create Purchase Invoice
-        </Button>
+        <div>
+          <Button onClick={resetForm}>+ Create Purchase Invoice</Button>
+        </div>
       </Group>
 
-      <Grid mb="lg">
-        <Grid.Col span={{ base: 12, sm: 3 }}>
-          <Card shadow="sm" radius="md" p="lg" withBorder bg={"#F1FCF0"}>
-            <Group justify="space-between">
-              <Text>Total Purchases</Text>
-              <IconShoppingCart size={20} />
-            </Group>
-            <div style={{ marginTop: 10 }}>
-              <Text fw={700}>{totalPurchases}</Text>
-            </div>
-          </Card>
-        </Grid.Col>
-      </Grid>
-
-      <Card shadow="sm" radius="md" p="lg" bg={"#F1FCF0"} withBorder>
-        <Group justify="space-between" mb="md">
-          <Text fw={600}>Purchase Invoices</Text>
-        </Group>
-        <Group mb="md" gap={"xs"} grow>
-          <TextInput
-            label="Search"
-            placeholder="Search purchase invoices..."
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
-            leftSection={<IconSearch size={16} />}
-            style={{ minWidth: 220 }}
-          />
-          <TextInput
-            label="From Date"
-            type="date"
-            placeholder="From Date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.currentTarget.value)}
-            style={{ minWidth: 140 }}
-          />
-          <TextInput
-            label="To Date"
-            type="date"
-            placeholder="To Date"
-            value={toDate}
-            onChange={(e) => setToDate(e.currentTarget.value)}
-            style={{ minWidth: 140 }}
-          />
-          <Group mt={24} gap="xs">
-            <Button
-              variant="outline"
-              color="#0A6802"
-              onClick={() => {
-                setSearch("");
-                setFromDate("");
-                setToDate("");
-              }}
-            >
-              Clear
-            </Button>
-            <Button
-              variant="filled"
-              color="#0A6802"
-              leftSection={<IconDownload size={16} />}
-              onClick={exportFilteredPDF}
-            >
-              Export
-            </Button>
-          </Group>
-
-          <Group justify="flex-end" mb="md">
-            <Select
-              data={["5", "10", "20", "50"]}
-              value={pageSize.toString()}
-              onChange={(val) => {
-                setPageSize(Number(val));
-                setPage(1);
-              }}
-              label="Rows per page"
-              style={{ width: 120 }}
-              size="xs"
-            />
-          </Group>
-        </Group>
-
-        <Table highlightOnHover withTableBorder>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Invoice #</Table.Th>
-              <Table.Th>Invoice Date</Table.Th>
-              <Table.Th>Supplier No</Table.Th>
-              <Table.Th>Supplier Title</Table.Th>
-              <Table.Th>Purchase Account</Table.Th>
-              <Table.Th>Purchase Title</Table.Th>
-              <Table.Th>Code</Table.Th>
-              <Table.Th>Product Name</Table.Th>
-              <Table.Th>Description</Table.Th>
-              <Table.Th>Unit</Table.Th>
-              <Table.Th>Qty</Table.Th>
-              <Table.Th>Rate</Table.Th>
-              <Table.Th>Amount</Table.Th>
-              <Table.Th>Actions</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {paginatedInvoices.map((inv) => (
-              <Table.Tr key={inv.id}>
-                <Table.Td>{inv.number || ""}</Table.Td>
-                <Table.Td>{inv.date}</Table.Td>
-                <Table.Td>{inv.supplierNo || ""}</Table.Td>
-                <Table.Td>{inv.supplierTitle || ""}</Table.Td>
-                <Table.Td>{inv.purchaseAccount || ""}</Table.Td>
-                <Table.Td>{inv.purchaseTitle || ""}</Table.Td>
-                <Table.Td>{inv.items?.[0]?.code || ""}</Table.Td>
-                <Table.Td>{inv.items?.[0]?.product || ""}</Table.Td>
-                <Table.Td>{inv.items?.[0]?.description || ""}</Table.Td>
-                <Table.Td>{inv.items?.[0]?.unit || ""}</Table.Td>
-                <Table.Td>{inv.items?.[0]?.qty || ""}</Table.Td>
-                <Table.Td>{inv.items?.[0]?.rate || ""}</Table.Td>
-                <Table.Td>
-                  {inv.items?.[0]?.qty && inv.items?.[0]?.rate
-                    ? (inv.items[0].qty * inv.items[0].rate).toFixed(2)
-                    : ""}
-                </Table.Td>
-                <Table.Td>
-                  <Menu shadow="md" width={180}>
-                    <Menu.Target>
-                      <ActionIcon variant="subtle" color="#0A6802">
-                        <IconDots size={18} />
-                      </ActionIcon>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Item
-                        leftSection={<IconPencil size={14} />}
-                        onClick={() => {
-                          setInvoiceNumber(inv.number || "");
-                          setDate(inv.date);
-                          setIncludeGST(inv.gst ?? true);
-                          setItems(inv.items || []);
-                          setNotes(inv.notes || "");
-                          setSupplierNo(inv.supplierNo || "");
-                          setSupplierTitle(inv.supplierTitle || "");
-                          setPurchaseAccount(inv.purchaseAccount || "");
-                          setPurchaseTitle(inv.purchaseTitle || "");
-                          setNtnNo(inv.ntnNo || ""); // <-- add this line
-                          setPartyBillNo(inv.partyBillNo || ""); // <-- add this line
-                          setPartyBillDate(inv.partyBillDate || ""); // <-- add this line
-                          setEditInvoice(inv);
-                        }}
-                      >
-                        Edit
-                      </Menu.Item>
-                      <Menu.Item
-                        leftSection={<IconDownload size={14} />}
-                        onClick={() => exportPDF(inv)}
-                      >
-                        Export PDF
-                      </Menu.Item>
-                      <Menu.Item
-                        color="red"
-                        leftSection={<IconTrash size={14} />}
-                        onClick={() => setDeleteInvoice(inv)}
-                      >
-                        Delete
-                      </Menu.Item>
-                    </Menu.Dropdown>
-                  </Menu>
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-
-        <Group mt="md" justify="center">
-          <Pagination
-            value={page}
-            onChange={setPage}
-            total={Math.max(1, Math.ceil(filteredInvoices.length / pageSize))}
-            color="#0A6802"
-            radius="md"
-            size="md"
-            withControls
-          />
-        </Group>
-      </Card>
+      <Table striped>
+        <thead>
+          <tr>
+            <th>Invoice #</th>
+            <th>Date</th>
+            <th>Supplier</th>
+            <th>Purchase Account</th>
+            <th>Purchase Title</th>
+            <th>Amount</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {invoices.map((inv) => (
+            <tr key={String(inv.id)}>
+              <td>{inv.number}</td>
+              <td>{inv.date}</td>
+              <td>{inv.supplierTitle}</td>
+              <td>{(inv as Invoice).purchaseAccount || ""}</td>
+              <td>{(inv as Invoice).purchaseTitle || ""}</td>
+              <td>{(inv.amount ?? 0).toFixed(2)}</td>
+              <td>
+                <Group>
+                  <Button
+                    variant="subtle"
+                    onClick={() => openEdit(inv)}
+                    leftSection={<IconPencil size={14} />}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="subtle"
+                    color="red"
+                    onClick={() => deleteInvoice(inv.id ?? "")}
+                    leftSection={<IconTrash size={14} />}
+                  >
+                    Delete
+                  </Button>
+                </Group>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
 
       <Modal
-        opened={createOpen || !!editInvoice}
-        onClose={() => {
-          setCreateOpen(false);
-          setEditInvoice(null);
-        }}
-        title={editInvoice ? "Edit Invoice" : "Create Purchase Invoice"}
-        size="100%"
+        opened={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editing ? "Edit Purchase Invoice" : "Create Purchase Invoice"}
         centered
+        size="80%"
       >
-        <Grid>
-          <Grid.Col span={3}>
+        <div style={{ display: "grid", gap: 10 }}>
+          <Group>
             <TextInput
               label="Invoice Number"
               value={invoiceNumber}
               onChange={(e) => setInvoiceNumber(e.currentTarget.value)}
             />
-          </Grid.Col>
-          <Grid.Col span={3}>
             <TextInput
               label="Invoice Date"
               type="date"
               value={date}
               onChange={(e) => setDate(e.currentTarget.value)}
             />
-          </Grid.Col>
-          <Grid.Col span={3}>
+          </Group>
+
+          <Group>
             <TextInput
               label="Party Bill No"
               value={partyBillNo}
               onChange={(e) => setPartyBillNo(e.currentTarget.value)}
             />
-          </Grid.Col>
-          <Grid.Col span={3}>
             <TextInput
               label="Party Bill Date"
               type="date"
               value={partyBillDate}
               onChange={(e) => setPartyBillDate(e.currentTarget.value)}
             />
-          </Grid.Col>
+          </Group>
 
-          {/* Updated Supplier Selection with backend data */}
-          <Grid.Col span={6}>
+          <Group>
             <Select
-              label="Select Supplier"
-              placeholder="Choose supplier from list"
-              data={supplierSelectOptions}
+              label="Supplier (Purchase Party)"
+              data={purchasePartyOptions.map((p) => ({
+                value: p.value,
+                label: p.label,
+              }))}
               value={supplierNo}
-              onChange={(selectedValue) => {
-                if (selectedValue) {
-                  handleSupplierSelect(selectedValue);
+              onChange={(val) => {
+                const sel = purchasePartyOptions.find((p) => p.value === val);
+                if (sel) {
+                  setSupplierNo(sel.account.code);
+                  setSupplierTitle(sel.account.name);
+                } else {
+                  setSupplierNo("");
+                  setSupplierTitle("");
                 }
               }}
               searchable
-              clearable
-              maxDropdownHeight={200}
+              styles={{ input: { width: 220 } }}
             />
-          </Grid.Col>
-
-          {/* Manual supplier fields (if not in backend) */}
-          <Grid.Col span={3}>
             <TextInput
-              label="Supplier No (Manual)"
-              placeholder="Enter manually if not in list"
-              value={supplierNo}
-              onChange={(e) => setSupplierNo(e.currentTarget.value)}
-            />
-          </Grid.Col>
-          <Grid.Col span={3}>
-            <TextInput
-              label="Supplier Title (Manual)"
-              placeholder="Enter manually if not in list"
+              label="Supplier Title"
               value={supplierTitle}
               onChange={(e) => setSupplierTitle(e.currentTarget.value)}
             />
-          </Grid.Col>
-
-          {/*
-          <Grid.Col span={4}>
             <Select
-              label="Purchase Account"
-              placeholder="Select purchase account"
-              data={purchaseAccountOptions}
+              label="Purchase Account (Inventory)"
+              data={inventoryOptions.map((p) => ({
+                value: p.value,
+                label: p.label,
+              }))}
               value={purchaseAccount}
-              onChange={(selectedCode) => {
-                if (selectedCode) {
-                  handlePurchaseAccountSelect(selectedCode);
+              onChange={(val) => {
+                const sel = inventoryOptions.find((p) => p.value === val);
+                if (sel) {
+                  setPurchaseAccount(sel.account.code);
+                  setPurchaseTitle(sel.account.name);
+                } else {
+                  setPurchaseAccount("");
+                  setPurchaseTitle("");
                 }
               }}
               searchable
-              clearable
-              maxDropdownHeight={200}
+              styles={{ input: { width: 220 } }}
             />
-          </Grid.Col>
-          <Grid.Col span={4}>
             <TextInput
               label="Purchase Title"
               value={purchaseTitle}
-              readOnly
-              styles={{
-                input: { backgroundColor: "#f8f9fa" },
-              }}
+              onChange={(e) => setPurchaseTitle(e.currentTarget.value)}
             />
-          </Grid.Col>
-          */}
-          <Grid.Col span={4}>
+            <Select
+              label="Province"
+              data={[
+                { value: "Punjab", label: "Punjab" },
+                { value: "Sindh", label: "Sindh" },
+              ]}
+              value={province}
+              onChange={(val) => val && setProvince(val as Province)}
+            />
             <TextInput
               label="NTN No"
               value={ntnNo}
               onChange={(e) => setNtnNo(e.currentTarget.value)}
             />
-          </Grid.Col>
-        </Grid>
+          </Group>
 
-        <Switch
-          mt="md"
-          label="Include GST (18%)"
-          color={"#0A6802"}
-          checked={includeGST}
-          onChange={(e) => setIncludeGST(e.currentTarget.checked)}
-        />
-
-        <Select
-          label="Province"
-          data={[
-            { value: "Punjab", label: "Punjab" },
-            { value: "Sindh", label: "Sindh" },
-          ]}
-          value={province}
-          onChange={(v) => setProvince(v as "Punjab" | "Sindh")}
-          mb="md"
-        />
-
-        <Group justify="space-between" mt="md" mb="xs">
-          <Text fw={600}>Invoice Items</Text>
-          <Button size="xs" onClick={addItem} color="#0A6802">
-            + Add Item
-          </Button>
-        </Group>
-        <Table withTableBorder>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Code</Table.Th>
-              <Table.Th>Product Name</Table.Th>
-              <Table.Th>HS Code</Table.Th>
-              <Table.Th>Description</Table.Th>
-              <Table.Th>Unit</Table.Th>
-              <Table.Th>Qty</Table.Th>
-              <Table.Th>Rate</Table.Th>
-              <Table.Th>EX.GST Rate</Table.Th>
-              <Table.Th>EX.GST Amt</Table.Th>
-              <Table.Th>Amount</Table.Th>
-              <Table.Th></Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {items.map((item) => {
-              const gstRate = getTaxRate(item.hsCode ?? "", province);
-              const gstAmount = (item.qty * item.rate * gstRate) / 100;
-              const amount = item.qty * item.rate;
-
-              return (
-                <Table.Tr key={item.id}>
-                  <Table.Td>
-                    <Select
-                      placeholder="Product Code"
-                      data={Array.from(
-                        new Map(
-                          productCodes.map((p) => [
-                            String(p.value),
-                            {
-                              value: String(p.value),
-                              label: p.label,
-                              productName: p.productName,
-                              description: p.description,
-                              rate: p.rate,
-                            },
-                          ])
-                        ).values()
-                      )}
-                      value={item.code?.toString() || ""}
-                      onChange={(v) => {
-                        const selected = productCodes.find(
-                          (p) => String(p.value) === v
-                        );
-                        const newItems = [...items];
-                        const itemIndex = newItems.findIndex(
-                          (i) => i.id === item.id
-                        );
-                        if (itemIndex !== -1) {
-                          newItems[itemIndex].code = Number(v) || 0;
-                          newItems[itemIndex].product =
-                            selected?.productName || "";
-                          newItems[itemIndex].description =
-                            selected?.description || "";
-                          newItems[itemIndex].rate = selected?.rate || 0;
-                          setItems(newItems);
-                        }
-                      }}
-                      searchable
-                      clearable
-                      maxDropdownHeight={200}
-                      styles={{
-                        dropdown: { zIndex: 1000 },
-                      }}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <Select
-                      placeholder="Product Name"
-                      data={Array.from(
-                        new Map(
-                          productCodes.map((p) => [
-                            p.productName,
-                            {
-                              value: p.productName,
-                              label: p.productName,
-                              code: p.value,
-                              description: p.description,
-                              rate: p.rate,
-                            },
-                          ])
-                        ).values()
-                      )}
-                      value={item.product}
-                      onChange={(v) => {
-                        const selected = productCodes.find(
-                          (p) => p.productName === v
-                        );
-                        const newItems = [...items];
-                        const itemIndex = newItems.findIndex(
-                          (i) => i.id === item.id
-                        );
-                        if (itemIndex !== -1) {
-                          newItems[itemIndex].product = v || "";
-                          newItems[itemIndex].code =
-                            Number(selected?.value) || 0;
-                          newItems[itemIndex].description =
-                            selected?.description || "";
-                          newItems[itemIndex].rate = selected?.rate || 0;
-                          setItems(newItems);
-                        }
-                      }}
-                      searchable
-                      clearable
-                      maxDropdownHeight={200}
-                      styles={{
-                        dropdown: { zIndex: 1000 },
-                      }}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <Select
-                      placeholder="HS Code"
-                      data={[
-                        { value: "3824", label: "3824 - Chemicals" },
-                        { value: "8421", label: "8421 - Equipment" },
-                        { value: "8413", label: "8413 - Pumps" },
-                        { value: "9833", label: "9833 - Service" },
-                      ]}
-                      value={item.hsCode ?? ""}
-                      onChange={(v) => updateItem(item.id, "hsCode", v || "")}
-                      searchable
-                      clearable
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <TextInput
-                      placeholder="Description"
-                      value={item.description}
-                      onChange={(e) =>
-                        updateItem(
-                          item.id,
-                          "description",
-                          e.currentTarget.value
-                        )
-                      }
-                      readOnly={false} // Removed getProductByCode reference, always editable
-                      styles={{
-                        input: {
-                          backgroundColor: "white", // Removed getProductByCode reference
-                        },
-                      }}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <TextInput
-                      value={item.unit}
-                      onChange={(e) =>
-                        updateItem(item.id, "unit", e.currentTarget.value)
-                      }
-                      placeholder="Unit"
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <NumberInput
-                      min={1}
-                      value={item.qty}
-                      onChange={(val) =>
-                        updateItem(item.id, "qty", Number(val) || 0)
-                      }
-                      placeholder="Qty"
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <NumberInput
-                      min={0}
-                      step={0.01}
-                      decimalScale={2}
-                      value={item.rate}
-                      onChange={(val) =>
-                        updateItem(item.id, "rate", Number(val) || 0)
-                      }
-                      placeholder="Rate"
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <NumberInput value={gstRate} disabled />
-                  </Table.Td>
-                  <Table.Td>
-                    <NumberInput value={gstAmount.toFixed(2)} disabled />
-                  </Table.Td>
-                  <Table.Td>
-                    <NumberInput value={amount.toFixed(2)} disabled />
-                  </Table.Td>
-                  <Table.Td>
-                    <ActionIcon
-                      color="red"
-                      onClick={() => removeItem(item.id)}
-                      variant="light"
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  </Table.Td>
-                </Table.Tr>
-              );
-            })}
-          </Table.Tbody>
-        </Table>
-
-        <Group align="start" mt="md">
-          <div style={{ minWidth: 180 }}>
-            <Text>Subtotal: {subtotal.toFixed(2)}</Text>
-            <Text>Ex Gst Amount: {exGstAmount.toFixed(2)}</Text>
-            <Text>Total GST: {totalGst.toFixed(2)}</Text>
-            <Text>GST (18%): {gst.toFixed(2)}</Text>
-            <Text fw={700}>Total: {total.toFixed(2)}</Text>
+          <div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <strong>Items</strong>
+              <Button size="xs" onClick={addItem}>
+                + Add
+              </Button>
+            </div>
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                marginTop: 8,
+              }}
+            >
+              <thead>
+                <tr>
+                  <th style={{ border: "1px solid #ddd", padding: 6 }}>Code</th>
+                  <th style={{ border: "1px solid #ddd", padding: 6 }}>
+                    Product Name
+                  </th>
+                  <th style={{ border: "1px solid #ddd", padding: 6 }}>
+                    HS Code
+                  </th>
+                  <th style={{ border: "1px solid #ddd", padding: 6 }}>
+                    Quantity
+                  </th>
+                  <th style={{ border: "1px solid #ddd", padding: 6 }}>Rate</th>
+                  <th style={{ border: "1px solid #ddd", padding: 6 }}>
+                    Net Amount
+                  </th>
+                  <th style={{ border: "1px solid #ddd", padding: 6 }}>
+                    GST %
+                  </th>
+                  <th style={{ border: "1px solid #ddd", padding: 6 }}>
+                    EX.GST Rate
+                  </th>
+                  <th style={{ border: "1px solid #ddd", padding: 6 }}>
+                    EX.GST Amount
+                  </th>
+                  <th style={{ border: "1px solid #ddd", padding: 6 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it) => {
+                  const qty = Number(it.qty || 0);
+                  const rate = Number(it.rate || 0);
+                  const net = qty * rate;
+                  const gstPct = getTaxRate(String(it.hsCode || ""), province);
+                  const exGSTRate = gstPct; // kept same naming
+                  const exGSTAmount = (net * exGSTRate) / 100;
+                  return (
+                    <tr key={String(it.id)}>
+                      <td style={{ border: "1px solid #ddd", padding: 6 }}>
+                        <Select
+                          data={productOptions}
+                          value={it.code || ""}
+                          onChange={(val) => {
+                            const selected = productOptions.find(
+                              (p) => p.value === val
+                            );
+                            updateItem(it.id, "code", val ?? "");
+                            if (selected) {
+                              updateItem(
+                                it.id,
+                                "product",
+                                selected.productName
+                              );
+                              if (selected.rate !== undefined)
+                                updateItem(
+                                  it.id,
+                                  "rate",
+                                  selected.rate as number
+                                );
+                              if (selected.description)
+                                updateItem(
+                                  it.id,
+                                  "description",
+                                  selected.description
+                                );
+                            }
+                          }}
+                          searchable
+                          styles={{ input: { width: 100 } }}
+                        />
+                      </td>
+                      <td style={{ border: "1px solid #ddd", padding: 6 }}>
+                        <Select
+                          data={productOptions.map((p) => ({
+                            value: p.value,
+                            label: p.label,
+                          }))}
+                          value={
+                            productOptions.find(
+                              (p) => p.value === (it.code || "")
+                            )?.value ?? ""
+                          }
+                          onChange={(val) => {
+                            const selected = productOptions.find(
+                              (p) => p.value === val
+                            );
+                            if (selected) {
+                              updateItem(it.id, "code", selected.value);
+                              updateItem(
+                                it.id,
+                                "product",
+                                selected.productName
+                              );
+                              if (selected.rate !== undefined)
+                                updateItem(
+                                  it.id,
+                                  "rate",
+                                  selected.rate as number
+                                );
+                              if (selected.description)
+                                updateItem(
+                                  it.id,
+                                  "description",
+                                  selected.description
+                                );
+                            }
+                          }}
+                          searchable
+                          styles={{ input: { width: "100%" } }}
+                        />
+                      </td>
+                      <td style={{ border: "1px solid #ddd", padding: 6 }}>
+                        <Select
+                          data={hsOptions}
+                          value={it.hsCode || ""}
+                          onChange={(val) =>
+                            updateItem(it.id, "hsCode", val ?? "")
+                          }
+                          searchable
+                          styles={{ input: { width: 120 } }}
+                        />
+                      </td>
+                      <td style={{ border: "1px solid #ddd", padding: 6 }}>
+                        <input
+                          type="number"
+                          value={it.qty ?? 0}
+                          onChange={(e) =>
+                            updateItem(it.id, "qty", Number(e.target.value))
+                          }
+                          style={{ width: 80 }}
+                        />
+                      </td>
+                      <td style={{ border: "1px solid #ddd", padding: 6 }}>
+                        <input
+                          type="number"
+                          value={it.rate ?? 0}
+                          onChange={(e) =>
+                            updateItem(it.id, "rate", Number(e.target.value))
+                          }
+                          style={{ width: 120 }}
+                        />
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #ddd",
+                          padding: 6,
+                          textAlign: "right",
+                        }}
+                      >
+                        {net.toFixed(2)}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #ddd",
+                          padding: 6,
+                          textAlign: "center",
+                        }}
+                      >
+                        {gstPct.toFixed(2)}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #ddd",
+                          padding: 6,
+                          textAlign: "center",
+                        }}
+                      >
+                        {exGSTRate.toFixed(2)}
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #ddd",
+                          padding: 6,
+                          textAlign: "right",
+                        }}
+                      >
+                        {exGSTAmount.toFixed(2)}
+                      </td>
+                      <td style={{ border: "1px solid #ddd", padding: 6 }}>
+                        <Button
+                          color="red"
+                          size="xs"
+                          onClick={() => removeItem(it.id)}
+                        >
+                          Remove
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </Group>
 
-        <Textarea
-          label="Notes (Optional)"
-          placeholder="Additional notes or terms..."
-          mt="md"
-          value={notes}
-          onChange={(e) => setNotes(e.currentTarget.value)}
-        />
+          <Textarea
+            label="Notes"
+            value={notes}
+            onChange={(e) => setNotes(e.currentTarget.value)}
+          />
 
-        <Group justify="flex-end" mt="lg">
-          <Button
-            color="#0A6802"
-            onClick={async () => {
-              try {
-                const payload = {
-                  invoiceNumber: invoiceNumber,
-                  invoiceDate: date,
-                  partyBillNo,
-                  partyBillDate,
-                  supplier: {
-                    name: supplierTitle,
-                    code: supplierNo,
-                  },
-                  purchaseAccount,
-                  purchaseTitle,
-                  items,
-                  notes,
-                  gst: includeGST,
-                  totalAmount: total,
-                };
+          <Group>
+            <TextInput
+              label="Discount"
+              type="number"
+              value={String(discount)}
+              onChange={(e) => setDiscount(Number(e.currentTarget.value))}
+            />
+          </Group>
 
-                if (editInvoice) {
-                  // Update existing invoice
-                  const response = await api.put(
-                    `/purchase-invoice/update-purchase-invoice/${editInvoice.id}`, // Changed path
-                    payload
-                  );
-
-                  if (response.data) {
-                    setInvoices((prev) =>
-                      prev.map((i) =>
-                        i.id === editInvoice.id ? { ...i, ...payload } : i
-                      )
-                    );
-                    notifications.show({
-                      title: "Success",
-                      message: "Purchase Invoice updated successfully",
-                      color: "green",
-                    });
-                  }
-                  setEditInvoice(null);
-                } else {
-                  // Create new invoice
-                  const response = await api.post(
-                    "/purchase-invoice/create-purchase-invoice", // Changed path
-                    payload
-                  );
-
-                  if (response.data) {
-                    const newInvoice: Invoice = {
-                      id: response.data.id || Date.now(),
-                      ...response.data,
-                    };
-                    setInvoices((prev) => [...prev, newInvoice]);
-                    notifications.show({
-                      title: "Success",
-                      message: "Purchase Invoice created successfully",
-                      color: "green",
-                    });
-                  }
-                  setCreateOpen(false);
-                }
-              } catch (error) {
-                let errorMessage = "Failed to save invoice";
-                if (
-                  typeof error === "object" &&
-                  error !== null &&
-                  "response" in error &&
-                  typeof (error as any).response === "object" &&
-                  (error as any).response !== null &&
-                  "data" in (error as any).response &&
-                  typeof (error as any).response.data === "object" &&
-                  (error as any).response.data !== null &&
-                  "message" in (error as any).response.data
-                ) {
-                  errorMessage = (error as any).response.data.message;
-                }
-                notifications.show({
-                  title: "Error",
-                  message: errorMessage,
-                  color: "red",
-                });
-                console.error("Error saving invoice:", error);
-              }
-            }}
-          >
-            {editInvoice ? <strong>Update Invoice</strong> : "Create Invoice"}
-          </Button>
-        </Group>
+          <Group justify="flex-end" gap={8}>
+            <Button
+              variant="outline"
+              leftSection={<IconPrinter size={16} />}
+              onClick={onModalPrint}
+            >
+              Print
+            </Button>
+            <Button color="#0A6802" onClick={save}>
+              {editing ? "Update" : "Create"}
+            </Button>
+          </Group>
+        </div>
       </Modal>
 
-      <Modal
-        opened={!!deleteInvoice}
-        onClose={() => setDeleteInvoice(null)}
-        title="Confirm Delete"
-        centered
-      >
-        <Text mb="md">
-          Are you sure you want to delete{" "}
-          <strong>{deleteInvoice?.number}</strong>?
-        </Text>
-        <Group justify="flex-end">
-          <Button variant="default" onClick={() => setDeleteInvoice(null)}>
-            Cancel
-          </Button>
-          <Button
-            color="red"
-            onClick={async () => {
-              if (deleteInvoice) {
-                try {
-                  await api.delete(
-                    `/purchase-invoice/delete-purchase-invoice/${deleteInvoice.id}` // Changed path
-                  );
-
-                  setInvoices((prev) =>
-                    prev.filter((i) => i.id !== deleteInvoice.id)
-                  );
-
-                  notifications.show({
-                    title: "Success",
-                    message: "Purchase Invoice deleted successfully",
-                    color: "green",
-                  });
-
-                  setDeleteInvoice(null);
-                } catch (error) {
-                  notifications.show({
-                    title: "Error",
-                    message:
-                      typeof error === "object" &&
-                      error !== null &&
-                      "response" in error &&
-                      typeof (error as any).response === "object" &&
-                      (error as any).response !== null &&
-                      "data" in (error as any).response &&
-                      typeof (error as any).response.data === "object" &&
-                      (error as any).response.data !== null &&
-                      "message" in (error as any).response.data
-                        ? (error as any).response.data.message
-                        : "Failed to delete invoice",
-                    color: "red",
-                  });
-                  console.error("Error deleting invoice:", error);
-                }
-              }
-            }}
-          >
-            Delete
-          </Button>
-        </Group>
-      </Modal>
+      {/* Hidden DOM printable template for window.print fallback */}
+      <div
+        style={{ position: "fixed", left: -9999, top: 0, width: 900 }}
+        ref={printRef}
+      />
     </div>
   );
 }
-
-// const purchaseAccountMap: Record<string, string> = {
-//   "131": "STOCK",
-//   // Add more codes and titles here
-// }; // Removed unused purchaseAccountMap
-
-// Fetch supplier accounts when createOpen is true
