@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import { getReceivableAccounts } from "../../../utils/receivableAccounts";
 import {
   Card,
   Text,
@@ -38,55 +40,22 @@ interface Invoice {
   status: "paid" | "partial" | "pending" | "overdue";
 }
 
-const customers: Customer[] = [
-  { id: "c1", name: "ABC Company" },
-  { id: "c2", name: "XYZ Industries" },
-];
+export default function AccountsReceivable({
+  invoices,
+}: {
+  invoices: Invoice[];
+}) {
+  // Use ChartOfAccountsContext to get receivable accounts as customers
+  const { accounts } = useChartOfAccounts();
+  invoices = invoices ?? [];
 
-const invoices: Invoice[] = [
-  {
-    id: "i1",
-    customerId: "c1",
-    date: "2024-01-02",
-    invoiceNo: "INV-001",
-    amount: 20000,
-    received: 10000,
-    balance: 10000,
-    status: "partial",
-  },
-  {
-    id: "i2",
-    customerId: "c1",
-    date: "2024-01-10",
-    invoiceNo: "INV-002",
-    amount: 30000,
-    received: 0,
-    balance: 30000,
-    status: "pending",
-  },
-  {
-    id: "i3",
-    customerId: "c2",
-    date: "2024-01-05",
-    invoiceNo: "INV-003",
-    amount: 40000,
-    received: 20000,
-    balance: 20000,
-    status: "partial",
-  },
-  {
-    id: "i4",
-    customerId: "c2",
-    date: "2024-01-12",
-    invoiceNo: "INV-004",
-    amount: 35000,
-    received: 0,
-    balance: 35000,
-    status: "overdue",
-  },
-];
+  // Use getReceivableAccounts to get all accounts under 1410 (including 14101, etc.)
+  const receivableAccounts = getReceivableAccounts(accounts ?? []);
+  const customers: Customer[] = receivableAccounts.map((acc) => ({
+    id: acc._id,
+    name: acc.accountName,
+  }));
 
-export default function AccountsReceivable() {
   const [page, setPage] = useState(1);
   const [invoicePage, setInvoicePage] = useState(1);
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
@@ -94,53 +63,88 @@ export default function AccountsReceivable() {
   const [agingFilter, setAgingFilter] = useState<string | null>(null);
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
+  const [appliedFromDate, setAppliedFromDate] = useState<string>("");
+  const [appliedToDate, setAppliedToDate] = useState<string>("");
 
   const pageSize = 5;
   const invoicePageSize = 5;
 
-  const filteredInvoices = invoices.filter((inv) => {
+  const applyFilters = () => {
+    setAppliedFromDate(fromDate);
+    setAppliedToDate(toDate);
+    setPage(1); // Reset to first page when applying filters
+    console.log("Applying filters - From:", fromDate, "To:", toDate);
+  };
+
+  const filteredInvoices = invoices.filter((inv: Invoice) => {
     const invDate = new Date(inv.date);
-    const from = fromDate ? new Date(fromDate) : null;
-    const to = toDate ? new Date(toDate) : null;
+    const from = appliedFromDate ? new Date(appliedFromDate) : null;
+    const to = appliedToDate ? new Date(appliedToDate) : null;
 
     const matchesDate = (!from || invDate >= from) && (!to || invDate <= to);
+
+    console.log(
+      "Invoice date:",
+      inv.date,
+      "Invoice Date obj:",
+      invDate,
+      "From:",
+      from,
+      "To:",
+      to,
+      "Matches:",
+      matchesDate
+    );
 
     return matchesDate;
   });
 
-  const customerData = customers.map((cust) => {
+  const customerData = customers.map((cust: Customer) => {
     const custInvoices = filteredInvoices.filter(
-      (inv) => inv.customerId === cust.id
+      (inv: Invoice) => inv.customerId === cust.id
     );
 
-    const outstanding = custInvoices.reduce((s, i) => s + i.balance, 0);
+    const outstanding = custInvoices.reduce(
+      (s: number, i: Invoice) => s + i.balance,
+      0
+    );
     const current = custInvoices
-      .filter((i) => i.status === "pending")
-      .reduce((s, i) => s + i.balance, 0);
+      .filter((i: Invoice) => i.status === "pending")
+      .reduce((s: number, i: Invoice) => s + i.balance, 0);
     const d30 = custInvoices
-      .filter((i) => i.status === "partial")
-      .reduce((s, i) => s + i.balance, 0);
+      .filter((i: Invoice) => i.status === "partial")
+      .reduce((s: number, i: Invoice) => s + i.balance, 0);
     const d60 = custInvoices
-      .filter((i) => i.status === "overdue")
-      .reduce((s, i) => s + i.balance, 0);
+      .filter((i: Invoice) => i.status === "overdue")
+      .reduce((s: number, i: Invoice) => s + i.balance, 0);
     const d90 = custInvoices
-      .filter((i) => i.status === "paid")
-      .reduce((s, i) => s + i.balance, 0);
+      .filter((i: Invoice) => i.status === "paid")
+      .reduce((s: number, i: Invoice) => s + i.balance, 0);
 
     return { ...cust, outstanding, current, d30, d60, d90 };
   });
 
-  const filteredCustomers = customerData.filter((c) => {
-    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase());
-    let matchesAging = true;
+  const filteredCustomers = customerData.filter(
+    (
+      c: Customer & {
+        outstanding: number;
+        current: number;
+        d30: number;
+        d60: number;
+        d90: number;
+      }
+    ) => {
+      const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase());
+      let matchesAging = true;
 
-    if (agingFilter === "current") matchesAging = c.current > 0;
-    else if (agingFilter === "31-60") matchesAging = c.d30 > 0;
-    else if (agingFilter === "61-90") matchesAging = c.d60 > 0;
-    else if (agingFilter === "90+") matchesAging = c.d90 > 0;
+      if (agingFilter === "current") matchesAging = c.current > 0;
+      else if (agingFilter === "31-60") matchesAging = c.d30 > 0;
+      else if (agingFilter === "61-90") matchesAging = c.d60 > 0;
+      else if (agingFilter === "90+") matchesAging = c.d90 > 0;
 
-    return matchesSearch && matchesAging;
-  });
+      return matchesSearch && matchesAging;
+    }
+  );
 
   const start = (page - 1) * pageSize;
   const paginatedCustomers = filteredCustomers.slice(start, start + pageSize);
@@ -156,21 +160,113 @@ export default function AccountsReceivable() {
   const total90 = filteredCustomers.reduce((s, c) => s + c.d90, 0);
 
   const exportPDF = () => {
-    const doc = new jsPDF();
-    doc.text("Accounts Receivable Report", 14, 15);
-    autoTable(doc, {
-      head: [["Customer", "Outstanding", "Current", "31-60", "61-90", "90+"]],
-      body: filteredCustomers.map((c) => [
-        c.name,
-        `₹${c.outstanding.toLocaleString()}`,
-        `₹${c.current.toLocaleString()}`,
-        `₹${c.d30.toLocaleString()}`,
-        `₹${c.d60.toLocaleString()}`,
-        `₹${c.d90.toLocaleString()}`,
-      ]) as RowInput[],
-      startY: 20,
-    });
-    doc.save("accounts_receivable.pdf");
+    const logoUrl = "/Logo.png";
+    const headerUrl = "/Header.jpg";
+    const footerUrl = "/Footer.jpg";
+    const logoImg = new window.Image();
+    const headerImg = new window.Image();
+    const footerImg = new window.Image();
+    let loaded = 0;
+    function tryDraw() {
+      loaded++;
+      if (loaded === 3) {
+        drawPDF();
+      }
+    }
+    logoImg.src = logoUrl;
+    headerImg.src = headerUrl;
+    footerImg.src = footerUrl;
+    logoImg.onload = tryDraw;
+    headerImg.onload = tryDraw;
+    footerImg.onload = tryDraw;
+    logoImg.onerror = tryDraw;
+    headerImg.onerror = tryDraw;
+    footerImg.onerror = tryDraw;
+
+    function drawPDF() {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      // Header design asset
+      doc.addImage(headerImg, "JPEG", 0, 0, pageWidth, 25);
+      // Centered logo below header
+      const logoWidth = 40;
+      const logoHeight = 20;
+      const logoX = (pageWidth - logoWidth) / 2;
+      doc.addImage(logoImg, "PNG", logoX, 27, logoWidth, logoHeight);
+
+      // Header text below logo
+      doc.setFontSize(16);
+      doc.text("Accounts Receivable Report", pageWidth / 2, 52, {
+        align: "center",
+      });
+      doc.setFontSize(10);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth / 2, 59, {
+        align: "center",
+      });
+
+      // Table with color theme
+      autoTable(doc, {
+        head: [["Customer", "Outstanding", "Current", "31-60", "61-90", "90+"]],
+        body: [
+          ...filteredCustomers.map((c) => [
+            c.name,
+            `Rs. ${c.outstanding.toLocaleString()}`,
+            `Rs. ${c.current.toLocaleString()}`,
+            `Rs. ${c.d30.toLocaleString()}`,
+            `Rs. ${c.d60.toLocaleString()}`,
+            `Rs. ${c.d90.toLocaleString()}`,
+          ]),
+          [
+            {
+              content: "Totals",
+              colSpan: 1,
+              styles: { halign: "right", fontStyle: "bold" },
+            },
+            `Rs. ${totalOutstanding.toLocaleString()}`,
+            `Rs. ${totalCurrent.toLocaleString()}`,
+            `Rs. ${total30.toLocaleString()}`,
+            `Rs. ${total60.toLocaleString()}`,
+            `Rs. ${total90.toLocaleString()}`,
+          ],
+        ],
+        startY: 65,
+        theme: "grid",
+        headStyles: {
+          fillColor: [10, 104, 2], // #0A6802
+          textColor: 255,
+          fontStyle: "bold",
+        },
+        bodyStyles: {
+          fillColor: [241, 252, 240], // #F1FCF0
+          textColor: 0,
+        },
+        footStyles: {
+          fillColor: [10, 104, 2],
+          textColor: 255,
+          fontStyle: "bold",
+        },
+        didDrawPage: function (data) {
+          // Footer design asset
+          const pageSize = doc.internal.pageSize;
+          doc.addImage(
+            footerImg,
+            "JPEG",
+            0,
+            pageSize.getHeight() - 25,
+            pageSize.getWidth(),
+            25
+          );
+          doc.setFontSize(9);
+          doc.text(
+            `Page ${data.pageNumber}`,
+            pageSize.getWidth() - 40,
+            pageSize.getHeight() - 10
+          );
+        },
+      });
+
+      doc.save("accounts_receivable.pdf");
+    }
   };
 
   const exportInvoicesPDF = (custId: string) => {
@@ -186,9 +282,9 @@ export default function AccountsReceivable() {
       body: invs.map((i) => [
         i.date,
         i.invoiceNo,
-        `₹${i.amount.toLocaleString()}`,
-        `₹${i.received.toLocaleString()}`,
-        `₹${i.balance.toLocaleString()}`,
+        `Rs. ${i.amount.toLocaleString()}`,
+        `Rs. ${i.received.toLocaleString()}`,
+        `Rs. ${i.balance.toLocaleString()}`,
         i.status,
       ]) as RowInput[],
       startY: 20,
@@ -234,7 +330,7 @@ export default function AccountsReceivable() {
               <IconArrowUpRight size={30} color="green" />
               <Stack gap={0}>
                 <Text>Outstanding</Text>
-                <Text fw={700}>₹{totalOutstanding.toLocaleString()}</Text>
+                <Text fw={700}>Rs. {totalOutstanding.toLocaleString()}</Text>
               </Stack>
             </Group>
           </Card>
@@ -245,7 +341,7 @@ export default function AccountsReceivable() {
               <IconArrowUpRight size={30} color="blue" />
               <Stack gap={0}>
                 <Text>Current</Text>
-                <Text fw={700}>₹{totalCurrent.toLocaleString()}</Text>
+                <Text fw={700}>Rs. {totalCurrent.toLocaleString()}</Text>
               </Stack>
             </Group>
           </Card>
@@ -256,7 +352,7 @@ export default function AccountsReceivable() {
               <IconClock size={30} color="#D08700" />
               <Stack gap={0}>
                 <Text>31-60 Days</Text>
-                <Text fw={700}>₹{total30.toLocaleString()}</Text>
+                <Text fw={700}>Rs. {total30.toLocaleString()}</Text>
               </Stack>
             </Group>
           </Card>
@@ -267,7 +363,7 @@ export default function AccountsReceivable() {
               <IconClock size={30} color="#A86500" />
               <Stack gap={0}>
                 <Text>61-90 Days</Text>
-                <Text fw={700}>₹{total60.toLocaleString()}</Text>
+                <Text fw={700}>Rs. {total60.toLocaleString()}</Text>
               </Stack>
             </Group>
           </Card>
@@ -279,7 +375,7 @@ export default function AccountsReceivable() {
               <Stack gap={0}>
                 <Text>90+ Days</Text>
                 <Text fw={700} c="red">
-                  ₹{total90.toLocaleString()}
+                  Rs. {total90.toLocaleString()}
                 </Text>
               </Stack>
             </Group>
@@ -315,7 +411,12 @@ export default function AccountsReceivable() {
             value={toDate}
             onChange={(e) => setToDate(e.currentTarget.value)}
           />
-          <Button mt={23} color="#0A6802" leftSection={<Filter size={16} />}>
+          <Button
+            mt={23}
+            color="#0A6802"
+            leftSection={<Filter size={16} />}
+            onClick={applyFilters}
+          >
             Apply Filter
           </Button>
         </Group>
@@ -341,11 +442,11 @@ export default function AccountsReceivable() {
             {paginatedCustomers.map((c) => (
               <Table.Tr key={c.id}>
                 <Table.Td>{c.name}</Table.Td>
-                <Table.Td>₹{c.outstanding.toLocaleString()}</Table.Td>
-                <Table.Td>₹{c.current.toLocaleString()}</Table.Td>
-                <Table.Td>₹{c.d30.toLocaleString()}</Table.Td>
-                <Table.Td>₹{c.d60.toLocaleString()}</Table.Td>
-                <Table.Td>₹{c.d90.toLocaleString()}</Table.Td>
+                <Table.Td>Rs. {c.outstanding.toLocaleString()}</Table.Td>
+                <Table.Td>Rs. {c.current.toLocaleString()}</Table.Td>
+                <Table.Td>Rs. {c.d30.toLocaleString()}</Table.Td>
+                <Table.Td>Rs. {c.d60.toLocaleString()}</Table.Td>
+                <Table.Td>Rs. {c.d90.toLocaleString()}</Table.Td>
                 <Table.Td>
                   <Group gap="xs">
                     <Button
@@ -414,12 +515,12 @@ export default function AccountsReceivable() {
                   <Table.Tr key={i.id}>
                     <Table.Td>{i.date}</Table.Td>
                     <Table.Td>{i.invoiceNo}</Table.Td>
-                    <Table.Td>₹{i.amount.toLocaleString()}</Table.Td>
+                    <Table.Td>Rs. {i.amount.toLocaleString()}</Table.Td>
                     <Table.Td c="#0A6802">
-                      ₹{i.received.toLocaleString()}
+                      Rs. {i.received.toLocaleString()}
                     </Table.Td>
                     <Table.Td c={i.balance > 0 ? "red" : "#0A6802"}>
-                      ₹{i.balance.toLocaleString()}
+                      Rs. {i.balance.toLocaleString()}
                     </Table.Td>
                     <Table.Td>{renderStatus(i.status)}</Table.Td>
                   </Table.Tr>

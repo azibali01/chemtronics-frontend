@@ -7,10 +7,19 @@ export function getReceivableAccounts(accounts: AccountNode[]): AccountNode[] {
   const result: AccountNode[] = [];
   function walk(nodes: AccountNode[]) {
     for (const acc of nodes) {
-      if (acc.accountCode === "1410" || acc.selectedCode === "1410") {
+      // Match any accountCode or selectedCode that starts with '1410'
+      if (
+        (typeof acc.accountCode === "string" &&
+          acc.accountCode.startsWith("1410")) ||
+        (typeof acc.selectedCode === "string" &&
+          acc.selectedCode.startsWith("1410"))
+      ) {
         result.push(acc);
         if (acc.children) walk(acc.children);
-      } else if (acc.parentAccount && acc.parentAccount.includes("1410")) {
+      } else if (
+        acc.parentAccount &&
+        acc.parentAccount.toString().includes("1410")
+      ) {
         result.push(acc);
         if (acc.children) walk(acc.children);
       } else if (acc.children) {

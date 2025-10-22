@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEffect } from "react";
 import {
   Card,
   Grid,
@@ -37,75 +38,31 @@ interface LedgerEntry {
   balance: string;
 }
 
-const ledgerData: LedgerEntry[] = [
-  {
-    date: "2024-01-01",
-    account: "Cash",
-    type: "asset",
-    reference: "OP-001",
-    description: "Opening Balance",
-    debit: "₹100,000",
-    credit: "-",
-    balance: "₹100,000",
-  },
-  {
-    date: "2024-01-02",
-    account: "Sales Revenue",
-    type: "revenue",
-    reference: "SI-001",
-    description: "Sales Invoice #001",
-    debit: "-",
-    credit: "₹50,000",
-    balance: "₹50,000",
-  },
-  {
-    date: "2024-01-02",
-    account: "Accounts Receivable",
-    type: "asset",
-    reference: "SI-001",
-    description: "Sales Invoice #001",
-    debit: "₹50,000",
-    credit: "-",
-    balance: "₹50,000",
-  },
-  {
-    date: "2024-01-03",
-    account: "Purchase Expense",
-    type: "expense",
-    reference: "PI-001",
-    description: "Purchase Invoice #001",
-    debit: "₹30,000",
-    credit: "-",
-    balance: "₹30,000",
-  },
-  {
-    date: "2024-01-03",
-    account: "Accounts Payable",
-    type: "liability",
-    reference: "PI-001",
-    description: "Purchase Invoice #001",
-    debit: "-",
-    credit: "₹30,000",
-    balance: "₹30,000",
-  },
-  {
-    date: "2024-01-05",
-    account: "Cash",
-    type: "asset",
-    reference: "RC-001",
-    description: "Cash Receipt from Customer",
-    debit: "₹25,000",
-    credit: "-",
-    balance: "₹125,000",
-  },
-];
-
 export default function GeneralLedger() {
   const [account, setAccount] = useState<string | null>(null);
   const [accountType, setAccountType] = useState<string | null>(null);
   const [fromDate, setFromDate] = useState<Date | null>(null);
   const [toDate, setToDate] = useState<Date | null>(null);
+  const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    // Replace with your actual API endpoint
+    fetch("/api/ledger")
+      .then((res) => res.json())
+      .then((data) => {
+        setLedgerData(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError("Failed to load ledger data");
+        setLoading(false);
+      });
+  }, []);
 
   const [activePage, setActivePage] = useState(1);
   const pageSize = 10;
@@ -137,38 +94,137 @@ export default function GeneralLedger() {
   const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
 
   const exportPDF = () => {
-    const doc = new jsPDF();
-    doc.text("General Ledger Report", 14, 15);
+    // Use only the correct PDF export logic (centered logo, header/footer assets)
+    const logoUrl = "/Logo.png";
+    const headerUrl = "/Header.jpg";
+    const footerUrl = "/Footer.jpg";
+    const logoImg = new window.Image();
+    const headerImg = new window.Image();
+    const footerImg = new window.Image();
+    let loaded = 0;
+    function tryDraw() {
+      loaded++;
+      if (loaded === 3) {
+        drawPDF();
+      }
+    }
+    logoImg.src = logoUrl;
+    headerImg.src = headerUrl;
+    footerImg.src = footerUrl;
+    logoImg.onload = tryDraw;
+    headerImg.onload = tryDraw;
+    footerImg.onload = tryDraw;
+    logoImg.onerror = tryDraw;
+    headerImg.onerror = tryDraw;
+    footerImg.onerror = tryDraw;
 
-    autoTable(doc, {
-      head: [
-        [
-          "Date",
-          "Account",
-          "Type",
-          "Reference",
-          "Description",
-          "Debit",
-          "Credit",
-          "Balance",
+    function drawPDF() {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      // Header design asset
+      doc.addImage(headerImg, "JPEG", 0, 0, pageWidth, 25);
+      // Centered logo below header
+      const logoWidth = 40;
+      const logoHeight = 20;
+      const logoX = (pageWidth - logoWidth) / 2;
+      doc.addImage(logoImg, "PNG", logoX, 27, logoWidth, logoHeight);
+
+      // Header text below logo
+      doc.setFontSize(16);
+      doc.text("General Ledger Report", pageWidth / 2, 52, { align: "center" });
+      doc.setFontSize(10);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth / 2, 59, {
+        align: "center",
+      });
+
+      // Calculate totals
+      const totalDebits = filteredData.reduce(
+        (sum, entry) =>
+          sum + (parseFloat(entry.debit.replace(/[^\d.-]/g, "")) || 0),
+        0
+      );
+      const totalCredits = filteredData.reduce(
+        (sum, entry) =>
+          sum + (parseFloat(entry.credit.replace(/[^\d.-]/g, "")) || 0),
+        0
+      );
+      const netBalance = totalDebits - totalCredits;
+
+      // Table with color theme
+      autoTable(doc, {
+        head: [
+          [
+            "Date",
+            "Account",
+            "Type",
+            "Reference",
+            "Description",
+            "Debit",
+            "Credit",
+            "Balance",
+          ],
         ],
-      ],
-      body: filteredData.map<RowInput>((entry) => [
-        entry.date,
-        entry.account,
-        entry.type,
-        entry.reference,
-        entry.description,
-        entry.debit,
-        entry.credit,
-        entry.balance,
-      ]),
-      startY: 20,
-    });
+        body: [
+          ...filteredData.map<RowInput>((entry) => [
+            entry.date,
+            entry.account,
+            entry.type,
+            entry.reference,
+            entry.description,
+            entry.debit,
+            entry.credit,
+            entry.balance,
+          ]),
+          [
+            {
+              content: "Totals",
+              colSpan: 5,
+              styles: { halign: "right", fontStyle: "bold" },
+            },
+            totalDebits.toLocaleString(),
+            totalCredits.toLocaleString(),
+            netBalance.toLocaleString(),
+          ],
+        ],
+        startY: 65,
+        theme: "grid",
+        headStyles: {
+          fillColor: [10, 104, 2], // #0A6802
+          textColor: 255,
+          fontStyle: "bold",
+        },
+        bodyStyles: {
+          fillColor: [241, 252, 240], // #F1FCF0
+          textColor: 0,
+        },
+        footStyles: {
+          fillColor: [10, 104, 2],
+          textColor: 255,
+          fontStyle: "bold",
+        },
+        didDrawPage: function (data) {
+          // Footer design asset
+          const pageSize = doc.internal.pageSize;
+          doc.addImage(
+            footerImg,
+            "JPEG",
+            0,
+            pageSize.getHeight() - 25,
+            pageSize.getWidth(),
+            25
+          );
+          doc.setFontSize(9);
+          doc.text(
+            `Page ${data.pageNumber}`,
+            pageSize.getWidth() - 40,
+            pageSize.getHeight() - 10
+          );
+        },
+      });
 
-    doc.save("general_ledger.pdf");
+      doc.save("general_ledger.pdf");
+    }
   };
-
   return (
     <div>
       <Group justify="space-between" mb="lg">
@@ -191,46 +247,74 @@ export default function GeneralLedger() {
 
       <Grid mb="lg">
         <Grid.Col span={3}>
-          <Card shadow="sm" p="lg" radius="md" withBorder bg={"#F1FCF0"}>
+          <Card shadow="sm" p="lg" radius="md" withBorder bg="#F1FCF0">
             <Group>
               <IconArrowDownRight size={30} color="green" />
               <div>
                 <Text size="sm">Total Debits</Text>
                 <Text fw={700} size="lg">
-                  ₹205,000
+                  {filteredData
+                    .reduce(
+                      (sum, entry) =>
+                        sum +
+                        (parseFloat(entry.debit.replace(/[^\d.-]/g, "")) || 0),
+                      0
+                    )
+                    .toLocaleString()}
                 </Text>
               </div>
             </Group>
           </Card>
         </Grid.Col>
         <Grid.Col span={3}>
-          <Card shadow="sm" p="lg" radius="md" withBorder bg={"#F1FCF0"}>
+          <Card shadow="sm" p="lg" radius="md" withBorder bg="#F1FCF0">
             <Group>
               <IconArrowUpRight size={30} color="red" />
               <div>
                 <Text size="sm">Total Credits</Text>
                 <Text fw={700} size="lg">
-                  ₹80,000
+                  {filteredData
+                    .reduce(
+                      (sum, entry) =>
+                        sum +
+                        (parseFloat(entry.credit.replace(/[^\d.-]/g, "")) || 0),
+                      0
+                    )
+                    .toLocaleString()}
                 </Text>
               </div>
             </Group>
           </Card>
         </Grid.Col>
         <Grid.Col span={3}>
-          <Card shadow="sm" p="lg" radius="md" withBorder bg={"#F1FCF0"}>
+          <Card shadow="sm" p="lg" radius="md" withBorder bg="#F1FCF0">
             <Group>
               <IconCash size={30} color="blue" />
               <div>
                 <Text size="sm">Net Balance</Text>
                 <Text fw={700} size="lg" c="#0A6802">
-                  125,000
+                  {(() => {
+                    const totalDebits = filteredData.reduce(
+                      (sum, entry) =>
+                        sum +
+                        (parseFloat(entry.debit.replace(/[^\d.-]/g, "")) || 0),
+                      0
+                    );
+                    const totalCredits = filteredData.reduce(
+                      (sum, entry) =>
+                        sum +
+                        (parseFloat(entry.credit.replace(/[^\d.-]/g, "")) || 0),
+                      0
+                    );
+                    return (totalDebits - totalCredits).toLocaleString();
+                  })()}
                 </Text>
               </div>
             </Group>
           </Card>
         </Grid.Col>
         <Grid.Col span={3}>
-          <Card shadow="sm" p="lg" radius="md" withBorder bg={"#F1FCF0"}>
+          <Card shadow="sm" p="lg" radius="md" withBorder bg="#F1FCF0">
             <Group>
               <IconBook size={30} />
               <div>
@@ -244,7 +328,7 @@ export default function GeneralLedger() {
         </Grid.Col>
       </Grid>
 
-      <Card shadow="sm" p="lg" radius="md" withBorder mb="lg" bg={"#F1FCF0"}>
+      <Card shadow="sm" p="lg" radius="md" withBorder mb="lg" bg="#F1FCF0">
         <Group grow>
           <TextInput
             placeholder="Search accounts..."
@@ -292,60 +376,69 @@ export default function GeneralLedger() {
         </Group>
       </Card>
 
-      <Card shadow="sm" p="lg" radius="md" withBorder bg={"#F1FCF0"}>
+      <Card shadow="sm" p="lg" radius="md" withBorder bg="#F1FCF0">
         <Text fw={600} mb="md">
           Ledger Entries
         </Text>
-        <Table highlightOnHover withTableBorder withColumnBorders>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Date</Table.Th>
-              <Table.Th>Account</Table.Th>
-              <Table.Th>Type</Table.Th>
-              <Table.Th>Reference</Table.Th>
-              <Table.Th>Description</Table.Th>
-              <Table.Th>Debit</Table.Th>
-              <Table.Th>Credit</Table.Th>
-              <Table.Th>Running Balance</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {paginatedData.map((entry, index) => (
-              <Table.Tr key={index}>
-                <Table.Td>{entry.date}</Table.Td>
-                <Table.Td>{entry.account}</Table.Td>
-                <Table.Td>
-                  <Badge
-                    color={
-                      entry.type === "asset"
-                        ? "blue"
-                        : entry.type === "revenue"
-                        ? "green"
-                        : entry.type === "expense"
-                        ? "orange"
-                        : "red"
-                    }
-                  >
-                    {entry.type}
-                  </Badge>
-                </Table.Td>
-                <Table.Td>{entry.reference}</Table.Td>
-                <Table.Td>{entry.description}</Table.Td>
-                <Table.Td c="#0A6802">{entry.debit}</Table.Td>
-                <Table.Td c="red">{entry.credit}</Table.Td>
-                <Table.Td fw={600}>{entry.balance}</Table.Td>
-              </Table.Tr>
-            ))}
-            {paginatedData.length === 0 && (
+        {loading ? (
+          <Text c="dimmed" style={{ textAlign: "center", padding: "2rem 0" }}>
+            Loading...
+          </Text>
+        ) : error ? (
+          <Text c="red" style={{ textAlign: "center", padding: "2rem 0" }}>
+            {error}
+          </Text>
+        ) : (
+          <Table highlightOnHover withTableBorder withColumnBorders>
+            <Table.Thead>
               <Table.Tr>
-                <Table.Td colSpan={8} style={{ textAlign: "center" }}>
-                  No matching records found
-                </Table.Td>
+                <Table.Th>Date</Table.Th>
+                <Table.Th>Account</Table.Th>
+                <Table.Th>Type</Table.Th>
+                <Table.Th>Reference</Table.Th>
+                <Table.Th>Description</Table.Th>
+                <Table.Th>Debit</Table.Th>
+                <Table.Th>Credit</Table.Th>
+                <Table.Th>Running Balance</Table.Th>
               </Table.Tr>
-            )}
-          </Table.Tbody>
-        </Table>
-
+            </Table.Thead>
+            <Table.Tbody>
+              {paginatedData.map((entry, index) => (
+                <Table.Tr key={index}>
+                  <Table.Td>{entry.date}</Table.Td>
+                  <Table.Td>{entry.account}</Table.Td>
+                  <Table.Td>
+                    <Badge
+                      color={
+                        entry.type === "asset"
+                          ? "blue"
+                          : entry.type === "revenue"
+                          ? "green"
+                          : entry.type === "expense"
+                          ? "orange"
+                          : "red"
+                      }
+                    >
+                      {entry.type}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>{entry.reference}</Table.Td>
+                  <Table.Td>{entry.description}</Table.Td>
+                  <Table.Td c="#0A6802">{entry.debit}</Table.Td>
+                  <Table.Td c="red">{entry.credit}</Table.Td>
+                  <Table.Td fw={600}>{entry.balance}</Table.Td>
+                </Table.Tr>
+              ))}
+              {paginatedData.length === 0 && (
+                <Table.Tr>
+                  <Table.Td colSpan={8} style={{ textAlign: "center" }}>
+                    No matching records found
+                  </Table.Td>
+                </Table.Tr>
+              )}
+            </Table.Tbody>
+          </Table>
+        )}
         <Group justify="center" mt="md">
           <Pagination
             color="#0A6802"

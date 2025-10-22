@@ -32,6 +32,7 @@ interface Item {
 interface Invoice {
   id?: string | number;
   number?: string;
+  invoiceNumber?: string;
   date?: string;
   supplierNo?: string;
   supplierTitle?: string;
@@ -108,36 +109,90 @@ export default function PurchaseInvoice(): JSX.Element {
       label: string;
       account: { code: string; name: string };
     }[] = [];
-    function walk(nodes: AccountNode[]) {
+
+    const extractLeadingCode = (node: AccountNode | null | undefined) => {
+      if (!node) return "";
+      const s = String(
+        node.accountCode ?? node.code ?? node.selectedCode ?? ""
+      );
+      const m = s.match(/^(\d{1,4})/);
+      return m ? m[1] : "";
+    };
+
+    // walk the tree with ancestor list; only include detail/party accounts which
+    // have ancestor path containing [2000, 2200, 2210] in that exact order
+    function walk(nodes: AccountNode[], ancestors: AccountNode[] = []) {
       if (!Array.isArray(nodes)) return;
       for (const n of nodes) {
         if (!n) continue;
-        const accType = String(n.accountType || "").toLowerCase();
-        const accName = String(n.accountName ?? n.name ?? "").toLowerCase();
-        const accCode = String(
+
+        // build numeric code path from ancestors
+        const codes = ancestors
+          .map((a) => extractLeadingCode(a))
+          .filter(Boolean);
+        // include current node's code at the end (not necessary for ancestor check but helpful)
+        const curCode = extractLeadingCode(n);
+        const fullCodes = [...codes, curCode];
+
+        // prefix-based sequence to match: 2 -> 22 -> 221 (so 22101 will match)
+        const prefixes = ["2", "22", "221"];
+        let foundSeq = false;
+        for (let i = 0; i + prefixes.length <= fullCodes.length; i++) {
+          let match = true;
+          for (let j = 0; j < prefixes.length; j++) {
+            const val = fullCodes[i + j] || "";
+            if (!val.startsWith(prefixes[j])) {
+              match = false;
+              break;
+            }
+          }
+          if (match) {
+            foundSeq = true;
+            break;
+          }
+        }
+
+        // Only include detail or explicit party nodes that are located under the sequence
+        const isDetailOrParty = n.type === "Detail" || n.isParty === true;
+
+        // current node code
+        const nodeCodeStr = String(
           n.accountCode ?? n.code ?? n.selectedCode ?? ""
-        ).toString();
-        const parentCode = String((n as any).parentAccount ?? "").toLowerCase();
-        // broaden detection: include nodes that mention purchase/party/supplier in type or name,
-        // or have account codes (or parent codes) starting with '22' which is common for purchase parties
-        const isPurchaseParty =
-          accType.includes("purchase") ||
-          accType.includes("purchase party") ||
-          accType.includes("party") ||
-          accType.includes("supplier") ||
-          accName.includes("purchase") ||
-          accName.includes("purchase party") ||
-          accName.includes("party") ||
-          accName.includes("supplier") ||
-          accCode.startsWith("22") ||
-          parentCode.startsWith("22");
-        if (isPurchaseParty) {
+        ).toLowerCase();
+        const curCodeStr = (curCode || "").toLowerCase();
+
+        // helper: do ancestors indicate liabilities?
+        const ancestorsIndicateLiability = ancestors.some((a) => {
+          const aParent = String(a.parentAccount ?? "").toLowerCase();
+          const aType = String(
+            a.accountType ??
+              a.selectedAccountType1 ??
+              a.selectedAccountType2 ??
+              ""
+          ).toLowerCase();
+          const aCode = String(a.accountCode ?? a.code ?? a.selectedCode ?? "");
+          return (
+            aParent.includes("liabilities") ||
+            aType.includes("liabilities") ||
+            String(aCode).startsWith("2")
+          );
+        });
+
+        // include also when node itself has code like 221xx and parent/ancestors indicate liabilities
+        const nodeLooksLikePurchase =
+          curCodeStr.startsWith("221") || nodeCodeStr.startsWith("221");
+
+        const include =
+          isDetailOrParty &&
+          (foundSeq || (nodeLooksLikePurchase && ancestorsIndicateLiability));
+
+        if (include) {
           results.push({
             value: String(
               n.accountCode ?? n.code ?? n.selectedCode ?? n._id ?? ""
             ),
             label: `${n.accountCode ?? n.code ?? ""} - ${
-              n.accountName ?? n.name ?? n.accountName ?? ""
+              n.accountName ?? n.name ?? ""
             }`,
             account: {
               code: String(n.accountCode ?? n.code ?? ""),
@@ -145,12 +200,15 @@ export default function PurchaseInvoice(): JSX.Element {
             },
           });
         }
+
         if (Array.isArray(n.children) && n.children.length)
-          walk(n.children as AccountNode[]);
+          walk(n.children as AccountNode[], [...ancestors, n]);
       }
     }
-    walk(accounts as AccountNode[]);
-    // remove duplicate values (Mantine Select throws on duplicate option values)
+
+    walk(accounts as AccountNode[], []);
+
+    // remove duplicate values
     return results.filter(
       (r, idx, arr) => arr.findIndex((x) => x.value === r.value) === idx
     );
@@ -288,8 +346,7 @@ export default function PurchaseInvoice(): JSX.Element {
                 ""
             ),
             purchaseTitle: String(
-              r.purchaseTitle ??
-                r.purchase_account ??
+              r.purchase_account ??
                 (r.supplier as Record<string, unknown> | undefined)
                   ?.purchaseTitle ??
                 (r.supplier as Record<string, unknown> | undefined)
@@ -431,7 +488,7 @@ export default function PurchaseInvoice(): JSX.Element {
     setNotes(raw.notes ?? raw.remarks ?? "");
     setEditing({
       id: raw.id ?? raw._id,
-      number: raw.number ?? raw.invoiceNumber ?? "",
+      invoiceNumber: raw.number ?? raw.invoiceNumber ?? "",
       date: raw.date ?? raw.invoiceDate ?? "",
       supplierNo: supplierObj.code ?? "",
       supplierTitle: supplierObj.name ?? "",
@@ -534,7 +591,7 @@ export default function PurchaseInvoice(): JSX.Element {
       }</div><div><strong>NTN:</strong> ${
         invoice.ntnNo || ""
       }</div></div><div style="width:320px;border:1px solid #222;padding:8px"><div><strong>Invoice No:</strong> ${
-        invoice.number || ""
+        invoice.invoiceNumber || ""
       }</div><div><strong>Invoice Date:</strong> ${
         invoice.date || ""
       }</div><div><strong>Supplier No:</strong> ${
@@ -586,7 +643,7 @@ export default function PurchaseInvoice(): JSX.Element {
   const onModalPrint = () => {
     const printable: Invoice = {
       id: editing?.id ?? Date.now(),
-      number: invoiceNumber,
+      invoiceNumber: invoiceNumber,
       date,
       supplierNo,
       supplierTitle,
@@ -756,11 +813,11 @@ export default function PurchaseInvoice(): JSX.Element {
         <tbody>
           {invoices.map((inv) => (
             <tr key={String(inv.id)}>
-              <td>{inv.number}</td>
+              <td>{inv.invoiceNumber || inv.invoiceNumber}</td>
               <td>{inv.date}</td>
               <td>{inv.supplierTitle}</td>
-              <td>{(inv as Invoice).purchaseAccount || ""}</td>
-              <td>{(inv as Invoice).purchaseTitle || ""}</td>
+              <td>{inv.purchaseAccount || ""}</td>
+              <td>{inv.purchaseTitle || ""}</td>
               <td>{(inv.amount ?? 0).toFixed(2)}</td>
               <td>
                 <Group>

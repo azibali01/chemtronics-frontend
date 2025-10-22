@@ -117,9 +117,7 @@ function ProductsInner() {
   const fetchProducts = async () => {
     try {
       setLoading(true);
-      const response = await api.get(
-        "/products"
-      );
+      const response = await api.get("/products");
 
       if (response.data && Array.isArray(response.data)) {
         const transformedProducts: Product[] = response.data.map(
@@ -220,6 +218,15 @@ function ProductsInner() {
   const totalPages = Math.ceil(filtered.length / pageSize);
   const pageData = filtered.slice((page - 1) * pageSize, page * pageSize);
 
+  const handleDelete = async (id: string) => {
+    try {
+      console.log("Deleting product with id:", id);
+      await api.delete(`products/delete-product-by-id/${id}`);
+    } catch (error) {
+      console.error("Error deleting product:", error);
+    }
+  };
+
   const openCreate = () => {
     setEditing(null);
     resetForm();
@@ -306,10 +313,7 @@ function ProductsInner() {
           color: "green",
         });
       } else {
-        const response = await api.post(
-          "/products/create-product",
-          payload
-        );
+        const response = await api.post("/products/create-product", payload);
         console.log("Create product response:", response);
         if (response.data) {
           const newProduct: Product = {
@@ -348,7 +352,7 @@ function ProductsInner() {
     );
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (delId) setProducts((prev) => prev.filter((r) => r.id !== delId));
     setDelId(null);
   };
@@ -687,7 +691,7 @@ Status: ${p.status}`;
                           <Menu.Item
                             color="red"
                             leftSection={<IconTrash size={16} />}
-                            onClick={() => setDelId(p.id)}
+                            onClick={() => handleDelete(p.id)}
                           >
                             Delete
                           </Menu.Item>
