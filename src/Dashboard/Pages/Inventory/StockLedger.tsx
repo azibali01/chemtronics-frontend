@@ -48,9 +48,7 @@ export default function StockLedger() {
         const [productsRes, salesRes, purchaseRes] = await Promise.all([
           api.get("/products"),
           api.get("/sale-invoice"),
-          api.get(
-            "/purchase-invoice/all-purchase-invoices"
-          ),
+          api.get("/purchase-invoice/all-purchase-invoices"),
         ]);
         const products = Array.isArray(productsRes.data)
           ? productsRes.data
@@ -91,29 +89,46 @@ export default function StockLedger() {
           }>;
         };
         const runningBalances: Record<string, number> = {};
+        const runningRates: Record<string, number> = {};
         const rows: StockLedgerRow[] = [];
-        // Opening Balances: Qty In
+
+        // Collect all transactions first
+        const allTransactions: Array<{
+          date: string;
+          productCode: string;
+          productName: string;
+          qtyIn: number;
+          qtyOut: number;
+          rate: number;
+          invid: string;
+          particulars: string;
+          type: "Sale" | "Purchase";
+          id: string;
+        }> = [];
+
+        // Opening Balances
         products.forEach((prod: Product) => {
           const qtyIn = prod.stockQuantity || 0;
-          const qtyOut = 0;
-          const qtyBalance = qtyIn;
-          runningBalances[prod.code] = qtyBalance;
-          rows.push({
-            id: "opening-" + prod.code,
-            date: "2025-01-01", // You can use a dynamic/project start date
-            invid: "",
-            particulars: "Opening Balance",
-            productCode: prod.code,
-            productName: prod.productName,
-            qtyIn,
-            qtyOut,
-            qtyBalance,
-            rate: prod.rate || 0,
-            balance: qtyBalance * (prod.rate || 0),
-            type: "Purchase", // Opening is treated as stock in
-          });
+          runningBalances[prod.code] = qtyIn;
+          runningRates[prod.code] = prod.rate || 0;
+
+          if (qtyIn > 0) {
+            allTransactions.push({
+              id: "opening-" + prod.code,
+              date: "2024-01-01", // Opening balance date
+              productCode: prod.code,
+              productName: prod.productName,
+              qtyIn,
+              qtyOut: 0,
+              rate: prod.rate || 0,
+              invid: "",
+              particulars: "Opening Balance",
+              type: "Purchase",
+            });
+          }
         });
-        // Purchases: Qty In (support both 'products' and 'items' arrays)
+
+        // Purchases
         (purchases as Invoice[]).forEach((inv) => {
           const purchaseItems = Array.isArray(inv.products)
             ? inv.products
@@ -121,28 +136,22 @@ export default function StockLedger() {
             ? inv.items
             : [];
           purchaseItems.forEach((item, idx) => {
-            const prevBalance = runningBalances[item.code] || 0;
-            const qtyIn = item.qty || 0;
-            const qtyOut = 0;
-            const qtyBalance = prevBalance + qtyIn;
-            runningBalances[item.code] = qtyBalance;
-            rows.push({
-              id: inv.id + "-" + (item.id || idx),
+            allTransactions.push({
+              id: inv.id + "-purchase-" + (item.id || idx),
               date: inv.invoiceDate,
-              invid: inv.invoiceNumber,
-              particulars: inv.accountTitle || "Purchase Invoice",
               productCode: item.code,
               productName: item.product,
-              qtyIn,
-              qtyOut,
-              qtyBalance,
+              qtyIn: item.qty || 0,
+              qtyOut: 0,
               rate: item.rate || 0,
-              balance: qtyBalance * (item.rate || 0),
+              invid: inv.invoiceNumber,
+              particulars: inv.accountTitle || "Purchase Invoice",
               type: "Purchase",
             });
           });
         });
-        // Sales: Qty Out (support both 'products' and 'items' arrays)
+
+        // Sales
         (sales as Invoice[]).forEach((inv) => {
           const saleItems = Array.isArray(inv.products)
             ? inv.products
@@ -150,31 +159,64 @@ export default function StockLedger() {
             ? inv.items
             : [];
           saleItems.forEach((item, idx) => {
-            const prevBalance = runningBalances[item.code] || 0;
-            const qtyOut = item.qty || 0;
-            const qtyIn = 0;
-            const qtyBalance = prevBalance - qtyOut;
-            runningBalances[item.code] = qtyBalance;
-            rows.push({
-              id: inv.id + "-" + (item.id || idx),
+            allTransactions.push({
+              id: inv.id + "-sale-" + (item.id || idx),
               date: inv.invoiceDate,
-              invid: inv.invoiceNumber,
-              particulars: inv.accountTitle || "Sale Invoice",
               productCode: item.code,
               productName: item.product,
-              qtyIn,
-              qtyOut,
-              qtyBalance,
+              qtyIn: 0,
+              qtyOut: item.qty || 0,
               rate: item.rate || 0,
-              balance: qtyBalance * (item.rate || 0),
+              invid: inv.invoiceNumber,
+              particulars: inv.accountTitle || "Sale Invoice",
               type: "Sale",
             });
           });
         });
-        // Sort by date ascending
-        rows.sort(
+
+        // Sort all transactions by date ascending
+        allTransactions.sort(
           (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
         );
+
+        // Now calculate running balances with correct weighted average
+        allTransactions.forEach((txn) => {
+          const prevBalance = runningBalances[txn.productCode] || 0;
+          const prevRate = runningRates[txn.productCode] || 0;
+
+          let newBalance = prevBalance;
+          let newRate = prevRate;
+
+          if (txn.qtyIn > 0) {
+            // Purchase: Update weighted average rate
+            const totalValue = prevBalance * prevRate + txn.qtyIn * txn.rate;
+            newBalance = prevBalance + txn.qtyIn;
+            newRate = newBalance > 0 ? totalValue / newBalance : txn.rate;
+          } else if (txn.qtyOut > 0) {
+            // Sale: Reduce quantity, keep rate same
+            newBalance = prevBalance - txn.qtyOut;
+            newRate = prevRate;
+          }
+
+          runningBalances[txn.productCode] = newBalance;
+          runningRates[txn.productCode] = newRate;
+
+          rows.push({
+            id: txn.id,
+            date: txn.date,
+            invid: txn.invid,
+            particulars: txn.particulars,
+            productCode: txn.productCode,
+            productName: txn.productName,
+            qtyIn: txn.qtyIn,
+            qtyOut: txn.qtyOut,
+            qtyBalance: newBalance,
+            rate: newRate,
+            balance: newBalance * newRate,
+            type: txn.type,
+          });
+        });
+
         setStockLedgerData(rows);
       } catch {
         setStockLedgerData([]);
@@ -293,8 +335,8 @@ export default function StockLedger() {
         r.qtyIn ? `+${r.qtyIn}` : "",
         r.qtyOut ? `-${r.qtyOut}` : "",
         r.qtyBalance,
-        r.rate,
-        r.balance,
+        `Rs. ${r.rate.toLocaleString()}`,
+        `Rs. ${r.balance.toLocaleString()}`,
       ]),
       styles: { fontSize: 9 },
       headStyles: { fillColor: [10, 104, 2] }, // #0A6802
@@ -389,7 +431,13 @@ export default function StockLedger() {
         <Group mb="sm">
           <Text fw={600}>Stock Movement History</Text>
         </Group>
-        <Table highlightOnHover withTableBorder verticalSpacing="sm">
+        <Table
+          highlightOnHover
+          withTableBorder
+          verticalSpacing="sm"
+          withRowBorders
+          withColumnBorders
+        >
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Date</Table.Th>
@@ -410,16 +458,20 @@ export default function StockLedger() {
                 <Table.Td>{r.invid}</Table.Td>
                 <Table.Td>{r.type}</Table.Td>
                 <Table.Td>{r.particulars}</Table.Td>
-                <Table.Td>{r.qtyIn}</Table.Td>
-                <Table.Td>{r.qtyOut}</Table.Td>
-                <Table.Td>{r.qtyBalance}</Table.Td>
-                <Table.Td>{r.rate}</Table.Td>
-                <Table.Td>{r.balance}</Table.Td>
+                <Table.Td c="#0A6802">
+                  {r.qtyIn > 0 ? `+${r.qtyIn}` : ""}
+                </Table.Td>
+                <Table.Td c="red">
+                  {r.qtyOut > 0 ? `-${r.qtyOut}` : ""}
+                </Table.Td>
+                <Table.Td fw={500}>{r.qtyBalance}</Table.Td>
+                <Table.Td>Rs. {r.rate.toLocaleString()}</Table.Td>
+                <Table.Td fw={500}>Rs. {r.balance.toLocaleString()}</Table.Td>
               </Table.Tr>
             ))}
             {paginatedData.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={10}>
+                <Table.Td colSpan={9}>
                   <Text c="dimmed" ta="center">
                     No records match the current filters.
                   </Text>

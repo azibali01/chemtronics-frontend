@@ -37,7 +37,6 @@ import CashBook from "../Pages/Accounts/CashBook";
 import JournalVouchers from "../Pages/Accounts/JournalVouchers";
 
 // Tax & Invoices
-import GstInvoices from "../Pages/Tax & Invoices/GstInvoices";
 
 // Analytics
 import Analytics from "../Pages/Analytics/Analytics";
@@ -91,7 +90,6 @@ const routes: RouteObject[] = [
       { path: "journal-vouchers", element: <JournalVouchers /> },
 
       // Tax & Invoices
-      { path: "gst-invoices", element: <GstInvoices /> },
 
       // Analytics
       { path: "analytics", element: <Analytics /> },

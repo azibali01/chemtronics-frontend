@@ -43,19 +43,28 @@ interface Invoice {
 
 interface PurchaseInvoiceData {
   _id: string;
-  invoiceNo: string;
-  date: string;
+  invoiceNo?: string;
+  invoiceNumber?: string;
+  date?: string;
+  invoiceDate?: string;
+  partyBillDate?: string;
   dueDate?: string;
   supplier?: {
     name: string;
+    code?: string;
     email?: string;
     phone?: string;
   };
-  products: Array<{
+  products?: Array<{
+    qty: number;
+    rate: number;
+  }>;
+  items?: Array<{
     qty: number;
     rate: number;
   }>;
   grandTotal?: number;
+  totalAmount?: number;
 }
 
 export default function AccountsPayable() {
@@ -68,7 +77,9 @@ export default function AccountsPayable() {
   useEffect(() => {
     const fetchInvoices = async () => {
       try {
-        const response = await api.get("/purchase-invoice");
+        const response = await api.get(
+          "/purchase-invoice/all-purchase-invoices"
+        );
         console.log("Purchase Invoices API response:", response.data);
         setPurchaseInvoices(response.data || []);
       } catch (error) {
@@ -97,6 +108,15 @@ export default function AccountsPayable() {
       // Filter invoices for this vendor - try multiple matching strategies
       const vendorInvoices = purchaseInvoices.filter((inv) => {
         const supplierName = inv.supplier?.name || "";
+
+        // Debug log for each invoice
+        console.log(`Checking invoice for vendor ${vendorName}:`, {
+          invoiceNo: inv.invoiceNo,
+          supplierName: supplierName,
+          vendorName: vendorName,
+          match: supplierName.toLowerCase() === vendorName.toLowerCase(),
+        });
+
         // Try exact match first
         if (supplierName === vendorName) return true;
         // Try case-insensitive match
@@ -111,35 +131,70 @@ export default function AccountsPayable() {
       });
 
       console.log(`Vendor: ${vendorName}, Matched Invoices:`, vendorInvoices);
+      console.log(
+        `Vendor: ${vendorName}, Total matched before processing:`,
+        vendorInvoices.length
+      );
 
       // Calculate invoice amounts and aging
-      const invoices: Invoice[] = vendorInvoices.map((inv) => {
-        const calculatedAmount =
-          inv.grandTotal ||
-          (inv.products || []).reduce(
-            (total, product) =>
-              total + (product.qty || 0) * (product.rate || 0),
-            0
+      const invoices: Invoice[] = vendorInvoices
+        .filter((inv) => {
+          // Check multiple possible date fields
+          const dateValue = inv.date || inv.invoiceDate || inv.partyBillDate;
+          const hasDate = !!dateValue;
+          if (!hasDate) {
+            console.warn(
+              `Invoice ${
+                inv.invoiceNo || inv.invoiceNumber || "unknown"
+              } has no date field, skipping. Available fields:`,
+              Object.keys(inv)
+            );
+          }
+          return hasDate;
+        })
+        .map((inv) => {
+          // Use whichever date field is available
+          const dateValue =
+            inv.date || inv.invoiceDate || inv.partyBillDate || "";
+
+          const calculatedAmount =
+            inv.grandTotal ||
+            inv.totalAmount ||
+            (inv.products || inv.items || []).reduce(
+              (total, product) =>
+                total + (product.qty || 0) * (product.rate || 0),
+              0
+            );
+
+          const invoiceDate = new Date(dateValue);
+
+          // Validate invoice date
+          if (isNaN(invoiceDate.getTime())) {
+            console.warn(
+              `Invalid date for invoice ${inv.invoiceNo || inv.invoiceNumber}:`,
+              dateValue
+            );
+            return null;
+          }
+
+          const dueDate = inv.dueDate
+            ? new Date(inv.dueDate)
+            : new Date(invoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+          const today = new Date();
+          const daysDiff = Math.floor(
+            (today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
           );
 
-        const invoiceDate = new Date(inv.date);
-        const dueDate = inv.dueDate
-          ? new Date(inv.dueDate)
-          : new Date(invoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-        const today = new Date();
-        const daysDiff = Math.floor(
-          (today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
-        );
-
-        return {
-          invoiceNo: inv.invoiceNo || "N/A",
-          date: invoiceDate.toISOString().split("T")[0],
-          dueDate: dueDate.toISOString().split("T")[0],
-          amount: calculatedAmount,
-          outstanding: calculatedAmount, // Assuming full amount is outstanding
-          daysOverdue: daysDiff > 0 ? `${daysDiff} days` : "Not overdue",
-        };
-      });
+          return {
+            invoiceNo: inv.invoiceNo || inv.invoiceNumber || "N/A",
+            date: invoiceDate.toISOString().split("T")[0],
+            dueDate: dueDate.toISOString().split("T")[0],
+            amount: calculatedAmount,
+            outstanding: calculatedAmount, // Assuming full amount is outstanding
+            daysOverdue: daysDiff > 0 ? `${daysDiff} days` : "Not overdue",
+          };
+        })
+        .filter((inv): inv is Invoice => inv !== null); // Filter out null values
 
       // Calculate aging buckets
       let current = 0;
@@ -165,14 +220,18 @@ export default function AccountsPayable() {
       const totalOutstanding = current + days31to60 + days61to90 + days90plus;
 
       // Get last payment date (most recent invoice date for now)
-      const lastPaymentDate =
-        invoices.length > 0
-          ? invoices.reduce(
-              (latest, inv) =>
-                new Date(inv.date) > new Date(latest) ? inv.date : latest,
-              invoices[0].date
-            )
-          : new Date().toISOString().split("T")[0];
+      let lastPaymentDate = "N/A";
+      if (invoices.length > 0) {
+        const validDates = invoices
+          .map((inv) => inv.date)
+          .filter((date) => date && date !== "Invalid Date");
+
+        if (validDates.length > 0) {
+          lastPaymentDate = validDates.reduce((latest, date) =>
+            new Date(date) > new Date(latest) ? date : latest
+          );
+        }
+      }
 
       return {
         name: vendorName,

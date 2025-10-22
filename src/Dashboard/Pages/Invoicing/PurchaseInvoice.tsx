@@ -743,49 +743,45 @@ export default function PurchaseInvoice(): JSX.Element {
         </div>
       </Group>
 
-      <Table striped>
-        <thead>
-          <tr>
-            <th>Invoice #</th>
-            <th>Date</th>
-            <th>Supplier</th>
-            <th>Purchase Account</th>
-            <th>Purchase Title</th>
-            <th>Amount</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table highlightOnHover withTableBorder withColumnBorders>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Invoice #</Table.Th>
+            <Table.Th>Date</Table.Th>
+            <Table.Th>Supplier</Table.Th>
+            <Table.Th>Purchase Account</Table.Th>
+            <Table.Th>Purchase Title</Table.Th>
+            <Table.Th>Amount</Table.Th>
+            <Table.Th>Actions</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
           {invoices.map((inv) => (
-            <tr key={String(inv.id)}>
-              <td>{inv.invoiceNumber || inv.invoiceNumber}</td>
-              <td>{inv.date}</td>
-              <td>{inv.supplierTitle}</td>
-              <td>{inv.purchaseAccount || ""}</td>
-              <td>{inv.purchaseTitle || ""}</td>
-              <td>{(inv.amount ?? 0).toFixed(2)}</td>
-              <td>
+            <Table.Tr key={String(inv.id)}>
+              <Table.Td>{inv.invoiceNumber || inv.invoiceNumber}</Table.Td>
+              <Table.Td>{inv.date}</Table.Td>
+              <Table.Td>{inv.supplierTitle}</Table.Td>
+              <Table.Td>{inv.purchaseAccount || ""}</Table.Td>
+              <Table.Td>{inv.purchaseTitle || ""}</Table.Td>
+              <Table.Td>{(inv.amount ?? 0).toFixed(2)}</Table.Td>
+              <Table.Td>
                 <Group>
                   <Button
                     variant="subtle"
                     onClick={() => openEdit(inv)}
-                    leftSection={<IconPencil size={14} />}
-                  >
-                    Edit
-                  </Button>
+                    leftSection={<IconPencil size={16} />}
+                  ></Button>
                   <Button
                     variant="subtle"
                     color="red"
                     onClick={() => deleteInvoice(inv.id ?? "")}
-                    leftSection={<IconTrash size={14} />}
-                  >
-                    Delete
-                  </Button>
+                    leftSection={<IconTrash size={16} />}
+                  ></Button>
                 </Group>
-              </td>
-            </tr>
+              </Table.Td>
+            </Table.Tr>
           ))}
-        </tbody>
+        </Table.Tbody>
       </Table>
 
       <Modal

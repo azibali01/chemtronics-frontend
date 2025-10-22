@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Card,
   Text,
@@ -10,20 +10,33 @@ import {
   Select,
   Modal,
   Stack,
+  NumberInput,
+  ActionIcon,
 } from "@mantine/core";
 import { Download, Edit, Trash2, Plus } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable, { type RowInput } from "jspdf-autotable";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import api from "../../../api_configuration/api";
 
-import {
-  JournalVouchersProvider,
-  useJournalVouchers,
-} from "../../Context/Accounts/JournalVouchersContext";
-import type { JournalVoucher } from "../../Context/Accounts/JournalVouchersContext";
+interface JournalVoucherEntry {
+  accountCode: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+}
+
+interface JournalVoucher {
+  _id?: string;
+  voucherNumber: string;
+  date: string;
+  description?: string;
+  entries: JournalVoucherEntry[];
+}
 
 function JournalVoucherList() {
-  const { vouchers, addVoucher, updateVoucher, deleteVoucher } =
-    useJournalVouchers();
+  const { accounts: chartAccounts } = useChartOfAccounts();
+  const [vouchers, setVouchers] = useState<JournalVoucher[]>([]);
 
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -34,6 +47,75 @@ function JournalVoucherList() {
   const [openedCreate, setOpenedCreate] = useState(false);
   const [openedEdit, setOpenedEdit] = useState(false);
   const [editVoucher, setEditVoucher] = useState<JournalVoucher | null>(null);
+  const [nextVoucherNumber, setNextVoucherNumber] = useState<string>("");
+
+  // Fetch journal vouchers from API
+  useEffect(() => {
+    const fetchJournalVouchers = async () => {
+      try {
+        const response = await api.get("/journal-vouchers");
+        console.log("Journal Vouchers API response:", response.data);
+        setVouchers(response.data || []);
+
+        // Generate next voucher number
+        generateNextVoucherNumber(response.data || []);
+      } catch (error) {
+        console.error("Failed to fetch journal vouchers:", error);
+        setVouchers([]);
+        setNextVoucherNumber("JV-0001");
+      }
+    };
+
+    fetchJournalVouchers();
+  }, []);
+
+  const generateNextVoucherNumber = (vouchersList: JournalVoucher[]) => {
+    if (vouchersList.length === 0) {
+      setNextVoucherNumber("JV-0001");
+      return;
+    }
+
+    // Extract numbers from voucher numbers and find the maximum
+    const numbers = vouchersList
+      .map((v) => {
+        const match = v.voucherNumber.match(/\d+/);
+        return match ? parseInt(match[0], 10) : 0;
+      })
+      .filter((num) => !isNaN(num));
+
+    const maxNumber = numbers.length > 0 ? Math.max(...numbers) : 0;
+    const nextNumber = maxNumber + 1;
+    setNextVoucherNumber(`JV-${nextNumber.toString().padStart(4, "0")}`);
+  };
+
+  // Flatten accounts for dropdown
+  const flattenAccounts = (accounts: Account[]): Account[] => {
+    let result: Account[] = [];
+    accounts.forEach((account) => {
+      result.push(account);
+      if (account.children && account.children.length > 0) {
+        result = result.concat(flattenAccounts(account.children));
+      }
+    });
+    return result;
+  };
+
+  interface Account {
+    accountCode?: string;
+    accountName?: string;
+    children?: Account[];
+  }
+
+  const accountOptions = useMemo(() => {
+    const flatAccounts = flattenAccounts(chartAccounts as Account[]);
+    return flatAccounts
+      .filter((acc) => acc.accountCode && acc.accountName)
+      .map((acc) => ({
+        value: acc.accountCode!,
+        label: `${acc.accountCode} - ${acc.accountName}`,
+      }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartAccounts]);
 
   const filteredData = useMemo(() => {
     let result = vouchers;
@@ -46,9 +128,9 @@ function JournalVoucherList() {
     if (search) {
       result = result.filter(
         (v) =>
-          v.voucherNo.toLowerCase().includes(search.toLowerCase()) ||
-          v.account.toLowerCase().includes(search.toLowerCase()) ||
-          v.description.toLowerCase().includes(search.toLowerCase())
+          v.voucherNumber.toLowerCase().includes(search.toLowerCase()) ||
+          (v.description &&
+            v.description.toLowerCase().includes(search.toLowerCase()))
       );
     }
     return result;
@@ -75,19 +157,27 @@ function JournalVoucherList() {
 
     doc.setFontSize(11);
     doc.setTextColor("#444");
-    doc.text(`Voucher No: ${voucher.voucherNo}`, 40, 95);
+    doc.text(`Voucher No: ${voucher.voucherNumber}`, 40, 95);
     doc.text(`Date: ${voucher.date}`, 250, 95);
-    doc.text(`Account: ${voucher.account}`, 40, 115);
-    doc.text(`Title: ${voucher.title}`, 250, 115);
-    doc.text(`Description: ${voucher.description}`, 40, 135);
+    doc.text(`Description: ${voucher.description || "N/A"}`, 40, 115);
+
+    const totalDebit = voucher.entries.reduce((sum, e) => sum + e.debit, 0);
+    const totalCredit = voucher.entries.reduce((sum, e) => sum + e.credit, 0);
 
     autoTable(doc, {
-      startY: 155,
-      head: [["Debit", "Credit"]],
+      startY: 135,
+      head: [["Account Code", "Account Name", "Debit", "Credit"]],
       body: [
+        ...voucher.entries.map((entry) => [
+          entry.accountCode,
+          entry.accountName,
+          `Rs. ${entry.debit.toLocaleString()}`,
+          `Rs. ${entry.credit.toLocaleString()}`,
+        ]),
         [
-          `₹${voucher.debit.toLocaleString()}`,
-          `₹${voucher.credit.toLocaleString()}`,
+          { content: "Totals", colSpan: 2, styles: { fontStyle: "bold" } },
+          `Rs. ${totalDebit.toLocaleString()}`,
+          `Rs. ${totalCredit.toLocaleString()}`,
         ],
       ] as RowInput[],
       styles: { fontSize: 12 },
@@ -105,7 +195,7 @@ function JournalVoucherList() {
     );
     doc.text(`Page 1 of 1`, 480, doc.internal.pageSize.height - 30);
 
-    doc.save(`${voucher.voucherNo}.pdf`);
+    doc.save(`${voucher.voucherNumber}.pdf`);
   };
 
   const exportAllPDF = () => {
@@ -135,44 +225,38 @@ function JournalVoucherList() {
       doc.text(dateText, 40, 90);
     }
 
-    const totalDebit = filteredData.reduce((sum, v) => sum + v.debit, 0);
-    const totalCredit = filteredData.reduce((sum, v) => sum + v.credit, 0);
+    const totalDebit = filteredData.reduce(
+      (sum, v) => sum + v.entries.reduce((s, e) => s + e.debit, 0),
+      0
+    );
+    const totalCredit = filteredData.reduce(
+      (sum, v) => sum + v.entries.reduce((s, e) => s + e.credit, 0),
+      0
+    );
 
     autoTable(doc, {
       startY: dateText ? 110 : 90,
-      head: [
-        [
-          "Voucher No",
-          "Date",
-          "Account",
-          "Title",
-          "Description",
-          "Debit",
-          "Credit",
-        ],
-      ],
+      head: [["Voucher No", "Date", "Description", "Debit", "Credit"]],
       body: [
         ...filteredData.map((v) => [
-          v.voucherNo,
+          v.voucherNumber,
           v.date,
-          v.account,
-          v.title,
-          v.description,
-          `₹${v.debit.toLocaleString()}`,
-          `₹${v.credit.toLocaleString()}`,
+          v.description || "N/A",
+          `Rs. ${v.entries.reduce((s, e) => s + e.debit, 0).toLocaleString()}`,
+          `Rs. ${v.entries.reduce((s, e) => s + e.credit, 0).toLocaleString()}`,
         ]),
         [
           {
             content: "Totals",
-            colSpan: 5,
+            colSpan: 3,
             styles: { halign: "right", fontStyle: "bold" },
           },
           {
-            content: `₹${totalDebit.toLocaleString()}`,
+            content: `Rs. ${totalDebit.toLocaleString()}`,
             styles: { fontStyle: "bold" },
           },
           {
-            content: `₹${totalCredit.toLocaleString()}`,
+            content: `Rs. ${totalCredit.toLocaleString()}`,
             styles: { fontStyle: "bold" },
           },
         ],
@@ -201,14 +285,39 @@ function JournalVoucherList() {
     doc.save("journal_vouchers.pdf");
   };
 
-  const handleCreate = (newVoucher: JournalVoucher) => {
-    addVoucher(newVoucher);
-    setOpenedCreate(false);
+  const handleCreate = async (newVoucher: JournalVoucher) => {
+    try {
+      await api.post("/journal-vouchers", newVoucher);
+      const response = await api.get("/journal-vouchers");
+      setVouchers(response.data || []);
+      generateNextVoucherNumber(response.data || []);
+      setOpenedCreate(false);
+    } catch (error) {
+      console.error("Failed to create journal voucher:", error);
+    }
   };
 
-  const handleEdit = (updatedVoucher: JournalVoucher) => {
-    updateVoucher(updatedVoucher);
-    setOpenedEdit(false);
+  const handleEdit = async (updatedVoucher: JournalVoucher) => {
+    try {
+      await api.put(`/journal-vouchers/${updatedVoucher._id}`, updatedVoucher);
+      const response = await api.get("/journal-vouchers");
+      setVouchers(response.data || []);
+      generateNextVoucherNumber(response.data || []);
+      setOpenedEdit(false);
+    } catch (error) {
+      console.error("Failed to update journal voucher:", error);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api.delete(`/journal-vouchers/${id}`);
+      const response = await api.get("/journal-vouchers");
+      setVouchers(response.data || []);
+      generateNextVoucherNumber(response.data || []);
+    } catch (error) {
+      console.error("Failed to delete journal voucher:", error);
+    }
   };
 
   return (
@@ -303,24 +412,26 @@ function JournalVoucherList() {
             <Table.Tr>
               <Table.Th>Voucher No</Table.Th>
               <Table.Th>Date</Table.Th>
-              <Table.Th>Account</Table.Th>
-              <Table.Th>Title</Table.Th>
+              <Table.Th>Description</Table.Th>
               <Table.Th>Debit</Table.Th>
               <Table.Th>Credit</Table.Th>
-              <Table.Th>Description</Table.Th>
               <Table.Th>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {paginatedData.map((v, i) => (
               <Table.Tr key={i}>
-                <Table.Td>{v.voucherNo}</Table.Td>
+                <Table.Td>{v.voucherNumber}</Table.Td>
                 <Table.Td>{v.date}</Table.Td>
-                <Table.Td>{v.account}</Table.Td>
-                <Table.Td>{v.title}</Table.Td>
-                <Table.Td c="#0A6802">{v.debit.toLocaleString()}</Table.Td>
-                <Table.Td c="red">{v.credit.toLocaleString()}</Table.Td>
-                <Table.Td>{v.description}</Table.Td>
+                <Table.Td>{v.description || "N/A"}</Table.Td>
+                <Table.Td c="#0A6802">
+                  Rs.{" "}
+                  {v.entries.reduce((s, e) => s + e.debit, 0).toLocaleString()}
+                </Table.Td>
+                <Table.Td c="red">
+                  Rs.{" "}
+                  {v.entries.reduce((s, e) => s + e.credit, 0).toLocaleString()}
+                </Table.Td>
                 <Table.Td>
                   <Group gap="xs">
                     <Button
@@ -338,7 +449,7 @@ function JournalVoucherList() {
                       variant="light"
                       color="red"
                       leftSection={<Trash2 size={14} />}
-                      onClick={() => deleteVoucher(v.voucherNo)}
+                      onClick={() => v._id && handleDelete(v._id)}
                     ></Button>
                     <Button
                       size="xs"
@@ -368,17 +479,27 @@ function JournalVoucherList() {
         opened={openedCreate}
         onClose={() => setOpenedCreate(false)}
         title={<strong>Create Journal Voucher</strong>}
+        size="xl"
       >
-        <VoucherForm onSubmit={handleCreate} />
+        <VoucherForm
+          onSubmit={handleCreate}
+          accountOptions={accountOptions}
+          autoVoucherNumber={nextVoucherNumber}
+        />
       </Modal>
 
       <Modal
         opened={openedEdit}
         onClose={() => setOpenedEdit(false)}
         title={<strong>Edit Journal Voucher</strong>}
+        size="xl"
       >
         {editVoucher && (
-          <VoucherForm initialData={editVoucher} onSubmit={handleEdit} />
+          <VoucherForm
+            initialData={editVoucher}
+            onSubmit={handleEdit}
+            accountOptions={accountOptions}
+          />
         )}
       </Modal>
     </div>
@@ -388,170 +509,229 @@ function JournalVoucherList() {
 function VoucherForm({
   onSubmit,
   initialData,
+  accountOptions,
+  autoVoucherNumber,
 }: {
   onSubmit: (data: JournalVoucher) => void;
   initialData?: JournalVoucher;
+  accountOptions: { value: string; label: string }[];
+  autoVoucherNumber?: string;
 }) {
   const [voucher, setVoucher] = useState<JournalVoucher>(
     initialData || {
-      voucherNo: "",
-      date: "",
-      account: "",
-      title: "",
-      debit: 0,
-      credit: 0,
+      voucherNumber: autoVoucherNumber || "",
+      date: new Date().toISOString().split("T")[0],
       description: "",
+      entries: [
+        { accountCode: "", accountName: "", debit: 0, credit: 0 },
+        { accountCode: "", accountName: "", debit: 0, credit: 0 },
+      ],
     }
   );
 
-  const printRef = useRef<HTMLDivElement>(null);
+  // Update voucher number when autoVoucherNumber changes
+  useEffect(() => {
+    if (autoVoucherNumber && !initialData) {
+      setVoucher((prev) => ({ ...prev, voucherNumber: autoVoucherNumber }));
+    }
+  }, [autoVoucherNumber, initialData]);
 
-  const handleChange = (
-    field: keyof JournalVoucher,
-    value: string | number
-  ) => {
+  const handleVoucherChange = (field: string, value: string) => {
     setVoucher((prev) => ({ ...prev, [field]: value }));
   };
 
-  const printVoucherWindow = (voucher: JournalVoucher): void => {
-    const printContent = `
-      <html>
-        <head>
-          <title>Journal Voucher ${voucher.voucherNo}</title>
-          <style>
-            body { font-family: Arial, sans-serif; color: #222; padding: 24px; }
-            h2 { margin-bottom: 8px; }
-            p { margin: 4px 0; }
-          </style>
-        </head>
-        <body>
-          <h2>Journal Voucher</h2>
-          <p><strong>Voucher No:</strong> ${voucher.voucherNo}</p>
-          <p><strong>Date:</strong> ${voucher.date}</p>
-          <p><strong>Account:</strong> ${voucher.account}</p>
-          <p><strong>Title:</strong> ${voucher.title}</p>
-          <p><strong>Debit:</strong> ₹${voucher.debit.toLocaleString()}</p>
-          <p><strong>Credit:</strong> ₹${voucher.credit.toLocaleString()}</p>
-          <p><strong>Description:</strong> ${voucher.description}</p>
-        </body>
-      </html>
-    `;
-    const printWindow = window.open("", "_blank", "width=800,height=600");
-    if (printWindow) {
-      printWindow.document.open();
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => printWindow.print(), 300);
+  const handleEntryChange = (
+    index: number,
+    field: keyof JournalVoucherEntry,
+    value: string | number
+  ) => {
+    const newEntries = [...voucher.entries];
+
+    if (field === "accountCode") {
+      const selectedAccount = accountOptions.find((acc) => acc.value === value);
+      newEntries[index] = {
+        ...newEntries[index],
+        accountCode: value as string,
+        accountName: selectedAccount
+          ? selectedAccount.label.split(" - ")[1]
+          : "",
+      };
+    } else {
+      newEntries[index] = { ...newEntries[index], [field]: value };
+    }
+
+    setVoucher((prev) => ({ ...prev, entries: newEntries }));
+  };
+
+  const addEntry = () => {
+    setVoucher((prev) => ({
+      ...prev,
+      entries: [
+        ...prev.entries,
+        { accountCode: "", accountName: "", debit: 0, credit: 0 },
+      ],
+    }));
+  };
+
+  const removeEntry = (index: number) => {
+    if (voucher.entries.length > 2) {
+      setVoucher((prev) => ({
+        ...prev,
+        entries: prev.entries.filter((_, i) => i !== index),
+      }));
     }
   };
+
+  const totalDebit = voucher.entries.reduce(
+    (sum, e) => sum + Number(e.debit),
+    0
+  );
+  const totalCredit = voucher.entries.reduce(
+    (sum, e) => sum + Number(e.credit),
+    0
+  );
+  const isBalanced = totalDebit === totalCredit && totalDebit > 0;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isBalanced) {
+      alert("Debit and Credit must be equal and greater than 0!");
+      return;
+    }
+    onSubmit(voucher);
+  };
+
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit(voucher);
-      }}
-    >
-      {/* Hidden printable area */}
-      <div
-        ref={printRef}
-        style={{
-          height: 0,
-          overflow: "hidden",
-          opacity: 0,
-          pointerEvents: "none",
-          position: "absolute",
-          zIndex: -1,
-        }}
-      >
-        <div style={{ padding: 24, fontFamily: "Arial" }}>
-          <h2>Journal Voucher</h2>
-          <p>
-            <strong>Voucher No:</strong> {voucher.voucherNo}
-          </p>
-          <p>
-            <strong>Date:</strong> {voucher.date}
-          </p>
-          <p>
-            <strong>Account:</strong> {voucher.account}
-          </p>
-          <p>
-            <strong>Title:</strong> {voucher.title}
-          </p>
-          <p>
-            <strong>Debit:</strong> {voucher.debit}
-          </p>
-          <p>
-            <strong>Credit:</strong> {voucher.credit}
-          </p>
-          <p>
-            <strong>Description:</strong> {voucher.description}
-          </p>
-        </div>
-      </div>
-      <Group grow>
+    <form onSubmit={handleSubmit}>
+      <Group grow mb="md">
         <TextInput
-          label="Voucher No"
-          value={voucher.voucherNo}
-          onChange={(e) => handleChange("voucherNo", e.currentTarget.value)}
+          label="Voucher Number"
+          value={voucher.voucherNumber}
+          onChange={(e) =>
+            handleVoucherChange("voucherNumber", e.currentTarget.value)
+          }
+          readOnly={!initialData}
+          disabled={!initialData}
           required
         />
         <TextInput
           label="Date"
           type="date"
           value={voucher.date}
-          onChange={(e) => handleChange("date", e.currentTarget.value)}
+          onChange={(e) => handleVoucherChange("date", e.currentTarget.value)}
           required
         />
       </Group>
-      <Group grow mt={"md"}>
-        <TextInput
-          label="Account Code"
-          value={voucher.account}
-          onChange={(e) => handleChange("account", e.currentTarget.value)}
-          required
-        />
-        <Select
-          label="Title"
-          value={voucher.title}
-          onChange={(value) => handleChange("title", value ?? "")}
-          required
-        />
-      </Group>
-      <Group grow mt={"md"}>
-        <TextInput
-          label="Debit"
-          type="number"
-          value={voucher.debit}
-          onChange={(e) => handleChange("debit", Number(e.currentTarget.value))}
-        />
 
-        <TextInput
-          label="Credit"
-          type="number"
-          value={voucher.credit}
-          onChange={(e) =>
-            handleChange("credit", Number(e.currentTarget.value))
-          }
-        />
-      </Group>
       <TextInput
-        mt={"md"}
         label="Description"
         value={voucher.description}
-        onChange={(e) => handleChange("description", e.currentTarget.value)}
+        onChange={(e) =>
+          handleVoucherChange("description", e.currentTarget.value)
+        }
+        mb="md"
       />
 
+      <Text fw={600} mb="sm">
+        Journal Entries
+      </Text>
+
+      {voucher.entries.map((entry, index) => (
+        <Card key={index} shadow="sm" p="sm" mb="sm" withBorder>
+          <Group justify="space-between" mb="xs">
+            <Text size="sm" fw={500}>
+              Entry {index + 1}
+            </Text>
+            {voucher.entries.length > 2 && (
+              <ActionIcon
+                color="red"
+                variant="light"
+                onClick={() => removeEntry(index)}
+              >
+                <Trash2 size={16} />
+              </ActionIcon>
+            )}
+          </Group>
+
+          <Select
+            label="Account"
+            placeholder="Select account"
+            data={accountOptions}
+            value={entry.accountCode}
+            onChange={(value) =>
+              handleEntryChange(index, "accountCode", value || "")
+            }
+            searchable
+            required
+            mb="xs"
+          />
+
+          <Group grow>
+            <NumberInput
+              label="Debit"
+              value={entry.debit}
+              onChange={(value) =>
+                handleEntryChange(index, "debit", Number(value) || 0)
+              }
+              min={0}
+              step={0.01}
+            />
+            <NumberInput
+              label="Credit"
+              value={entry.credit}
+              onChange={(value) =>
+                handleEntryChange(index, "credit", Number(value) || 0)
+              }
+              min={0}
+              step={0.01}
+            />
+          </Group>
+        </Card>
+      ))}
+
+      <Button
+        variant="light"
+        color="#0A6802"
+        leftSection={<Plus size={16} />}
+        onClick={addEntry}
+        mb="md"
+        fullWidth
+      >
+        Add Entry
+      </Button>
+
+      <Card shadow="sm" p="md" mb="md" withBorder bg="#F1FCF0">
+        <Group justify="space-between">
+          <div>
+            <Text size="sm" c="dimmed">
+              Total Debit
+            </Text>
+            <Text fw={700} c="#0A6802">
+              Rs. {totalDebit.toLocaleString()}
+            </Text>
+          </div>
+          <div>
+            <Text size="sm" c="dimmed">
+              Total Credit
+            </Text>
+            <Text fw={700} c="red">
+              Rs. {totalCredit.toLocaleString()}
+            </Text>
+          </div>
+          <div>
+            <Text size="sm" c="dimmed">
+              Status
+            </Text>
+            <Text fw={700} c={isBalanced ? "#0A6802" : "orange"}>
+              {isBalanced ? "✓ Balanced" : "⚠ Not Balanced"}
+            </Text>
+          </div>
+        </Group>
+      </Card>
+
       <Group justify="flex-end" mt="md">
-        <Button
-          color="#819E00"
-          variant="outline"
-          onClick={() => printVoucherWindow(voucher)}
-        >
-          Print
-        </Button>
-        <Button type="submit" color="#0A6802">
-          Save
+        <Button type="submit" color="#0A6802" disabled={!isBalanced}>
+          Save Voucher
         </Button>
       </Group>
     </form>
@@ -559,9 +739,5 @@ function VoucherForm({
 }
 
 export default function JournalVouchers() {
-  return (
-    <JournalVouchersProvider>
-      <JournalVoucherList />
-    </JournalVouchersProvider>
-  );
+  return <JournalVoucherList />;
 }

@@ -21,8 +21,6 @@ import {
   IconPackage,
   IconReportAnalytics,
   IconCash,
-  IconReceipt2,
-  IconChartBar,
   IconHome,
 } from "@tabler/icons-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
@@ -135,11 +133,11 @@ const menuItems: MenuItem[] = [
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/products",
       },
-      {
-        label: "Stock Opening",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/account-ledger",
-      },
+      // {
+      //   label: "Stock Opening",
+      //   icon: <IconArrowRight size={16} />,
+      //   path: "/dashboard/account-ledger",
+      // },
       {
         label: "Stock Ledger",
         icon: <IconArrowRight size={16} />,
@@ -161,16 +159,16 @@ const menuItems: MenuItem[] = [
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/general-ledger",
       },
-      {
-        label: "Sales Ledger",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/sales-ledger",
-      },
-      {
-        label: "Purchase Ledger",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/purchase-ledger",
-      },
+      // {
+      //   label: "Sales Ledger",
+      //   icon: <IconArrowRight size={16} />,
+      //   path: "/dashboard/sales-ledger",
+      // },
+      // {
+      //   label: "Purchase Ledger",
+      //   icon: <IconArrowRight size={16} />,
+      //   path: "/dashboard/purchase-ledger",
+      // },
       {
         label: "Accounts Receivable",
         icon: <IconArrowRight size={16} />,
@@ -201,33 +199,6 @@ const menuItems: MenuItem[] = [
         label: "Journal Vouchers",
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/journal-vouchers",
-      },
-    ],
-  },
-  {
-    label: "Tax & Invoices",
-    icon: <IconReceipt2 size={18} />,
-    children: [
-      {
-        label: "GST Invoices",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/gst-invoices",
-      },
-      {
-        label: "Tax Reports",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/tax-reports",
-      },
-    ],
-  },
-  {
-    label: "Analytics",
-    icon: <IconChartBar size={18} />,
-    children: [
-      {
-        label: "Analytics Dashboard",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/analytics",
       },
     ],
   },

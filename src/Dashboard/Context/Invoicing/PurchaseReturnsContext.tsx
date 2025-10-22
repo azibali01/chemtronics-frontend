@@ -15,6 +15,8 @@ type ReturnEntry = {
   id: string;
   invoice: string;
   date: string;
+  referenceNumber: string;
+  referenceDate: string;
   amount: number;
   notes: string;
   items: ReturnItem[];

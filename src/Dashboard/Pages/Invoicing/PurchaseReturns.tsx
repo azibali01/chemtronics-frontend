@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 
 import {
   Modal,
@@ -52,12 +52,15 @@ interface ReturnEntry {
   id: string;
   invoice: string;
   date: string;
+  referenceNumber: string;
+  referenceDate: string;
   amount: number;
   notes: string;
   items: ReturnItem[];
   supplierNumber: string;
   supplierTitle: string;
-  // purchaseAccount and purchaseTitle removed
+  purchaseAccount: string;
+  purchaseTitle: string;
 }
 
 // Helper to get next invoice number
@@ -85,16 +88,19 @@ export default function PurchaseReturnModal() {
   const [editOpened, setEditOpened] = useState(false);
 
   const [returnDate, setReturnDate] = useState("");
+  const [referenceNumber, setReferenceNumber] = useState("");
+  const [referenceDate, setReferenceDate] = useState("");
   const [notes, setNotes] = useState<string>("");
   const [supplierNumber, setSupplierNumber] = useState("");
   const [supplierTitle, setSupplierTitle] = useState("");
-  // purchaseAccount and purchaseTitle state removed
+  const [purchaseAccount, setPurchaseAccount] = useState("");
+  const [purchaseTitle, setPurchaseTitle] = useState("");
   const [invoice, setInvoice] = useState("");
 
   // --- Supplier mapping logic (same as PurchaseInvoice) ---
   const [accounts, setAccounts] = useState<any[]>([]);
 
-  const flattenAccounts = (nodes: any[]): any[] => {
+  const flattenAccounts = React.useCallback((nodes: any[]): any[] => {
     let result: any[] = [];
     nodes.forEach((node) => {
       result.push({
@@ -113,73 +119,193 @@ export default function PurchaseReturnModal() {
       }
     });
     return result;
-  };
-
-  useEffect(() => {
-    api
-      .get("/chart-of-account/all")
-      .then((res) => {
-        console.log("Raw accounts response:", res.data);
-        if (Array.isArray(res.data)) {
-          setAccounts(res.data);
-          // Flatten and console all accounts
-          const allAccounts = flattenAccounts(res.data);
-          console.log("All found accounts in Purchase Return:", allAccounts);
-        }
-      });
   }, []);
 
-  const flatAccounts = flattenAccounts(accounts);
-  console.log("Full flattened accounts:", flatAccounts);
-  const supplierAccounts = flatAccounts.filter(
-    (acc) => acc.accountType === "2210"
-  );
-  console.log(
-    "Filtered supplierAccounts (accountType === '2210'):",
-    supplierAccounts
-  );
-  // Supplier select options from backend supplierAccounts
+  useEffect(() => {
+    api.get("/chart-of-account/all").then((res) => {
+      console.log("Raw accounts response:", res.data);
+      if (Array.isArray(res.data)) {
+        setAccounts(res.data);
+        // Flatten and console all accounts
+        const allAccounts = flattenAccounts(res.data);
+        console.log("All found accounts in Purchase Return:", allAccounts);
+      }
+    });
+  }, [flattenAccounts]);
+
+  // Derive Purchase Party accounts (Liabilities → Current Liabilities → Purchase Party)
+  // Filter accounts whose code starts with "221"
+  const supplierAccounts = (() => {
+    const results: any[] = [];
+
+    function walk(nodes: any[]) {
+      if (!Array.isArray(nodes)) return;
+      for (const node of nodes) {
+        if (!node) continue;
+
+        // Get the account code
+        const accountCode = String(
+          node.accountCode ?? node.code ?? node.selectedCode ?? ""
+        );
+
+        // Check if this is a Purchase Party account (code starts with "221")
+        const isPurchaseParty = accountCode.startsWith("221");
+
+        if (isPurchaseParty) {
+          results.push({
+            code: String(node.accountCode ?? node.code ?? ""),
+            name: String(node.accountName ?? node.name ?? ""),
+            accountName: String(node.accountName ?? node.name ?? ""),
+            accountCode: String(node.accountCode ?? node.code ?? ""),
+            ...node,
+          });
+        }
+
+        // Recursively walk children
+        if (Array.isArray(node.children) && node.children.length > 0) {
+          walk(node.children);
+        }
+      }
+    }
+
+    walk(accounts);
+
+    // Remove duplicates
+    const uniqueResults = results.filter(
+      (r, idx, arr) =>
+        arr.findIndex((x) => x.accountCode === r.accountCode) === idx
+    );
+
+    console.log(
+      "Purchase Party Accounts (Suppliers) - codes starting with 221:",
+      uniqueResults
+    );
+    return uniqueResults;
+  })();
+
+  // Supplier select options from Purchase Party accounts
   const supplierSelectOptions =
     supplierAccounts.length > 0
       ? supplierAccounts
-          .filter((supplier) => supplier.accountName)
+          .filter((supplier) => supplier.accountName || supplier.name)
           .map((supplier) => ({
-            value: supplier.accountName,
-            label: supplier.accountName,
+            value: supplier.accountName || supplier.name,
+            label: `${supplier.accountCode || supplier.code} - ${
+              supplier.accountName || supplier.name
+            }`,
             data: supplier,
           }))
-      : [{ value: "", label: "No supplier found", disabled: true }];
+      : [{ value: "", label: "No suppliers found", disabled: true }];
 
   // Function to handle supplier selection
   const handleSupplierSelect = (selectedValue: string) => {
     const selectedSupplier = supplierAccounts.find(
-      (s: any) => s.accountName === selectedValue
+      (s: any) =>
+        s.accountName === selectedValue ||
+        s.name === selectedValue ||
+        `${s.accountCode || s.code} - ${s.accountName || s.name}` ===
+          selectedValue
     );
     if (selectedSupplier) {
-      setSupplierNumber(selectedSupplier.accountName);
+      setSupplierNumber(
+        selectedSupplier.accountCode || selectedSupplier.code || ""
+      );
       setSupplierTitle(selectedSupplier.accountName || selectedSupplier.name);
     }
   };
 
-  // --- Sale Account mapping logic (same as SaleReturns) ---
-  // const saleAccountTitleMap: Record<string, string> = {
-  //   "4111": "Sales Of Chemicals",
-  //   "4112": "Sale Of Equipments",
-  //   "4113": "Services",
-  //   "4114": "Sale Of Chemicals and Equipments",
-  // };
+  // --- Purchase Account mapping logic from Chart of Accounts ---
+  // Derive Inventory accounts (Assets → Inventories)
+  // Filter accounts whose code starts with "13" (Inventory accounts under Assets)
+  const purchaseAccountOptions = (() => {
+    const results: any[] = [];
+    const allAccounts: any[] = [];
 
-  // const saleAccountOptions = Object.entries(saleAccountTitleMap).map(
-  //   ([code, title]) => ({
-  //     value: code,
-  //     label: `${code} - ${title}`,
-  //   })
-  // );
+    function walk(nodes: any[]) {
+      if (!Array.isArray(nodes)) return;
+      for (const node of nodes) {
+        if (!node) continue;
 
-  // Function to handle sale account selection
-  // const handleSaleAccountSelect = (selectedValue: string) => {
-  // purchaseAccount and purchaseTitle logic removed
-  // };
+        // Get the account code
+        const accountCode = String(
+          node.accountCode ?? node.code ?? node.selectedCode ?? ""
+        );
+
+        // Log all accounts for debugging
+        if (accountCode.startsWith("13")) {
+          allAccounts.push({
+            code: accountCode,
+            name: node.accountName ?? node.name ?? "",
+            type: node.accountType,
+          });
+        }
+
+        // Check if this is an Inventory account (code starts with "13")
+        const isInventoryAccount = accountCode.startsWith("13");
+
+        // Include if it's an inventory account and EITHER Detail type OR has no children (leaf node)
+        if (
+          isInventoryAccount &&
+          (node.accountType === "Detail" ||
+            !node.children ||
+            node.children.length === 0)
+        ) {
+          results.push({
+            code: String(node.accountCode ?? node.code ?? ""),
+            name: String(node.accountName ?? node.name ?? ""),
+            accountName: String(node.accountName ?? node.name ?? ""),
+            accountCode: String(node.accountCode ?? node.code ?? ""),
+            ...node,
+          });
+        }
+
+        // Recursively walk children
+        if (Array.isArray(node.children) && node.children.length > 0) {
+          walk(node.children);
+        }
+      }
+    }
+
+    walk(accounts);
+
+    // Remove duplicates
+    const uniqueResults = results.filter(
+      (r, idx, arr) =>
+        arr.findIndex((x) => x.accountCode === r.accountCode) === idx
+    );
+
+    console.log("All accounts starting with 13 (Inventories):", allAccounts);
+    console.log(
+      "Purchase Accounts from Inventories (filtered):",
+      uniqueResults
+    );
+
+    return uniqueResults.length > 0
+      ? uniqueResults.map((acc) => ({
+          value: acc.accountCode || acc.code,
+          label: `${acc.accountCode || acc.code} - ${
+            acc.accountName || acc.name
+          }`,
+          data: acc,
+        }))
+      : [{ value: "", label: "No purchase accounts found", disabled: true }];
+  })();
+
+  // Function to handle purchase account selection
+  const handleSaleAccountSelect = (selectedValue: string) => {
+    const selectedAccount = purchaseAccountOptions.find(
+      (opt: any) => opt.value === selectedValue
+    );
+    if (selectedAccount && "data" in selectedAccount && selectedAccount.data) {
+      setPurchaseAccount(selectedValue);
+      setPurchaseTitle(
+        selectedAccount.data.accountName || selectedAccount.data.name
+      );
+    } else {
+      setPurchaseAccount(selectedValue);
+      setPurchaseTitle("");
+    }
+  };
 
   const [search, setSearch] = useState<string>("");
   const [fromDate, setFromDate] = useState("");
@@ -207,17 +333,10 @@ export default function PurchaseReturnModal() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
 
-  // Add useEffect to fetch purchase returns from backend on component mount
-  useEffect(() => {
-    fetchPurchaseReturns();
-  }, []);
-
   // Function to fetch all purchase returns from backend
-  const fetchPurchaseReturns = async () => {
+  const fetchPurchaseReturns = React.useCallback(async () => {
     try {
-      const response = await api.get(
-        "/purchase-return"
-      ); // Changed path
+      const response = await api.get("/purchase-return");
       setReturns(response.data);
     } catch (error) {
       console.error("Error fetching purchase returns:", error);
@@ -227,7 +346,12 @@ export default function PurchaseReturnModal() {
         color: "red",
       });
     }
-  };
+  }, [setReturns]);
+
+  // Add useEffect to fetch purchase returns from backend on component mount
+  useEffect(() => {
+    fetchPurchaseReturns();
+  }, [fetchPurchaseReturns]);
 
   // Function to create purchase return in backend
   const createPurchaseReturn = async (returnData: ReturnEntry) => {
@@ -239,6 +363,8 @@ export default function PurchaseReturnModal() {
       const payload = {
         invoiceNumber,
         invoiceDate: returnData.date,
+        referenceNumber: returnData.referenceNumber,
+        referenceDate: returnData.referenceDate,
         supplier: { name: returnData.supplierNumber },
         supplierTitle: returnData.supplierTitle,
         products: returnData.items.map((item) => ({
@@ -253,10 +379,7 @@ export default function PurchaseReturnModal() {
         amount: returnData.amount,
       };
 
-      const response = await api.post(
-        "/purchase-return",
-        payload
-      );
+      const response = await api.post("/purchase-return", payload);
 
       if (response.data) {
         setReturns((prev) => [response.data, ...prev]);
@@ -302,6 +425,8 @@ export default function PurchaseReturnModal() {
       const payload = {
         invoiceNumber,
         invoiceDate: returnData.date,
+        referenceNumber: returnData.referenceNumber,
+        referenceDate: returnData.referenceDate,
         supplier: { name: returnData.supplierNumber },
         supplierTitle: returnData.supplierTitle,
         products: returnData.items.map((item) => ({
@@ -347,9 +472,7 @@ export default function PurchaseReturnModal() {
   // Function to delete purchase return
   const deletePurchaseReturn = async (returnId: string) => {
     try {
-      await api.delete(
-        `/purchase-return/${returnId}`
-      ); // Changed path
+      await api.delete(`/purchase-return/${returnId}`); // Changed path
 
       // Remove from local state after successful backend deletion
       setReturns((prev) => prev.filter((r) => r.id !== returnId));
@@ -377,9 +500,12 @@ export default function PurchaseReturnModal() {
   const resetForm = () => {
     setInvoice(getNextReturnNumber(returns));
     setReturnDate(new Date().toISOString().slice(0, 10));
+    setReferenceNumber("");
+    setReferenceDate("");
     setSupplierNumber("");
     setSupplierTitle("");
-    // purchaseAccount and purchaseTitle reset removed
+    setPurchaseAccount("");
+    setPurchaseTitle("");
     setNotes("");
     setItems([
       {
@@ -459,11 +585,15 @@ export default function PurchaseReturnModal() {
         id: getNextReturnNumber(returns),
         invoice,
         date: returnDate,
+        referenceNumber,
+        referenceDate,
         notes,
         items,
         amount: items.reduce((acc, i) => acc + i.amount, 0),
         supplierNumber,
         supplierTitle,
+        purchaseAccount,
+        purchaseTitle,
       };
 
       // Map to backend DTO before sending
@@ -482,12 +612,15 @@ export default function PurchaseReturnModal() {
         ...editingReturn,
         invoice,
         date: returnDate,
+        referenceNumber,
+        referenceDate,
         notes,
         items,
         amount: items.reduce((acc, i) => acc + i.amount, 0),
         supplierNumber,
         supplierTitle,
-        // purchaseAccount and purchaseTitle removed
+        purchaseAccount,
+        purchaseTitle,
       };
 
       await updatePurchaseReturn(updated);
@@ -536,9 +669,12 @@ export default function PurchaseReturnModal() {
       body: [
         ["Invoice", entry.invoice || ""],
         ["Date", entry.date],
+        ["Reference Number", entry.referenceNumber || ""],
+        ["Reference Date", entry.referenceDate || ""],
         ["Supplier Number", entry.supplierNumber || ""],
         ["Supplier Title", entry.supplierTitle],
-
+        ["Purchase Account", entry.purchaseAccount],
+        ["Purchase Title", entry.purchaseTitle],
         ["Notes", entry.notes],
       ],
       styles: { fontSize: 10 },
@@ -631,6 +767,8 @@ export default function PurchaseReturnModal() {
         [
           "Invoice",
           "Date",
+          "Reference Number",
+          "Reference Date",
           "Supplier Number",
           "Supplier Title",
           "Purchase Account",
@@ -642,6 +780,8 @@ export default function PurchaseReturnModal() {
       body: filteredReturns.map((entry) => [
         entry.invoice || "",
         entry.date,
+        entry.referenceNumber || "",
+        entry.referenceDate || "",
         entry.supplierNumber || "",
         entry.supplierTitle,
         entry.purchaseAccount,
@@ -694,8 +834,12 @@ export default function PurchaseReturnModal() {
   const handleOpen = () => {
     setInvoice(getNextReturnNumber(returns));
     setReturnDate(new Date().toISOString().slice(0, 10)); // set today's date
+    setReferenceNumber("");
+    setReferenceDate("");
     setSupplierNumber("");
     setSupplierTitle("");
+    setPurchaseAccount("");
+    setPurchaseTitle("");
     setNotes("");
     setItems([
       {
@@ -733,9 +877,7 @@ export default function PurchaseReturnModal() {
     }
     const fetchProductCodes = async () => {
       try {
-        const res = await api.get(
-          "/products"
-        );
+        const res = await api.get("/products");
         if (Array.isArray(res.data)) {
           setProductCodes(
             res.data.map((p: Product) => ({
@@ -810,9 +952,12 @@ export default function PurchaseReturnModal() {
     setEditingReturn(entry);
     setInvoice(entry.invoice || "");
     setReturnDate(entry.date);
+    setReferenceNumber(entry.referenceNumber || "");
+    setReferenceDate(entry.referenceDate || "");
     setSupplierNumber(entry.supplierNumber || "");
     setSupplierTitle(entry.supplierTitle);
-
+    setPurchaseAccount(entry.purchaseAccount);
+    setPurchaseTitle(entry.purchaseTitle);
     setNotes(entry.notes);
     setItems(entry.items);
     setEditOpened(true);
@@ -924,6 +1069,8 @@ export default function PurchaseReturnModal() {
             <Table.Tr>
               <Table.Th>Invoice</Table.Th>
               <Table.Th>Date</Table.Th>
+              <Table.Th>Reference Number</Table.Th>
+              <Table.Th>Reference Date</Table.Th>
               <Table.Th>Supplier Number</Table.Th>
               <Table.Th>Supplier Title</Table.Th>
               <Table.Th>Purchase Account</Table.Th>
@@ -937,11 +1084,13 @@ export default function PurchaseReturnModal() {
               <Table.Tr key={r.id}>
                 <Table.Td>{r.invoice}</Table.Td>
                 <Table.Td>{r.date}</Table.Td>
+                <Table.Td>{r.referenceNumber}</Table.Td>
+                <Table.Td>{r.referenceDate}</Table.Td>
                 <Table.Td>{r.supplierNumber}</Table.Td>
                 <Table.Td>{r.supplierTitle}</Table.Td>
                 <Table.Td>{r.purchaseAccount}</Table.Td>
                 <Table.Td>{r.purchaseTitle}</Table.Td>
-                <Table.Td>{r.amount}</Table.Td>
+                <Table.Td>Rs. {r.amount.toLocaleString()}</Table.Td>
                 <Table.Td>
                   <Group gap="xs">
                     <ActionIcon
@@ -1045,11 +1194,24 @@ export default function PurchaseReturnModal() {
             value={returnDate}
             onChange={(e) => setReturnDate(e.currentTarget.value)}
           />
+          <TextInput
+            label="Reference Number"
+            placeholder="Enter reference number"
+            value={referenceNumber}
+            onChange={(e) => setReferenceNumber(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Reference Date"
+            type="date"
+            placeholder="mm/dd/yyyy"
+            value={referenceDate}
+            onChange={(e) => setReferenceDate(e.currentTarget.value)}
+          />
         </Group>
         <Group grow mb="md">
           <Select
-            label="Select Supplier"
-            placeholder="Choose supplier from list"
+            label="Select Supplier (Purchase Party)"
+            placeholder="Choose supplier from Purchase Party accounts"
             data={supplierSelectOptions}
             value={supplierNumber}
             onChange={(selectedValue) => {
@@ -1062,23 +1224,32 @@ export default function PurchaseReturnModal() {
             maxDropdownHeight={200}
           />
           <TextInput
-            label="Supplier Title (Manual)"
-            placeholder="Enter manually if not in list"
+            label="Supplier Title (Auto-filled)"
+            placeholder="Auto-filled from selected account"
             value={supplierTitle}
             onChange={(e) => setSupplierTitle(e.currentTarget.value)}
           />
-          {/* <TextInput
+        </Group>
+        <Group grow mb="md">
+          <Select
             label="Purchase Account"
-            placeholder="Enter purchase account"
+            placeholder="Select purchase account from Chart of Accounts"
+            data={purchaseAccountOptions}
             value={purchaseAccount}
-            onChange={(e) => setPurchaseAccount(e.currentTarget.value)}
+            onChange={(selectedValue) => {
+              if (selectedValue) {
+                handleSaleAccountSelect(selectedValue);
+              }
+            }}
+            searchable
+            clearable
           />
           <TextInput
-            label="Purchase Title"
-            placeholder="Enter purchase title"
+            label="Purchase Title (Auto-filled)"
+            placeholder="Auto-filled from selected account"
             value={purchaseTitle}
             onChange={(e) => setPurchaseTitle(e.currentTarget.value)}
-          /> */}
+          />
         </Group>
         <ReturnForm
           notes={notes}
@@ -1101,13 +1272,15 @@ export default function PurchaseReturnModal() {
                 id: invoice,
                 invoice,
                 date: returnDate,
+                referenceNumber,
+                referenceDate,
                 notes,
                 items,
                 amount: items.reduce((acc, i) => acc + i.amount, 0),
                 supplierNumber,
                 supplierTitle,
-                // purchaseAccount,
-                // purchaseTitle,
+                purchaseAccount,
+                purchaseTitle,
               })
             }
             leftSection={<IconPrinter size={16} />}
@@ -1144,6 +1317,19 @@ export default function PurchaseReturnModal() {
             value={returnDate}
             onChange={(e) => setReturnDate(e.currentTarget.value)}
           />
+          <TextInput
+            label="Reference Number"
+            placeholder="Enter reference number"
+            value={referenceNumber}
+            onChange={(e) => setReferenceNumber(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Reference Date"
+            type="date"
+            placeholder="mm/dd/yyyy"
+            value={referenceDate}
+            onChange={(e) => setReferenceDate(e.currentTarget.value)}
+          />
         </Group>
         <Group grow mb="md">
           <TextInput
@@ -1158,18 +1344,27 @@ export default function PurchaseReturnModal() {
             value={supplierTitle}
             onChange={(e) => setSupplierTitle(e.currentTarget.value)}
           />
-          {/* <TextInput
+        </Group>
+        <Group grow mb="md">
+          <Select
             label="Purchase Account"
-            placeholder="Enter purchase account"
+            placeholder="Select purchase account from Chart of Accounts"
+            data={purchaseAccountOptions}
             value={purchaseAccount}
-            onChange={(e) => setPurchaseAccount(e.currentTarget.value)}
+            onChange={(selectedValue) => {
+              if (selectedValue) {
+                handleSaleAccountSelect(selectedValue);
+              }
+            }}
+            searchable
+            clearable
           />
           <TextInput
-            label="Purchase Title"
-            placeholder="Enter purchase title"
+            label="Purchase Title (Auto-filled)"
+            placeholder="Auto-filled from selected account"
             value={purchaseTitle}
             onChange={(e) => setPurchaseTitle(e.currentTarget.value)}
-          /> */}
+          />
         </Group>
         <ReturnForm
           notes={notes}
@@ -1224,17 +1419,23 @@ function PurchaseReturnPrintTemplate({ entry }: { entry: ReturnEntry }) {
             <td>{entry.date}</td>
           </tr>
           <tr>
+            <td style={{ fontWeight: "bold" }}>Reference Number</td>
+            <td>{entry.referenceNumber || ""}</td>
+            <td style={{ fontWeight: "bold" }}>Reference Date</td>
+            <td>{entry.referenceDate || ""}</td>
+          </tr>
+          <tr>
             <td style={{ fontWeight: "bold" }}>Supplier Number</td>
             <td>{entry.supplierNumber || ""}</td>
             <td style={{ fontWeight: "bold" }}>Supplier Title</td>
             <td>{entry.supplierTitle}</td>
           </tr>
-          {/* <tr>
+          <tr>
             <td style={{ fontWeight: "bold" }}>Purchase Account</td>
             <td>{entry.purchaseAccount}</td>
             <td style={{ fontWeight: "bold" }}>Purchase Title</td>
             <td>{entry.purchaseTitle}</td>
-          </tr> */}
+          </tr>
         </tbody>
       </table>
       <table

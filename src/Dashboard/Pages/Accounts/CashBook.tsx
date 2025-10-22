@@ -24,10 +24,12 @@ import {
   IconSearch,
   IconFilter,
 } from "@tabler/icons-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useForm } from "@mantine/form";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import api from "../../../api_configuration/api";
 
 type Entry = {
   date: string;
@@ -39,7 +41,24 @@ type Entry = {
 
 type EntryWithBalance = Entry & { balance: number };
 
+interface JournalVoucherEntry {
+  accountCode: string;
+  accountName: string;
+  debit: number;
+  credit: number;
+}
+
+interface JournalVoucher {
+  _id: string;
+  voucherNumber: string;
+  date: string;
+  description?: string;
+  entries: JournalVoucherEntry[];
+}
+
 export default function CashBook() {
+  const { accounts: chartAccounts } = useChartOfAccounts();
+  const [journalVouchers, setJournalVouchers] = useState<JournalVoucher[]>([]);
   const [opened, { open, close }] = useDisclosure(false);
 
   const form = useForm({
@@ -48,45 +67,103 @@ export default function CashBook() {
       type: "Cash Receipt",
       particulars: "",
       amount: 0,
+      contraAccount: "",
     },
 
     validate: {
       particulars: (value) =>
         value.trim().length === 0 ? "Please enter particulars" : null,
       amount: (value) => (value <= 0 ? "Amount must be greater than 0" : null),
+      contraAccount: (value) =>
+        value.trim().length === 0 ? "Please select contra account" : null,
     },
   });
 
-  const [entries, setEntries] = useState<Entry[]>([
-    {
-      date: "2024-01-15",
-      particulars: "Sales payment received from ABC Corp",
-      voucher: "CR-001",
-      type: "Receipt",
-      amount: 2500,
-    },
-    {
-      date: "2024-01-14",
-      particulars: "Office rent payment",
-      voucher: "CP-001",
-      type: "Payment",
-      amount: -3000,
-    },
-    {
-      date: "2024-01-13",
-      particulars: "Utility bill payment",
-      voucher: "CP-002",
-      type: "Payment",
-      amount: -450,
-    },
-    {
-      date: "2024-01-12",
-      particulars: "Cash sales",
-      voucher: "CR-002",
-      type: "Receipt",
-      amount: 1800,
-    },
-  ]);
+  // Fetch journal vouchers from API
+  useEffect(() => {
+    const fetchJournalVouchers = async () => {
+      try {
+        const response = await api.get("/journal-vouchers");
+        console.log("Journal Vouchers API response:", response.data);
+        setJournalVouchers(response.data || []);
+      } catch (error) {
+        console.error("Failed to fetch journal vouchers:", error);
+        setJournalVouchers([]);
+      }
+    };
+
+    fetchJournalVouchers();
+  }, []);
+
+  // Find Cash account from Chart of Accounts
+  interface Account {
+    accountCode?: string;
+    accountName?: string;
+    openingBalance?: { debit?: number; credit?: number };
+    children?: Account[];
+  }
+
+  const flattenAccounts = useCallback((accounts: Account[]): Account[] => {
+    let result: Account[] = [];
+    accounts.forEach((account) => {
+      result.push(account);
+      if (account.children && account.children.length > 0) {
+        result = result.concat(flattenAccounts(account.children));
+      }
+    });
+    return result;
+  }, []);
+
+  const cashAccount = useMemo(() => {
+    const flatAccounts = flattenAccounts(chartAccounts);
+    // Find Cash account (usually code starts with 1101 or account name contains "Cash")
+    return flatAccounts.find(
+      (acc) =>
+        acc.accountCode?.startsWith("1101") ||
+        acc.accountName?.toLowerCase().includes("cash")
+    );
+  }, [chartAccounts, flattenAccounts]);
+
+  // Get all detail accounts for contra selection
+  const detailAccounts = useMemo(() => {
+    const flatAccounts = flattenAccounts(chartAccounts);
+    return flatAccounts
+      .filter((acc) => acc.accountCode && acc.accountName)
+      .map((acc) => ({
+        value: acc.accountCode || "",
+        label: `${acc.accountCode} - ${acc.accountName}`,
+      }));
+  }, [chartAccounts, flattenAccounts]);
+
+  // Build entries from journal vouchers
+  const entries: Entry[] = useMemo(() => {
+    if (!cashAccount) return [];
+
+    const cashEntries: Entry[] = [];
+    const cashCode = cashAccount.accountCode;
+
+    journalVouchers.forEach((voucher) => {
+      voucher.entries?.forEach((entry) => {
+        if (entry.accountCode === cashCode) {
+          const isReceipt = entry.debit > 0;
+          const amount = isReceipt ? entry.debit : entry.credit;
+
+          cashEntries.push({
+            date:
+              voucher.date?.split("T")[0] ||
+              new Date().toISOString().split("T")[0],
+            particulars:
+              voucher.description || entry.accountName || "Cash transaction",
+            voucher: voucher.voucherNumber || "N/A",
+            type: isReceipt ? "Receipt" : "Payment",
+            amount: isReceipt ? amount : -amount,
+          });
+        }
+      });
+    });
+
+    return cashEntries;
+  }, [journalVouchers, cashAccount]);
 
   const [query, setQuery] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<"All" | "Receipt" | "Payment">(
@@ -141,12 +218,15 @@ export default function CashBook() {
   }, [entries, query, typeFilter, dateRange]);
 
   const withBalance: EntryWithBalance[] = useMemo(() => {
-    let bal = 0;
+    // Start with opening balance
+    const openingBalance = cashAccount?.openingBalance?.debit || 0;
+    let bal = openingBalance;
+
     return filteredSorted.map((e) => {
       bal += e.amount;
       return { ...e, balance: bal };
     });
-  }, [filteredSorted]);
+  }, [filteredSorted, cashAccount]);
 
   const pageCount = Math.max(1, Math.ceil(withBalance.length / pageSize));
   const pagedRows = withBalance.slice((page - 1) * pageSize, page * pageSize);
@@ -161,20 +241,55 @@ export default function CashBook() {
       .reduce((sum, e) => sum + e.amount, 0)
   );
 
-  const closingBalance = withBalance[0]?.balance ?? 0;
+  const closingBalance =
+    withBalance.length > 0
+      ? withBalance[withBalance.length - 1]?.balance
+      : cashAccount?.openingBalance?.debit || 0;
 
-  const handleSubmit = (values: typeof form.values) => {
-    const newEntry: Entry = {
-      date: values.date,
-      particulars: values.particulars,
-      voucher: values.type === "Cash Receipt" ? "CR-NEW" : "CP-NEW",
-      type: values.type === "Cash Receipt" ? "Receipt" : "Payment",
-      amount: values.type === "Cash Receipt" ? values.amount : -values.amount,
-    };
+  const handleSubmit = async (values: typeof form.values) => {
+    try {
+      const isReceipt = values.type === "Cash Receipt";
 
-    setEntries((prev) => [...prev, newEntry]);
-    close();
-    form.reset();
+      // Find the contra account details
+      const flatAccounts = flattenAccounts(chartAccounts);
+      const contraAccount = flatAccounts.find(
+        (acc) => acc.accountCode === values.contraAccount
+      );
+
+      // Create journal voucher
+      const newVoucher = {
+        date: values.date,
+        description: values.particulars,
+        entries: [
+          {
+            accountCode: cashAccount?.accountCode || "",
+            accountName: cashAccount?.accountName || "Cash",
+            debit: isReceipt ? values.amount : 0,
+            credit: isReceipt ? 0 : values.amount,
+          },
+          {
+            accountCode: contraAccount?.accountCode || values.contraAccount,
+            accountName: contraAccount?.accountName || "Contra Account",
+            debit: isReceipt ? 0 : values.amount,
+            credit: isReceipt ? values.amount : 0,
+          },
+        ],
+      };
+
+      console.log("Creating journal voucher:", newVoucher);
+
+      // Post to API
+      await api.post("/journal-vouchers", newVoucher);
+
+      // Refresh data
+      const response = await api.get("/journal-vouchers");
+      setJournalVouchers(response.data || []);
+
+      close();
+      form.reset();
+    } catch (error) {
+      console.error("Failed to create cash book entry:", error);
+    }
   };
 
   const exportToPDF = () => {
@@ -211,11 +326,11 @@ export default function CashBook() {
         e.particulars,
         e.voucher,
         e.type,
-        e.amount > 0 ? `+₹${e.amount}` : `-₹${Math.abs(e.amount)}`,
-        `₹${e.balance}`,
+        e.amount > 0 ? `+Rs. ${e.amount}` : `-Rs. ${Math.abs(e.amount)}`,
+        `Rs. ${e.balance}`,
       ]),
       styles: { fontSize: 10 },
-      headStyles: { fillColor: [34, 139, 230] },
+      headStyles: { fillColor: [10, 104, 2] },
     });
 
     const lastY =
@@ -226,19 +341,19 @@ export default function CashBook() {
     doc.setTextColor(0);
     doc.setFont("helvetica", "bold");
     doc.text(
-      `Total Receipts: ₹${totalReceipts.toLocaleString()}`,
+      `Total Receipts: Rs. ${totalReceipts.toLocaleString()}`,
       14,
       lastY + 10
     );
     doc.text(
-      `Total Payments: ₹${totalPayments.toLocaleString()}`,
+      `Total Payments: Rs. ${totalPayments.toLocaleString()}`,
       14,
       lastY + 17
     );
 
     doc.setTextColor(34, 139, 34);
     doc.text(
-      `Closing Balance: ₹${closingBalance.toLocaleString()}`,
+      `Closing Balance: Rs. ${closingBalance.toLocaleString()}`,
       14,
       lastY + 24
     );
@@ -247,17 +362,19 @@ export default function CashBook() {
   };
 
   const allClosingBalance = useMemo(() => {
-    let bal = 0;
+    const openingBalance = cashAccount?.openingBalance?.debit || 0;
+    let bal = openingBalance;
+
     [...entries]
       .sort(
         (a: Entry, b: Entry) =>
-          new Date(b.date).getTime() - new Date(a.date).getTime()
+          new Date(a.date).getTime() - new Date(b.date).getTime()
       )
       .forEach((e) => {
         bal += e.amount;
       });
     return bal;
-  }, [entries]);
+  }, [entries, cashAccount]);
 
   const allReceipts = useMemo(
     () =>
@@ -303,7 +420,7 @@ export default function CashBook() {
               <Text size="xs" c="dimmed">
                 Total Receipts
               </Text>
-              <Text fw={500}>₹{allReceipts.toLocaleString()}</Text>
+              <Text fw={500}>Rs. {allReceipts.toLocaleString()}</Text>
             </div>
           </Group>
         </Card>
@@ -314,7 +431,7 @@ export default function CashBook() {
               <Text size="xs" c="dimmed">
                 Total Payments
               </Text>
-              <Text fw={500}>₹{allPayments.toLocaleString()}</Text>
+              <Text fw={500}>Rs. {allPayments.toLocaleString()}</Text>
             </div>
           </Group>
         </Card>
@@ -324,11 +441,27 @@ export default function CashBook() {
               <Text size="xs" c="dimmed">
                 Closing Balance
               </Text>
-              <Text fw={500}>₹{allClosingBalance.toLocaleString()}</Text>
+              <Text fw={500}>Rs. {allClosingBalance.toLocaleString()}</Text>
             </div>
           </Group>
         </Card>
       </SimpleGrid>
+
+      {!cashAccount && (
+        <Card
+          shadow="sm"
+          padding="lg"
+          radius="md"
+          withBorder
+          bg="#FFF3CD"
+          mb="md"
+        >
+          <Text c="orange" fw={500}>
+            ⚠️ Cash account not found in Chart of Accounts. Please create a Cash
+            account with code starting with "1101".
+          </Text>
+        </Card>
+      )}
 
       <Card
         shadow="sm"
@@ -463,6 +596,15 @@ export default function CashBook() {
             label="Particulars"
             placeholder="Description of transaction"
             {...form.getInputProps("particulars")}
+            mb="md"
+          />
+
+          <Select
+            label="Contra Account"
+            placeholder="Select account"
+            data={detailAccounts}
+            searchable
+            {...form.getInputProps("contraAccount")}
             mb="md"
           />
 
