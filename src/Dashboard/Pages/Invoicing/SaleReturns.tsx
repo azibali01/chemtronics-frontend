@@ -31,12 +31,15 @@ import {
   type SaleReturn,
   type SaleReturnItem,
 } from "../../Context/Invoicing/SaleReturnsContext";
-import { useProducts } from "../../Context/Inventory/ProductsContext";
 import api from "../../../api_configuration/api";
 import { notifications } from "@mantine/notifications";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import { getReceivableAccounts } from "../../utils/receivableAccounts";
+import type { AccountNode } from "../../Context/ChartOfAccountsContext";
 
 function SaleReturnsInner() {
   const { returns, setReturns } = useSaleReturns(); // Updated to use setReturns instead of addReturn, updateReturn, deleteReturn
+  const { accounts } = useChartOfAccounts();
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -56,20 +59,6 @@ function SaleReturnsInner() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
-
-  // Get products from inventory context
-  const { products = [] } = useProducts();
-
-  // Prepare dropdown options for code and product name
-  const productCodeOptions = products.map((p) => ({
-    value: p.code,
-    label: p.code,
-  }));
-
-  const productNameOptions = products.map((p) => ({
-    value: p.productName,
-    label: p.productName,
-  }));
 
   const filteredData = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -515,38 +504,399 @@ function SaleReturnsInner() {
     setNotes("");
   };
 
-  function PrintableInvoiceContent(invoice: SaleReturn) {
-    return `
-    <html>
-      <head>
-        <title>Sale Return ${invoice.number}</title>
-        <style>
-          body { font-family: Arial; color: #222; padding: 24px; }
-          h2 { margin-bottom: 8px; }
-          p { margin: 4px 0; }
-        </style>
-      </head>
-      <body>
-        <h2>Sale Return #${invoice.number}</h2>
-        <p>Date: ${invoice.date}</p>
-        <p>Account: ${invoice.accountTitle}</p>
-        <p>Amount: $${invoice.amount?.toFixed(2)}</p>
-        <!-- Add more details as needed -->
-      </body>
-    </html>
-  `;
-  }
-
   const printInvoiceWindow = (invoice: SaleReturn) => {
-    const printWindow = window.open("", "_blank", "width=800,height=600");
-    if (printWindow) {
-      printWindow.document.open();
-      printWindow.document.write(PrintableInvoiceContent(invoice));
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => printWindow.print(), 300);
+    try {
+      // Calculate totals
+      const itemsList = invoice.items || [];
+      const subtotal = itemsList.reduce(
+        (s, it) => s + (it.quantity || 0) * (it.rate || 0),
+        0
+      );
+      const totalDiscount = itemsList.reduce(
+        (s, it) =>
+          s + ((it.quantity || 0) * (it.rate || 0) * (it.discount || 0)) / 100,
+        0
+      );
+      const grandTotal = subtotal - totalDiscount;
+
+      // Helper function to convert number to words
+      function numberToWordsLocal(num: number) {
+        if (!num) return "ZERO";
+        const a = [
+          "",
+          "one",
+          "two",
+          "three",
+          "four",
+          "five",
+          "six",
+          "seven",
+          "eight",
+          "nine",
+          "ten",
+          "eleven",
+          "twelve",
+          "thirteen",
+          "fourteen",
+          "fifteen",
+          "sixteen",
+          "seventeen",
+          "eighteen",
+          "nineteen",
+        ];
+        const b = [
+          "",
+          "",
+          "twenty",
+          "thirty",
+          "forty",
+          "fifty",
+          "sixty",
+          "seventy",
+          "eighty",
+          "ninety",
+        ];
+        function inWords(n: number): string {
+          if (n < 20) return a[n];
+          if (n < 100)
+            return b[Math.floor(n / 10)] + (n % 10 ? " " + a[n % 10] : "");
+          if (n < 1000)
+            return (
+              a[Math.floor(n / 100)] +
+              " hundred" +
+              (n % 100 ? " " + inWords(n % 100) : "")
+            );
+          if (n < 1000000)
+            return (
+              inWords(Math.floor(n / 1000)) +
+              " thousand" +
+              (n % 1000 ? " " + inWords(n % 1000) : "")
+            );
+          return (
+            inWords(Math.floor(n / 1000000)) +
+            " million" +
+            (n % 1000000 ? " " + inWords(n % 1000000) : "")
+          );
+        }
+        return inWords(Math.round(num)).toUpperCase();
+      }
+
+      // Build HTML rows for items with padding
+      const _itemsForRows = invoice.items || [];
+      const itemsRows = _itemsForRows
+        .map((item, idx) => {
+          const amount = (item.quantity || 0) * (item.rate || 0);
+          const discountAmount = (amount * (item.discount || 0)) / 100;
+          const netAmount = amount - discountAmount;
+          return `<tr>
+                    <td align="center">${idx + 1}</td>
+                    <td align="center">${(
+                      item.productName ||
+                      item.description ||
+                      item.code ||
+                      ""
+                    ).replace(/</g, "&lt;")}</td>
+                    <td align="center">${item.code || ""}</td>
+                    <td align="center">${(item.rate || 0).toFixed(2)}</td>
+                    <td align="center">${(item.quantity || 0).toFixed(2)}</td>
+                    <td class="right">PKR ${amount.toFixed(2)}</td>
+                    <td align="center">${(item.discount || 0).toFixed(2)}%</td>
+                    <td class="right">PKR ${netAmount.toFixed(2)}</td>
+                  </tr>`;
+        })
+        .join("");
+
+      // Add padding rows for consistent layout
+      const desiredRows = 8;
+      const paddingCount = Math.max(0, desiredRows - _itemsForRows.length);
+      const paddingRows = Array.from({ length: paddingCount })
+        .map(() => {
+          return `<tr>
+                    <td align="center">&nbsp;</td>
+                    <td align="center">&nbsp;</td>
+                    <td align="center">&nbsp;</td>
+                    <td align="center">&nbsp;</td>
+                    <td align="center">&nbsp;</td>
+                    <td class="right">&nbsp;</td>
+                    <td align="center">&nbsp;</td>
+                    <td class="right">&nbsp;</td>
+                  </tr>`;
+        })
+        .join("");
+
+      const rowsHtml = itemsRows + paddingRows;
+
+      const html = `<!doctype html>
+        <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Sale Return ${invoice.id}</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #222; margin: 24px; }
+            .header { display:flex; align-items:center; gap:12px; }
+            .company { color: #0A6802; font-weight:700; font-size:18px; }
+            .meta { margin-top: 12px; display: flex; justify-content: space-between; gap:12px; }
+            .box { border: 1px solid #222; padding: 8px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; border: 2px solid #000; }
+            th, td { border: 1px solid #000; padding: 8px; font-size: 12px; vertical-align: top; }
+            thead th:nth-child(2), tbody td:nth-child(2) { width: 30%; }
+            thead th { background: #e9e9e9; color: #0B4AA6; font-weight: 700; border-bottom: 1px solid #000; }
+            thead th:first-child { border-left: 1px solid #000; border-top-left-radius: 6px; }
+            thead th:last-child { border-right: 1px solid #000; border-top-right-radius: 6px; }
+            tbody td:first-child { border-left: 1px solid #000; }
+            tbody tr { height: 48px; }
+            tbody td:last-child { border-right: 1px solid #000; }
+            .totals { margin-top: 12px; width: 100%; display: flex; justify-content: flex-end; }
+            .totals .block { width: 320px; border: 1px solid #222; padding: 12px; }
+            .right { text-align: right; }
+            .muted { color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="header" style="padding:0;">
+            <img src="/Header.jpg" alt="Header" style="display:block; width:calc(100% + 48px); height:auto; object-fit: cover;" />
+          </div>
+          
+          <div style="text-align:center; margin:12px 0; font-size:20px; font-weight:700; color:#d32f2f;">
+            SALE RETURN
+          </div>
+
+          <div class="meta">
+            <div class="box" style="flex:1; margin-right:8px;">
+              <div><strong>Title:</strong> ${
+                invoice.customerTitle || invoice.accountTitle || ""
+              }</div>
+              <div><strong>Account:</strong> ${invoice.customer || ""}</div>
+              <div><strong>Sale Account:</strong> ${
+                invoice.saleAccount || ""
+              }</div>
+              <div><strong>Salesman:</strong> ${invoice.salesman || ""}</div>
+            </div>
+            <div style="width:320px;">
+              <div class="box">
+                <div><strong>Return No:</strong> ${invoice.id}</div>
+                <div><strong>Return Date:</strong> ${invoice.date}</div>
+                <div><strong>Invoice No:</strong> ${invoice.number || ""}</div>
+              </div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>SR No</th>
+                <th>Description</th>
+                <th>Code</th>
+                <th>Rate</th>
+                <th>Qty</th>
+                <th>Amount</th>
+                <th>Discount</th>
+                <th>Net Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+
+          <div style="margin-top:8px; font-size:12px; color:#666;">*Computer generated sale return. No need for signature</div>
+
+          <div class="totals">
+            <div class="block">
+              <div style="display:flex; justify-content:space-between;">
+                <div>Gross Total:</div>
+                <div>PKR ${subtotal.toFixed(2)}</div>
+              </div>
+              <div style="display:flex; justify-content:space-between;">
+                <div>Total Discount:</div>
+                <div>PKR ${totalDiscount.toFixed(2)}</div>
+              </div>
+              <hr />
+              <div style="display:flex; justify-content:space-between; font-weight:bold;">
+                <div>Grand Total:</div>
+                <div>PKR ${grandTotal.toFixed(2)}</div>
+              </div>
+              <div style="margin-top:10px; font-size:12px;">Amount in words: ${numberToWordsLocal(
+                Math.round(grandTotal)
+              )}</div>
+              ${
+                invoice.notes
+                  ? `<div style="margin-top:10px; font-size:11px;"><strong>Notes:</strong> ${invoice.notes}</div>`
+                  : ""
+              }
+            </div>
+          </div>
+
+          <div style="margin-top:18px; page-break-inside:avoid;" class="footer">
+            <img src="/Footer.jpg" alt="Footer" style="width:100%; height:auto; max-height:120px; object-fit:contain;" />
+          </div>
+
+        </body>
+        </html>`;
+
+      const w = window.open("", "_blank");
+      if (!w) return;
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      setTimeout(() => {
+        try {
+          w.focus();
+          w.print();
+        } catch (e) {
+          console.error("Print failed", e);
+        }
+      }, 300);
+    } catch (e) {
+      console.error("Print failed", e);
     }
   };
+
+  // Get Sales Accounts dynamically from Chart of Accounts (selectedAccountType1 === '4100')
+  function getSalesAccounts(nodes: AccountNode[]): {
+    value: string;
+    label: string;
+    code: string;
+    accountName: string;
+    accountCode?: string;
+  }[] {
+    const result: {
+      value: string;
+      label: string;
+      code: string;
+      accountName: string;
+      accountCode?: string;
+    }[] = [];
+
+    function walk(node: AccountNode) {
+      if (!node) return;
+
+      // Map all accounts where selectedAccountType1 === '4100'
+      if (
+        node.selectedAccountType1 === "4100" &&
+        node.accountCode &&
+        node.accountName
+      ) {
+        result.push({
+          value: node.accountCode,
+          label: `${node.accountCode} - ${node.accountName}`,
+          code: node.accountCode,
+          accountName: node.accountName,
+          accountCode: node.accountCode,
+        });
+      }
+
+      // Continue to children
+      if (node.children && node.children.length > 0) {
+        node.children.forEach(walk);
+      }
+    }
+
+    // Traverse all nodes (including root level)
+    if (Array.isArray(nodes)) {
+      nodes.forEach(walk);
+    }
+    return result;
+  }
+
+  const salesAccountOptions = getSalesAccounts(accounts as AccountNode[])
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .map((a) => ({
+      ...a,
+      value: a.code && a.accountName ? a.code : a.value,
+    }));
+
+  // Customer Account mapping (from receivables - account 1410 and children)
+  const receivablesAccounts = getReceivableAccounts(accounts as AccountNode[]);
+
+  const customerAccountOptions = receivablesAccounts.map(
+    (acc: AccountNode) => ({
+      value: acc.accountCode || acc.selectedCode,
+      label: `${acc.accountCode || acc.selectedCode} - ${acc.accountName}`,
+    })
+  );
+
+  const customerTitleOptions = receivablesAccounts.map((acc: AccountNode) => ({
+    value: acc.accountName,
+    label: acc.accountName,
+    code: acc.accountCode || acc.selectedCode,
+  }));
+
+  // Remove empty/duplicate options
+  const uniqueCustomerAccountOptions: { value: string; label: string }[] =
+    Array.from(
+      new Map(
+        customerAccountOptions
+          .filter((a: { value: string; label: string }) => a.value && a.label)
+          .map((a: { value: string; label: string }) => [a.value, a])
+      ).values()
+    );
+
+  const uniqueCustomerTitleOptions: { value: string; label: string }[] =
+    Array.from(
+      new Map(
+        customerTitleOptions
+          .filter((a: { value: string; label: string }) => a.value && a.label)
+          .map((a: { value: string; label: string }) => [a.value, a])
+      ).values()
+    );
+
+  // Fetch and transform products
+  const [productList, setProductList] = useState<
+    Array<{
+      id: string;
+      code: string;
+      productName: string;
+      unitPrice: number | "";
+      productDescription: string;
+    }>
+  >([]);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await api.get("/products");
+
+        // Transform products to match our interface
+        if (response.data && Array.isArray(response.data)) {
+          const transformedProducts = response.data.map(
+            (product: {
+              id?: string;
+              _id?: string;
+              code?: string;
+              name?: string;
+              productname?: string;
+              productName?: string;
+              unitPrice?: number;
+              unit_price?: number;
+              description?: string;
+              productDescription?: string;
+            }) => ({
+              id:
+                product.id ||
+                product._id ||
+                `p-${Math.random().toString(36).slice(2, 8)}`,
+              code: String(product.code || ""),
+              productName: String(
+                product.name || product.productname || product.productName || ""
+              ),
+              unitPrice: product.unitPrice || product.unit_price || 0,
+              productDescription: String(
+                product.description || product.productDescription || ""
+              ),
+            })
+          );
+          setProductList(transformedProducts);
+        } else {
+          setProductList([]);
+        }
+      } catch (error) {
+        console.error("Failed to fetch products:", error);
+        setProductList([]);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   // Calculate net total for all items (sum of net amounts after discount)
   const netTotal = items.reduce(
@@ -736,39 +1086,88 @@ function SaleReturnsInner() {
             />
           </Group>
           <Group grow mb="md">
-            <TextInput
-              label="Customer"
-              placeholder="Enter customer"
+            <Select
+              label="Customer Account"
+              placeholder="Select Customer Account"
+              data={uniqueCustomerAccountOptions}
               value={customer}
-              onChange={(e) => setCustomer(e.currentTarget.value)}
+              onChange={(v) => {
+                setCustomer(v || "");
+                // Find account by accountCode from receivablesAccounts
+                const acc = receivablesAccounts.find(
+                  (a: AccountNode) => (a.accountCode || a.selectedCode) === v
+                );
+                if (acc) {
+                  setCustomerTitle(acc.accountName || "");
+                } else {
+                  setCustomerTitle("");
+                }
+              }}
+              clearable
+              searchable
             />
             <Select
               label="Customer Title"
-              placeholder="Enter customer title"
+              placeholder="Select Customer Title"
+              data={uniqueCustomerTitleOptions}
               value={customerTitle}
-              onChange={(value) => setCustomerTitle(value || "")}
+              onChange={(v) => {
+                setCustomerTitle(v || "");
+                // Find account by name from receivablesAccounts
+                const acc = receivablesAccounts.find(
+                  (a: AccountNode) => a.accountName === v
+                );
+                if (acc) {
+                  setCustomer(
+                    acc.accountCode !== undefined
+                      ? String(acc.accountCode)
+                      : acc.selectedCode !== undefined
+                      ? String(acc.selectedCode)
+                      : ""
+                  );
+                } else {
+                  setCustomer("");
+                }
+              }}
+              clearable
+              searchable
             />
             <Select
               label="Sale Account"
-              placeholder="Select sale account"
-              data={saleAccountOptions}
+              placeholder="Select Sale Account"
+              data={salesAccountOptions}
               value={saleAccount}
-              onChange={(value) => {
-                setSaleAccount(value || "");
-                setSaleTitle(saleAccountTitleMap[value || ""] || "");
+              onChange={(v) => {
+                setSaleAccount(v || "");
+                // Auto-fill Sale Account Title
+                const acc = salesAccountOptions.find((a) => a.value === v);
+                if (acc) {
+                  setSaleTitle(acc.accountName);
+                } else {
+                  setSaleTitle("");
+                }
               }}
+              description="Select from sales accounts under 4100 - Sales"
+              clearable
+              searchable
+              error={
+                salesAccountOptions.length === 0
+                  ? "No sales accounts available. Create them in Chart of Accounts first."
+                  : undefined
+              }
             />
             <TextInput
               label="Sale Title"
               placeholder="Sale title"
               value={saleTitle}
               readOnly
+              description="Auto-filled based on selected sale account"
             />
-            <Select
+            <TextInput
               label="Salesman"
               placeholder="Enter salesman"
               value={salesman}
-              onChange={(value) => setSalesman(value || "")}
+              onChange={(e) => setSalesman(e.currentTarget.value)}
             />
           </Group>
           <Card withBorder mb="md" p="md">
@@ -799,27 +1198,50 @@ function SaleReturnsInner() {
             </Group>
             {items.map((item, idx) => (
               <Group key={idx} grow mb="xs" align="end">
-                <Select
+                <TextInput
                   label="Code"
-                  placeholder="Select product code"
-                  data={productCodeOptions}
+                  placeholder="Code"
                   value={item.code}
-                  onChange={(val) => {
-                    const next = [...items];
-                    next[idx].code = val ?? "";
-                    setItems(next);
-                  }}
+                  readOnly
+                  styles={{ input: { backgroundColor: "#f8f9fa" } }}
                 />
                 <Select
                   label="Product Name"
                   placeholder="Select product name"
-                  data={productNameOptions}
-                  value={item.productName}
+                  data={productList
+                    .filter((p) => p.id && p.productName)
+                    .map((p) => ({
+                      value: p.id,
+                      label: `${p.code || ""} - ${p.productName}`,
+                    }))}
+                  value={
+                    productList.find((p) => p.productName === item.productName)
+                      ?.id || null
+                  }
                   onChange={(val) => {
+                    if (!val) return;
+                    const selectedProduct = productList.find(
+                      (p) => p.id === val
+                    );
+                    if (!selectedProduct) return;
+
                     const next = [...items];
-                    next[idx].productName = val ?? "";
+                    next[idx].code = selectedProduct.code;
+                    next[idx].productName = selectedProduct.productName;
+                    next[idx].description =
+                      selectedProduct.productDescription || "";
+                    next[idx].rate = Number(selectedProduct.unitPrice) || 0;
+                    // Auto-calculate amount and netAmount
+                    next[idx].amount = next[idx].quantity * next[idx].rate;
+                    next[idx].netAmount =
+                      (next[idx].amount ?? 0) -
+                      ((next[idx].amount ?? 0) * (next[idx].discount ?? 0)) /
+                        100;
                     setItems(next);
                   }}
+                  searchable
+                  clearable
+                  disabled={productList.length === 0}
                 />
                 <TextInput
                   label="Description"
@@ -999,18 +1421,3 @@ function getNextInvoiceNumber(returns: SaleReturn[]) {
   const next = max + 1;
   return `SR-${next.toString().padStart(3, "0")}`;
 }
-
-// Sale Account mapping
-const saleAccountTitleMap: Record<string, string> = {
-  "4111": "Sales Of Chemicals",
-  "4112": "Sale Of Equipments",
-  "4113": "Services",
-  "4114": "Sale Of Chemicals and Equipments",
-};
-
-const saleAccountOptions = Object.entries(saleAccountTitleMap).map(
-  ([code, title]) => ({
-    value: code,
-    label: `${code} - ${title}`,
-  })
-);
