@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import api from "../../../api_configuration/api";
 import {
   Table,
@@ -10,31 +10,85 @@ import {
   Card,
   ScrollArea,
   Divider,
+  Modal,
+  Stack,
 } from "@mantine/core";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import { useAccountsOpeningBalances } from "../../Context/AccountsOpeningbalancesContext";
 import type { AccountNode } from "../../Context/ChartOfAccountsContext";
 
 const flattenAccounts = (
-  nodes: AccountNode[]
-): { code: string; name: string }[] => {
-  return nodes.flatMap((n) => [
-    { code: String(n.selectedCode), name: n.accountName },
-    ...(n.children ? flattenAccounts(n.children) : []),
-  ]);
+  nodes: AccountNode[],
+  level: number = 0
+): { code: string; name: string; id: string }[] => {
+  const result: { code: string; name: string; id: string }[] = [];
+
+  nodes.forEach((n) => {
+    // Add current account with indentation
+    const indent = "  ".repeat(level); // Indentation for nested levels
+    result.push({
+      id: n._id || `${n.accountCode}-${Math.random()}`, // Unique ID
+      code: String(n.accountCode || n.selectedCode || ""), // Use accountCode first (specific code)
+      name: `${indent}${n.accountName}`,
+    });
+
+    // Recursively add all children at deeper levels
+    if (n.children && n.children.length > 0) {
+      result.push(...flattenAccounts(n.children, level + 1));
+    }
+  });
+
+  return result;
 };
 
 const AccountsOpeningBalances: React.FC = () => {
   const { accounts } = useChartOfAccounts();
-  const { balances, setBalances, loading, setLoading } =
-    useAccountsOpeningBalances();
+  const { balances, setBalances } = useAccountsOpeningBalances();
   const [search, setSearch] = React.useState("");
 
+  // Modal state
+  const [modalOpened, setModalOpened] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<{
+    code: string;
+    name: string;
+    id: string;
+  } | null>(null);
+  const [modalDebit, setModalDebit] = useState<number>(0);
+  const [modalCredit, setModalCredit] = useState<number>(0);
+  const [updating, setUpdating] = useState(false);
+
   const allAccounts = useMemo(() => flattenAccounts(accounts), [accounts]);
+
+  // Load opening balances from Chart of Accounts data
+  React.useEffect(() => {
+    if (accounts.length > 0) {
+      const initialBalances: Record<string, { debit: number; credit: number }> =
+        {};
+
+      const loadBalancesFromNodes = (nodes: AccountNode[]) => {
+        nodes.forEach((node) => {
+          const code = String(node.accountCode || node.selectedCode || "");
+          if (code && node.openingBalance) {
+            initialBalances[code] = {
+              debit: node.openingBalance.debit || 0,
+              credit: node.openingBalance.credit || 0,
+            };
+          }
+          if (node.children && node.children.length > 0) {
+            loadBalancesFromNodes(node.children);
+          }
+        });
+      };
+
+      loadBalancesFromNodes(accounts);
+      setBalances(initialBalances);
+    }
+  }, [accounts, setBalances]);
+
   const filteredAccounts = useMemo(
     () =>
       allAccounts.filter(
-        (a: { code?: string; name?: string }) =>
+        (a: { code?: string; name?: string; id?: string }) =>
           (a.name && a.name.toLowerCase().includes(search.toLowerCase())) ||
           (a.code && a.code.toLowerCase().includes(search.toLowerCase()))
       ),
@@ -52,35 +106,63 @@ const AccountsOpeningBalances: React.FC = () => {
     }));
   };
 
-  const handleUpdate = async () => {
-    setLoading(true);
-    // Prepare payload: array of { code, name, debit, credit }
-    const payload = filteredAccounts.map((acc) => ({
-      code: acc.code,
-      name: acc.name,
-      debit: balances[acc.code]?.debit || 0,
-      credit: balances[acc.code]?.credit || 0,
-    }));
+  // Open modal for single account
+  const openModal = (account: { code: string; name: string; id: string }) => {
+    setSelectedAccount(account);
+    setModalDebit(balances[account.code]?.debit || 0);
+    setModalCredit(balances[account.code]?.credit || 0);
+    setModalOpened(true);
+  };
+
+  // Update single account
+  const handleSingleUpdate = async () => {
+    if (!selectedAccount) return;
+
+    setUpdating(true);
+
+    // Send only the non-zero value to match backend logic
+    const payload: { debit?: number; credit?: number } = {};
+    if (modalDebit > 0) {
+      payload.debit = modalDebit;
+    }
+    if (modalCredit > 0) {
+      payload.credit = modalCredit;
+    }
+
+    console.log("Updating single account:", {
+      id: selectedAccount.id,
+      ...payload,
+    });
+
     try {
-      await api.post(
-        "/opening-balances",
+      const response = await api.put(
+        `/chart-of-account/openingBalance/${selectedAccount.id}`,
         payload
       );
-      // Optionally show success notification here
+      console.log("Update successful:", response.data);
+
+      // Update local state
+      setBalances((prev) => ({
+        ...prev,
+        [selectedAccount.code]: { debit: modalDebit, credit: modalCredit },
+      }));
+
+      alert("Opening balance updated successfully!");
+      setModalOpened(false);
     } catch (error) {
-      // Optionally show error notification here
-      console.error("Failed to update opening balances", error);
+      console.error("Failed to update opening balance", error);
+      alert("Failed to update. Check console for details.");
     }
-    setLoading(false);
+    setUpdating(false);
   };
 
   const totalDebit = filteredAccounts.reduce(
-    (sum: number, a: { code: string; name: string }) =>
+    (sum: number, a: { code: string; name: string; id: string }) =>
       sum + (balances[a.code]?.debit || 0),
     0
   );
   const totalCredit = filteredAccounts.reduce(
-    (sum: number, a: { code: string; name: string }) =>
+    (sum: number, a: { code: string; name: string; id: string }) =>
       sum + (balances[a.code]?.credit || 0),
     0
   );
@@ -123,7 +205,7 @@ const AccountsOpeningBalances: React.FC = () => {
                 style={{
                   border: "1px solid #dee2e6",
                   padding: 8,
-                  minWidth: 500,
+                  minWidth: 400,
                 }}
               >
                 Title
@@ -134,74 +216,92 @@ const AccountsOpeningBalances: React.FC = () => {
               <Table.Th style={{ border: "1px solid #dee2e6", padding: 8 }}>
                 Credit
               </Table.Th>
+              <Table.Th style={{ border: "1px solid #dee2e6", padding: 8 }}>
+                Action
+              </Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {filteredAccounts.length === 0 ? (
               <Table.Tr>
                 <Table.Td
-                  colSpan={4}
+                  colSpan={5}
                   style={{ textAlign: "center", padding: 24, color: "#888" }}
                 >
                   No accounts found.
                 </Table.Td>
               </Table.Tr>
             ) : (
-              filteredAccounts.map((row: { code: string; name: string }) => (
-                <Table.Tr
-                  key={row.code}
-                  style={{ border: "1px solid #dee2e6" }}
-                >
-                  <Table.Td style={{ border: "1px solid #dee2e6", padding: 8 }}>
-                    {row.code}
-                  </Table.Td>
-                  <Table.Td style={{ border: "1px solid #dee2e6", padding: 8 }}>
-                    {row.name}
-                  </Table.Td>
-                  <Table.Td style={{ border: "1px solid #dee2e6", padding: 8 }}>
-                    <NumberInput
-                      value={balances[row.code]?.debit || 0}
-                      min={0}
-                      onChange={(val: number | string) =>
-                        handleChange(
-                          row.code,
-                          "debit",
-                          typeof val === "number" ? val : 0
-                        )
-                      }
-                      hideControls={false}
-                    />
-                  </Table.Td>
-                  <Table.Td style={{ border: "1px solid #dee2e6", padding: 8 }}>
-                    <NumberInput
-                      value={balances[row.code]?.credit || 0}
-                      min={0}
-                      onChange={(val: number | string) =>
-                        handleChange(
-                          row.code,
-                          "credit",
-                          typeof val === "number" ? val : 0
-                        )
-                      }
-                      hideControls={false}
-                    />
-                  </Table.Td>
-                </Table.Tr>
-              ))
+              filteredAccounts.map(
+                (row: { code: string; name: string; id: string }) => (
+                  <Table.Tr
+                    key={row.id}
+                    style={{ border: "1px solid #dee2e6" }}
+                  >
+                    <Table.Td
+                      style={{ border: "1px solid #dee2e6", padding: 8 }}
+                    >
+                      {row.code}
+                    </Table.Td>
+                    <Table.Td
+                      style={{ border: "1px solid #dee2e6", padding: 8 }}
+                    >
+                      {row.name}
+                    </Table.Td>
+                    <Table.Td
+                      style={{ border: "1px solid #dee2e6", padding: 8 }}
+                    >
+                      <NumberInput
+                        value={balances[row.code]?.debit || 0}
+                        min={0}
+                        onChange={(val: number | string) =>
+                          handleChange(
+                            row.code,
+                            "debit",
+                            typeof val === "number" ? val : 0
+                          )
+                        }
+                        hideControls={false}
+                        disabled
+                      />
+                    </Table.Td>
+                    <Table.Td
+                      style={{ border: "1px solid #dee2e6", padding: 8 }}
+                    >
+                      <NumberInput
+                        value={balances[row.code]?.credit || 0}
+                        min={0}
+                        onChange={(val: number | string) =>
+                          handleChange(
+                            row.code,
+                            "credit",
+                            typeof val === "number" ? val : 0
+                          )
+                        }
+                        hideControls={false}
+                        disabled
+                      />
+                    </Table.Td>
+                    <Table.Td
+                      style={{ border: "1px solid #dee2e6", padding: 8 }}
+                    >
+                      <Button
+                        size="xs"
+                        color="#0A6802"
+                        onClick={() => openModal(row)}
+                      >
+                        Update
+                      </Button>
+                    </Table.Td>
+                  </Table.Tr>
+                )
+              )
             )}
           </Table.Tbody>
         </Table>
       </ScrollArea>
       <Divider my="md" />
-      <Group mt="md" justify="space-between">
-        <Button
-          color="#0A6802"
-          size="md"
-          onClick={handleUpdate}
-          loading={loading}
-        >
-          Update
-        </Button>
+      <Group mt="md" justify="flex-end">
         <Group>
           <Text c="red" fw={700} size="md">
             Total Debit: {totalDebit}
@@ -211,6 +311,69 @@ const AccountsOpeningBalances: React.FC = () => {
           </Text>
         </Group>
       </Group>
+
+      {/* Modal for single account update */}
+      <Modal
+        opened={modalOpened}
+        onClose={() => setModalOpened(false)}
+        title={
+          <Text fw={700} size="lg">
+            Update Opening Balance
+          </Text>
+        }
+        size="md"
+      >
+        {selectedAccount && (
+          <Stack gap="md">
+            <div>
+              <Text size="sm" c="dimmed">
+                Account Code
+              </Text>
+              <Text fw={600}>{selectedAccount.code}</Text>
+            </div>
+            <div>
+              <Text size="sm" c="dimmed">
+                Account Name
+              </Text>
+              <Text fw={600}>{selectedAccount.name.trim()}</Text>
+            </div>
+            <NumberInput
+              label="Debit"
+              value={modalDebit}
+              onChange={(val) =>
+                setModalDebit(typeof val === "number" ? val : 0)
+              }
+              min={0}
+              placeholder="Enter debit amount"
+            />
+            <NumberInput
+              label="Credit"
+              value={modalCredit}
+              onChange={(val) =>
+                setModalCredit(typeof val === "number" ? val : 0)
+              }
+              min={0}
+              placeholder="Enter credit amount"
+            />
+            <Group justify="flex-end" mt="md">
+              <Button
+                variant="outline"
+                onClick={() => setModalOpened(false)}
+                disabled={updating}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="#0A6802"
+                onClick={handleSingleUpdate}
+                loading={updating}
+              >
+                Update Balance
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
     </Card>
   );
 };

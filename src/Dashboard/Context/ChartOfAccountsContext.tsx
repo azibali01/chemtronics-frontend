@@ -2,8 +2,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import api from "../../api_configuration/api";
- 
- 
 
 export type AccountType =
   | "1000-Assets"
@@ -57,9 +55,14 @@ export type AccountType =
 /* eslint-disable react-refresh/only-export-components */
 
 // Types
- 
+
 export type AccountGroupType = "Group" | "Detail";
-export type ParentAccount = "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
+export type ParentAccount =
+  | "Asset"
+  | "Liability"
+  | "Equity"
+  | "Revenue"
+  | "Expense";
 
 export interface AccountNode {
   _id: string;
@@ -81,6 +84,10 @@ export interface AccountNode {
   ntn?: string;
   icon?: ReactNode;
   children?: AccountNode[];
+  openingBalance?: {
+    debit: number;
+    credit: number;
+  };
 }
 
 interface ChartOfAccountsContextType {
@@ -90,33 +97,36 @@ interface ChartOfAccountsContextType {
   setExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
 }
 
-const ChartOfAccountsContext = createContext<ChartOfAccountsContextType | undefined>(undefined);
+const ChartOfAccountsContext = createContext<
+  ChartOfAccountsContextType | undefined
+>(undefined);
 
 export const useChartOfAccounts = () => {
   const context = useContext(ChartOfAccountsContext);
   if (!context)
-    throw new Error("useChartOfAccounts must be used within ChartOfAccountsProvider");
+    throw new Error(
+      "useChartOfAccounts must be used within ChartOfAccountsProvider"
+    );
   return context;
 };
 
-export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
   const [accounts, setAccounts] = useState<AccountNode[]>([]);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const fetchAccounts = async () => {
       try {
-        const res = await api.get(
-          "/chart-of-account"
-        );
+        const res = await api.get("/chart-of-account");
         console.log("API response:", res.data);
-        
-          if (Array.isArray(res.data)) {
-    setAccounts(res.data);
-  } else {
-    console.warn("Unexpected API shape:", res.data);
-  }
 
+        if (Array.isArray(res.data)) {
+          setAccounts(res.data);
+        } else {
+          console.warn("Unexpected API shape:", res.data);
+        }
 
         const data = Array.isArray(res.data)
           ? res.data
@@ -135,7 +145,9 @@ export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({ chi
   }, []);
 
   return (
-    <ChartOfAccountsContext.Provider value={{ accounts, setAccounts, expanded, setExpanded }}>
+    <ChartOfAccountsContext.Provider
+      value={{ accounts, setAccounts, expanded, setExpanded }}
+    >
       {children}
     </ChartOfAccountsContext.Provider>
   );

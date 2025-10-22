@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Card,
   Text,
@@ -15,6 +15,9 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { RowInput } from "jspdf-autotable";
 import { IconAlertCircle, IconArrowDown, IconClock } from "@tabler/icons-react";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import { getPayableAccounts } from "../../../utils/payableAccounts";
+import api from "../../../api_configuration/api";
 interface Vendor {
   name: string;
   contact: string;
@@ -38,52 +41,155 @@ interface Invoice {
   daysOverdue: string;
 }
 
-const vendors: Vendor[] = [
-  {
-    name: "ABC Suppliers",
-    contact: "Robert Brown",
-    email: "robert@abcsuppliers.com",
-    totalOutstanding: 95000,
-    current: 40000,
-    days31to60: 30000,
-    days61to90: 15000,
-    days90plus: 10000,
-    lastPayment: "2024-01-05",
-    terms: "Net 30",
-    invoices: Array.from({ length: 12 }).map((_, i) => ({
-      invoiceNo: `PI-00${i + 1}`,
-      date: "2024-01-01",
-      dueDate: "2024-01-15",
-      amount: 10000 + i * 500,
-      outstanding: 5000,
-      daysOverdue: `${i} days`,
-    })),
-  },
-  {
-    name: "XYZ Trading",
-    contact: "Lisa Davis",
-    email: "lisa@xyztrading.com",
-    totalOutstanding: 65000,
-    current: 35000,
-    days31to60: 20000,
-    days61to90: 10000,
-    days90plus: 0,
-    lastPayment: "2024-01-12",
-    terms: "Net 15",
-    invoices: [
-      {
-        invoiceNo: "PI-013",
-        date: "2024-01-06",
-        dueDate: "2024-01-21",
-        amount: 15000,
-        outstanding: 7500,
-        daysOverdue: "1 day",
-      },
-    ],
-  },
-];
+interface PurchaseInvoiceData {
+  _id: string;
+  invoiceNo: string;
+  date: string;
+  dueDate?: string;
+  supplier?: {
+    name: string;
+    email?: string;
+    phone?: string;
+  };
+  products: Array<{
+    qty: number;
+    rate: number;
+  }>;
+  grandTotal?: number;
+}
 
 export default function AccountsPayable() {
+  const { accounts } = useChartOfAccounts();
+  const [purchaseInvoices, setPurchaseInvoices] = useState<
+    PurchaseInvoiceData[]
+  >([]);
+
+  // Fetch purchase invoices from API
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      try {
+        const response = await api.get("/purchase-invoice");
+        console.log("Purchase Invoices API response:", response.data);
+        setPurchaseInvoices(response.data || []);
+      } catch (error) {
+        console.error("Failed to fetch purchase invoices:", error);
+        setPurchaseInvoices([]);
+      }
+    };
+
+    fetchInvoices();
+  }, []);
+
+  // Get payable accounts (vendors) from Chart of Accounts
+  const payableAccountsList = useMemo(
+    () => getPayableAccounts(accounts),
+    [accounts]
+  );
+
+  // Build vendors data from payable accounts and purchase invoices
+  const vendors: Vendor[] = useMemo(() => {
+    console.log("Payable Accounts List:", payableAccountsList);
+    console.log("Purchase Invoices:", purchaseInvoices);
+
+    return payableAccountsList.map((account) => {
+      const vendorName = account.accountName || "Unknown Vendor";
+
+      // Filter invoices for this vendor - try multiple matching strategies
+      const vendorInvoices = purchaseInvoices.filter((inv) => {
+        const supplierName = inv.supplier?.name || "";
+        // Try exact match first
+        if (supplierName === vendorName) return true;
+        // Try case-insensitive match
+        if (supplierName.toLowerCase() === vendorName.toLowerCase())
+          return true;
+        // Try partial match (contains)
+        if (supplierName.toLowerCase().includes(vendorName.toLowerCase()))
+          return true;
+        if (vendorName.toLowerCase().includes(supplierName.toLowerCase()))
+          return true;
+        return false;
+      });
+
+      console.log(`Vendor: ${vendorName}, Matched Invoices:`, vendorInvoices);
+
+      // Calculate invoice amounts and aging
+      const invoices: Invoice[] = vendorInvoices.map((inv) => {
+        const calculatedAmount =
+          inv.grandTotal ||
+          (inv.products || []).reduce(
+            (total, product) =>
+              total + (product.qty || 0) * (product.rate || 0),
+            0
+          );
+
+        const invoiceDate = new Date(inv.date);
+        const dueDate = inv.dueDate
+          ? new Date(inv.dueDate)
+          : new Date(invoiceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+        const today = new Date();
+        const daysDiff = Math.floor(
+          (today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
+
+        return {
+          invoiceNo: inv.invoiceNo || "N/A",
+          date: invoiceDate.toISOString().split("T")[0],
+          dueDate: dueDate.toISOString().split("T")[0],
+          amount: calculatedAmount,
+          outstanding: calculatedAmount, // Assuming full amount is outstanding
+          daysOverdue: daysDiff > 0 ? `${daysDiff} days` : "Not overdue",
+        };
+      });
+
+      // Calculate aging buckets
+      let current = 0;
+      let days31to60 = 0;
+      let days61to90 = 0;
+      let days90plus = 0;
+
+      invoices.forEach((inv) => {
+        const daysOverdueMatch = inv.daysOverdue.match(/(\d+)/);
+        const daysNum = daysOverdueMatch ? parseInt(daysOverdueMatch[1]) : 0;
+
+        if (daysNum <= 30) {
+          current += inv.outstanding;
+        } else if (daysNum <= 60) {
+          days31to60 += inv.outstanding;
+        } else if (daysNum <= 90) {
+          days61to90 += inv.outstanding;
+        } else {
+          days90plus += inv.outstanding;
+        }
+      });
+
+      const totalOutstanding = current + days31to60 + days61to90 + days90plus;
+
+      // Get last payment date (most recent invoice date for now)
+      const lastPaymentDate =
+        invoices.length > 0
+          ? invoices.reduce(
+              (latest, inv) =>
+                new Date(inv.date) > new Date(latest) ? inv.date : latest,
+              invoices[0].date
+            )
+          : new Date().toISOString().split("T")[0];
+
+      return {
+        name: vendorName,
+        contact: account.phoneNo || "N/A",
+        email: account.address || "N/A",
+        totalOutstanding,
+        current,
+        days31to60,
+        days61to90,
+        days90plus,
+        lastPayment: lastPaymentDate,
+        terms: "Net 30", // Default terms
+        invoices,
+      };
+    });
+  }, [payableAccountsList, purchaseInvoices]);
+
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
 
   const [activePage, setActivePage] = useState(1);
@@ -137,90 +243,246 @@ export default function AccountsPayable() {
   const total90plus = vendors.reduce((s, v) => s + v.days90plus, 0);
 
   const exportPDF = () => {
-    const doc = new jsPDF();
-    doc.text("Accounts Payable Report", 14, 15);
+    // Load images
+    const logoUrl = "/Logo.png";
+    const headerUrl = "/Header.jpg";
+    const footerUrl = "/Footer.jpg";
+    const logoImg = new window.Image();
+    const headerImg = new window.Image();
+    const footerImg = new window.Image();
+    let loaded = 0;
 
-    autoTable(doc, {
-      head: [
-        [
-          "Vendor",
-          "Contact",
-          "Total Outstanding",
-          "Current",
-          "31-60 Days",
-          "61-90 Days",
-          "90+ Days",
-          "Last Payment",
-          "Terms",
+    function tryDraw() {
+      loaded++;
+      if (loaded === 3) {
+        drawPDF();
+      }
+    }
+
+    logoImg.src = logoUrl;
+    headerImg.src = headerUrl;
+    footerImg.src = footerUrl;
+    logoImg.onload = tryDraw;
+    headerImg.onload = tryDraw;
+    footerImg.onload = tryDraw;
+    logoImg.onerror = tryDraw;
+    headerImg.onerror = tryDraw;
+    footerImg.onerror = tryDraw;
+
+    function drawPDF() {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Header design asset
+      doc.addImage(headerImg, "JPEG", 0, 0, pageWidth, 25);
+
+      // Centered logo below header
+      const logoWidth = 40;
+      const logoHeight = 20;
+      const logoX = (pageWidth - logoWidth) / 2;
+      doc.addImage(logoImg, "PNG", logoX, 27, logoWidth, logoHeight);
+
+      // Title
+      doc.setFontSize(16);
+      doc.text("Accounts Payable Report", pageWidth / 2, 52, {
+        align: "center",
+      });
+      doc.setFontSize(10);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth / 2, 59, {
+        align: "center",
+      });
+
+      autoTable(doc, {
+        head: [
+          [
+            "Vendor",
+            "Contact",
+            "Total Outstanding",
+            "Current",
+            "31-60 Days",
+            "61-90 Days",
+            "90+ Days",
+            "Last Payment",
+            "Terms",
+          ],
         ],
-      ],
-      body: filteredVendors.map((v) => [
-        v.name,
-        v.contact,
-        `₹${v.totalOutstanding.toLocaleString()}`,
-        `₹${v.current.toLocaleString()}`,
-        `₹${v.days31to60.toLocaleString()}`,
-        `₹${v.days61to90.toLocaleString()}`,
-        `₹${v.days90plus.toLocaleString()}`,
-        v.lastPayment,
-        v.terms,
-      ]) as RowInput[],
-      startY: 20,
-    });
+        body: filteredVendors.map((v) => [
+          v.name,
+          v.contact,
+          `Rs. ${v.totalOutstanding.toLocaleString()}`,
+          `Rs. ${v.current.toLocaleString()}`,
+          `Rs. ${v.days31to60.toLocaleString()}`,
+          `Rs. ${v.days61to90.toLocaleString()}`,
+          `Rs. ${v.days90plus.toLocaleString()}`,
+          v.lastPayment,
+          v.terms,
+        ]) as RowInput[],
+        startY: 65,
+        theme: "grid",
+        headStyles: {
+          fillColor: [10, 104, 2], // #0A6802
+          textColor: 255,
+          fontStyle: "bold",
+        },
+        bodyStyles: {
+          fillColor: [241, 252, 240], // #F1FCF0
+          textColor: 0,
+        },
+        didDrawPage: function (data) {
+          // Footer design asset
+          const pageSize = doc.internal.pageSize;
+          doc.addImage(
+            footerImg,
+            "JPEG",
+            0,
+            pageSize.getHeight() - 25,
+            pageSize.getWidth(),
+            25
+          );
+          doc.setFontSize(9);
+          doc.text(
+            `Page ${data.pageNumber}`,
+            pageSize.getWidth() - 40,
+            pageSize.getHeight() - 10
+          );
+        },
+      });
 
-    doc.save("accounts_payable.pdf");
+      doc.save("accounts_payable.pdf");
+    }
   };
 
   // PDF Export (Invoices)
   const exportInvoicesPDF = () => {
     if (!selectedVendor) return;
 
-    const doc = new jsPDF();
-    doc.text(`Invoices - ${selectedVendor.name}`, 14, 15);
+    const vendor = selectedVendor; // Local variable to avoid null checks
 
-    const totalAmount = selectedVendor.invoices.reduce(
-      (sum, inv) => sum + inv.amount,
-      0
-    );
-    const totalOutstanding = selectedVendor.invoices.reduce(
-      (sum, inv) => sum + inv.outstanding,
-      0
-    );
+    // Load images
+    const logoUrl = "/Logo.png";
+    const headerUrl = "/Header.jpg";
+    const footerUrl = "/Footer.jpg";
+    const logoImg = new window.Image();
+    const headerImg = new window.Image();
+    const footerImg = new window.Image();
+    let loaded = 0;
 
-    autoTable(doc, {
-      head: [
-        [
-          "Invoice No.",
-          "Date",
-          "Due Date",
-          "Amount",
-          "Outstanding",
-          "Days Overdue",
+    function tryDraw() {
+      loaded++;
+      if (loaded === 3) {
+        drawPDF();
+      }
+    }
+
+    logoImg.src = logoUrl;
+    headerImg.src = headerUrl;
+    footerImg.src = footerUrl;
+    logoImg.onload = tryDraw;
+    headerImg.onload = tryDraw;
+    footerImg.onload = tryDraw;
+    logoImg.onerror = tryDraw;
+    headerImg.onerror = tryDraw;
+    footerImg.onerror = tryDraw;
+
+    function drawPDF() {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Header design asset
+      doc.addImage(headerImg, "JPEG", 0, 0, pageWidth, 25);
+
+      // Centered logo below header
+      const logoWidth = 40;
+      const logoHeight = 20;
+      const logoX = (pageWidth - logoWidth) / 2;
+      doc.addImage(logoImg, "PNG", logoX, 27, logoWidth, logoHeight);
+
+      // Title
+      doc.setFontSize(16);
+      doc.text(`Invoices - ${vendor.name}`, pageWidth / 2, 52, {
+        align: "center",
+      });
+      doc.setFontSize(10);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth / 2, 59, {
+        align: "center",
+      });
+
+      const totalAmount = vendor.invoices.reduce(
+        (sum, inv) => sum + inv.amount,
+        0
+      );
+      const totalOutstanding = vendor.invoices.reduce(
+        (sum, inv) => sum + inv.outstanding,
+        0
+      );
+
+      autoTable(doc, {
+        head: [
+          [
+            "Invoice No.",
+            "Date",
+            "Due Date",
+            "Amount",
+            "Outstanding",
+            "Days Overdue",
+          ],
         ],
-      ],
-      body: [
-        ...selectedVendor.invoices.map((inv) => [
-          inv.invoiceNo,
-          inv.date,
-          inv.dueDate,
-          `₹${inv.amount.toLocaleString()}`,
-          `₹${inv.outstanding.toLocaleString()}`,
-          inv.daysOverdue,
-        ]),
-        [
-          { content: "Totals", colSpan: 3, styles: { halign: "right" } },
-          { content: `₹${totalAmount.toLocaleString()}` },
-          {
-            content: `₹${totalOutstanding.toLocaleString()}`,
-            styles: { textColor: "red" },
-          },
-          "",
-        ],
-      ] as RowInput[],
-      startY: 20,
-    });
+        body: [
+          ...vendor.invoices.map((inv) => [
+            inv.invoiceNo,
+            inv.date,
+            inv.dueDate,
+            `Rs. ${inv.amount.toLocaleString()}`,
+            `Rs. ${inv.outstanding.toLocaleString()}`,
+            inv.daysOverdue,
+          ]),
+          [
+            {
+              content: "Totals",
+              colSpan: 3,
+              styles: { halign: "right", fontStyle: "bold" },
+            },
+            { content: `Rs. ${totalAmount.toLocaleString()}` },
+            {
+              content: `Rs. ${totalOutstanding.toLocaleString()}`,
+              styles: { textColor: [255, 0, 0] },
+            },
+            "",
+          ],
+        ] as RowInput[],
+        startY: 65,
+        theme: "grid",
+        headStyles: {
+          fillColor: [10, 104, 2], // #0A6802
+          textColor: 255,
+          fontStyle: "bold",
+        },
+        bodyStyles: {
+          fillColor: [241, 252, 240], // #F1FCF0
+          textColor: 0,
+        },
+        didDrawPage: function (data) {
+          // Footer design asset
+          const pageSize = doc.internal.pageSize;
+          doc.addImage(
+            footerImg,
+            "JPEG",
+            0,
+            pageSize.getHeight() - 25,
+            pageSize.getWidth(),
+            25
+          );
+          doc.setFontSize(9);
+          doc.text(
+            `Page ${data.pageNumber}`,
+            pageSize.getWidth() - 40,
+            pageSize.getHeight() - 10
+          );
+        },
+      });
 
-    doc.save(`${selectedVendor.name}_invoices.pdf`);
+      doc.save(`${vendor.name}_invoices.pdf`);
+    }
   };
 
   return (
@@ -246,7 +508,7 @@ export default function AccountsPayable() {
               <div>
                 <Text>Total Outstanding</Text>
                 <Text fw={700} c="red">
-                  ₹{totalOutstanding.toLocaleString()}
+                  Rs. {totalOutstanding.toLocaleString()}
                 </Text>
               </div>
             </Group>
@@ -258,7 +520,7 @@ export default function AccountsPayable() {
               <IconClock size={24} color="#0A6802" />
               <div>
                 <Text>Current (0-30)</Text>
-                <Text fw={700}>₹{totalCurrent.toLocaleString()}</Text>
+                <Text fw={700}>Rs. {totalCurrent.toLocaleString()}</Text>
               </div>
             </Group>
           </Card>
@@ -269,7 +531,7 @@ export default function AccountsPayable() {
               <IconClock size={24} color="orange" />
               <div>
                 <Text>31-60 Days</Text>
-                <Text fw={700}>₹{total31to60.toLocaleString()}</Text>
+                <Text fw={700}>Rs. {total31to60.toLocaleString()}</Text>
               </div>
             </Group>
           </Card>
@@ -280,7 +542,7 @@ export default function AccountsPayable() {
               <IconClock size={24} color="#F54900" />
               <div>
                 <Text>61-90 Days</Text>
-                <Text fw={700}>₹{total61to90.toLocaleString()}</Text>
+                <Text fw={700}>Rs. {total61to90.toLocaleString()}</Text>
               </div>
             </Group>
           </Card>
@@ -292,7 +554,7 @@ export default function AccountsPayable() {
               <div>
                 <Text>90+ Days</Text>
                 <Text fw={700} c="red">
-                  ₹{total90plus.toLocaleString()}
+                  Rs. {total90plus.toLocaleString()}
                 </Text>
               </div>
             </Group>
@@ -368,14 +630,18 @@ export default function AccountsPayable() {
                 </Table.Td>
                 <Table.Td>{v.contact}</Table.Td>
                 <Table.Td c="red">
-                  ₹{v.totalOutstanding.toLocaleString()}
+                  Rs. {v.totalOutstanding.toLocaleString()}
                 </Table.Td>
-                <Table.Td c="#0A6802">₹{v.current.toLocaleString()}</Table.Td>
-                <Table.Td c="orange">₹{v.days31to60.toLocaleString()}</Table.Td>
+                <Table.Td c="#0A6802">
+                  Rs. {v.current.toLocaleString()}
+                </Table.Td>
+                <Table.Td c="orange">
+                  Rs. {v.days31to60.toLocaleString()}
+                </Table.Td>
                 <Table.Td c="#F54900">
-                  ₹{v.days61to90.toLocaleString()}
+                  Rs. {v.days61to90.toLocaleString()}
                 </Table.Td>
-                <Table.Td c="red">₹{v.days90plus.toLocaleString()}</Table.Td>
+                <Table.Td c="red">Rs. {v.days90plus.toLocaleString()}</Table.Td>
                 <Table.Td>{v.lastPayment}</Table.Td>
                 <Table.Td>{v.terms}</Table.Td>
                 <Table.Td>
@@ -434,18 +700,29 @@ export default function AccountsPayable() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {paginatedInvoices.map((inv, i) => (
-                <Table.Tr key={i}>
-                  <Table.Td>{inv.invoiceNo}</Table.Td>
-                  <Table.Td>{inv.date}</Table.Td>
-                  <Table.Td>{inv.dueDate}</Table.Td>
-                  <Table.Td>₹{inv.amount.toLocaleString()}</Table.Td>
+              {paginatedInvoices.length === 0 ? (
+                <Table.Tr>
                   <Table.Td
-                    c={inv.outstanding > 0 ? "red" : "green"}
-                  >{`₹${inv.outstanding.toLocaleString()}`}</Table.Td>
-                  <Table.Td>{inv.daysOverdue}</Table.Td>
+                    colSpan={6}
+                    style={{ textAlign: "center", padding: "2rem" }}
+                  >
+                    <Text c="dimmed">No invoices found for this vendor</Text>
+                  </Table.Td>
                 </Table.Tr>
-              ))}
+              ) : (
+                paginatedInvoices.map((inv, i) => (
+                  <Table.Tr key={i}>
+                    <Table.Td>{inv.invoiceNo}</Table.Td>
+                    <Table.Td>{inv.date}</Table.Td>
+                    <Table.Td>{inv.dueDate}</Table.Td>
+                    <Table.Td>Rs. {inv.amount.toLocaleString()}</Table.Td>
+                    <Table.Td
+                      c={inv.outstanding > 0 ? "red" : "green"}
+                    >{`Rs. ${inv.outstanding.toLocaleString()}`}</Table.Td>
+                    <Table.Td>{inv.daysOverdue}</Table.Td>
+                  </Table.Tr>
+                ))
+              )}
             </Table.Tbody>
           </Table>
 

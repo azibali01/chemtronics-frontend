@@ -110,83 +110,21 @@ export default function PurchaseInvoice(): JSX.Element {
       account: { code: string; name: string };
     }[] = [];
 
-    const extractLeadingCode = (node: AccountNode | null | undefined) => {
-      if (!node) return "";
-      const s = String(
-        node.accountCode ?? node.code ?? node.selectedCode ?? ""
-      );
-      const m = s.match(/^(\d{1,4})/);
-      return m ? m[1] : "";
-    };
-
-    // walk the tree with ancestor list; only include detail/party accounts which
-    // have ancestor path containing [2000, 2200, 2210] in that exact order
-    function walk(nodes: AccountNode[], ancestors: AccountNode[] = []) {
+    // Simple walk function to find accounts with code starting with "221"
+    function walk(nodes: AccountNode[]) {
       if (!Array.isArray(nodes)) return;
       for (const n of nodes) {
         if (!n) continue;
 
-        // build numeric code path from ancestors
-        const codes = ancestors
-          .map((a) => extractLeadingCode(a))
-          .filter(Boolean);
-        // include current node's code at the end (not necessary for ancestor check but helpful)
-        const curCode = extractLeadingCode(n);
-        const fullCodes = [...codes, curCode];
-
-        // prefix-based sequence to match: 2 -> 22 -> 221 (so 22101 will match)
-        const prefixes = ["2", "22", "221"];
-        let foundSeq = false;
-        for (let i = 0; i + prefixes.length <= fullCodes.length; i++) {
-          let match = true;
-          for (let j = 0; j < prefixes.length; j++) {
-            const val = fullCodes[i + j] || "";
-            if (!val.startsWith(prefixes[j])) {
-              match = false;
-              break;
-            }
-          }
-          if (match) {
-            foundSeq = true;
-            break;
-          }
-        }
-
-        // Only include detail or explicit party nodes that are located under the sequence
-        const isDetailOrParty = n.type === "Detail" || n.isParty === true;
-
-        // current node code
-        const nodeCodeStr = String(
+        // Get the account code
+        const accountCode = String(
           n.accountCode ?? n.code ?? n.selectedCode ?? ""
-        ).toLowerCase();
-        const curCodeStr = (curCode || "").toLowerCase();
+        );
 
-        // helper: do ancestors indicate liabilities?
-        const ancestorsIndicateLiability = ancestors.some((a) => {
-          const aParent = String(a.parentAccount ?? "").toLowerCase();
-          const aType = String(
-            a.accountType ??
-              a.selectedAccountType1 ??
-              a.selectedAccountType2 ??
-              ""
-          ).toLowerCase();
-          const aCode = String(a.accountCode ?? a.code ?? a.selectedCode ?? "");
-          return (
-            aParent.includes("liabilities") ||
-            aType.includes("liabilities") ||
-            String(aCode).startsWith("2")
-          );
-        });
+        // Check if this is a Purchase Party account (code starts with "221")
+        const isPurchaseParty = accountCode.startsWith("221");
 
-        // include also when node itself has code like 221xx and parent/ancestors indicate liabilities
-        const nodeLooksLikePurchase =
-          curCodeStr.startsWith("221") || nodeCodeStr.startsWith("221");
-
-        const include =
-          isDetailOrParty &&
-          (foundSeq || (nodeLooksLikePurchase && ancestorsIndicateLiability));
-
-        if (include) {
+        if (isPurchaseParty) {
           results.push({
             value: String(
               n.accountCode ?? n.code ?? n.selectedCode ?? n._id ?? ""
@@ -201,17 +139,24 @@ export default function PurchaseInvoice(): JSX.Element {
           });
         }
 
-        if (Array.isArray(n.children) && n.children.length)
-          walk(n.children as AccountNode[], [...ancestors, n]);
+        // Recursively walk children
+        if (Array.isArray(n.children) && n.children.length > 0) {
+          walk(n.children as AccountNode[]);
+        }
       }
     }
 
-    walk(accounts as AccountNode[], []);
+    walk(accounts as AccountNode[]);
 
     // remove duplicate values
-    return results.filter(
+    const uniqueResults = results.filter(
       (r, idx, arr) => arr.findIndex((x) => x.value === r.value) === idx
     );
+
+    // Debug log
+    console.log("Purchase Party Options (Suppliers):", uniqueResults);
+
+    return uniqueResults;
   })();
 
   // derive Inventory accounts (Assets -> Inventories) for Purchase Account select

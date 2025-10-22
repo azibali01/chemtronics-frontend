@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import { getReceivableAccounts } from "../../../utils/receivableAccounts";
+import api from "../../../api_configuration/api";
 import {
   Card,
   Text,
@@ -29,25 +30,49 @@ interface Customer {
   name: string;
 }
 
+interface Product {
+  qty: number | string;
+  rate: number | string;
+  // Add other fields as needed
+}
+
 interface Invoice {
   id: string;
+  _id?: string;
   customerId: string;
+  accountTitle: string;
   date: string;
   invoiceNo: string;
+  invoiceNumber: string;
+  invoiceDate: string;
   amount: number;
+  netAmount: number;
   received: number;
   balance: number;
   status: "paid" | "partial" | "pending" | "overdue";
+  products?: Product[];
 }
 
-export default function AccountsReceivable({
-  invoices,
-}: {
-  invoices: Invoice[];
-}) {
+export default function AccountsReceivable() {
   // Use ChartOfAccountsContext to get receivable accounts as customers
   const { accounts } = useChartOfAccounts();
-  invoices = invoices ?? [];
+
+  const [salesInvoices, setSalesInvoices] = useState<Invoice[]>([]);
+
+  // Fetch sales invoices on component mount
+  useEffect(() => {
+    const fetchInvoices = async () => {
+      try {
+        const response = await api.get("/sale-invoice");
+
+        setSalesInvoices(response.data || []);
+      } catch (error) {
+        console.error("Error fetching sales invoices:", error);
+        setSalesInvoices([]);
+      }
+    };
+    fetchInvoices();
+  }, []);
 
   // Use getReceivableAccounts to get all accounts under 1410 (including 14101, etc.)
   const receivableAccounts = getReceivableAccounts(accounts ?? []);
@@ -55,6 +80,55 @@ export default function AccountsReceivable({
     id: acc._id,
     name: acc.accountName,
   }));
+
+  // Map sales invoices to Invoice format
+  const invoices: Invoice[] = salesInvoices.map((inv: Invoice) => {
+    // Find customer by accountTitle
+    const customer = customers.find((c) => c.name === inv.accountTitle);
+
+    // Calculate total amount from products
+    const calculatedAmount = (inv.products || []).reduce(
+      (total: number, product: Product) => {
+        const qty = parseFloat(product.qty as string) || 0;
+        const rate = parseFloat(product.rate as string) || 0;
+        return total + qty * rate;
+      },
+      0
+    );
+
+    // Calculate aging based on invoice date
+    const invoiceDate = new Date(inv.invoiceDate);
+    const today = new Date();
+    const daysDiff = Math.floor(
+      (today.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    let status: "paid" | "partial" | "pending" | "overdue";
+    if (daysDiff <= 30) {
+      status = "pending"; // Current (0-30 days)
+    } else if (daysDiff <= 60) {
+      status = "partial"; // 31-60 days
+    } else if (daysDiff <= 90) {
+      status = "overdue"; // 61-90 days
+    } else {
+      status = "paid"; // 90+ days (using 'paid' as placeholder for 90+)
+    }
+
+    return {
+      id: inv.id || inv._id || "",
+      customerId: customer?.id || "",
+      accountTitle: inv.accountTitle || "",
+      date: inv.invoiceDate || "",
+      invoiceNo: inv.invoiceNumber || "",
+      invoiceNumber: inv.invoiceNumber || "",
+      invoiceDate: inv.invoiceDate || "",
+      amount: calculatedAmount,
+      netAmount: calculatedAmount,
+      received: 0, // Will need to calculate from payments later
+      balance: calculatedAmount,
+      status: status,
+    };
+  });
 
   const [page, setPage] = useState(1);
   const [invoicePage, setInvoicePage] = useState(1);
@@ -73,7 +147,6 @@ export default function AccountsReceivable({
     setAppliedFromDate(fromDate);
     setAppliedToDate(toDate);
     setPage(1); // Reset to first page when applying filters
-    console.log("Applying filters - From:", fromDate, "To:", toDate);
   };
 
   const filteredInvoices = invoices.filter((inv: Invoice) => {
@@ -82,19 +155,6 @@ export default function AccountsReceivable({
     const to = appliedToDate ? new Date(appliedToDate) : null;
 
     const matchesDate = (!from || invDate >= from) && (!to || invDate <= to);
-
-    console.log(
-      "Invoice date:",
-      inv.date,
-      "Invoice Date obj:",
-      invDate,
-      "From:",
-      from,
-      "To:",
-      to,
-      "Matches:",
-      matchesDate
-    );
 
     return matchesDate;
   });
@@ -273,23 +333,98 @@ export default function AccountsReceivable({
     const cust = customers.find((c) => c.id === custId);
     const invs = filteredInvoices.filter((i) => i.customerId === custId);
 
-    const doc = new jsPDF();
-    doc.text(`Invoices - ${cust?.name}`, 14, 15);
-    autoTable(doc, {
-      head: [
-        ["Date", "Invoice No.", "Amount", "Received", "Balance", "Status"],
-      ],
-      body: invs.map((i) => [
-        i.date,
-        i.invoiceNo,
-        `Rs. ${i.amount.toLocaleString()}`,
-        `Rs. ${i.received.toLocaleString()}`,
-        `Rs. ${i.balance.toLocaleString()}`,
-        i.status,
-      ]) as RowInput[],
-      startY: 20,
-    });
-    doc.save(`invoices_${cust?.name}.pdf`);
+    const logoUrl = "/Logo.png";
+    const headerUrl = "/Header.jpg";
+    const footerUrl = "/Footer.jpg";
+    const logoImg = new window.Image();
+    const headerImg = new window.Image();
+    const footerImg = new window.Image();
+    let loaded = 0;
+
+    function tryDraw() {
+      loaded++;
+      if (loaded === 3) {
+        drawInvoicePDF();
+      }
+    }
+
+    logoImg.src = logoUrl;
+    headerImg.src = headerUrl;
+    footerImg.src = footerUrl;
+    logoImg.onload = tryDraw;
+    headerImg.onload = tryDraw;
+    footerImg.onload = tryDraw;
+    logoImg.onerror = tryDraw;
+    headerImg.onerror = tryDraw;
+    footerImg.onerror = tryDraw;
+
+    function drawInvoicePDF() {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Header design asset
+      doc.addImage(headerImg, "JPEG", 0, 0, pageWidth, 25);
+      // Centered logo below header
+      const logoWidth = 40;
+      const logoHeight = 20;
+      const logoX = (pageWidth - logoWidth) / 2;
+      doc.addImage(logoImg, "PNG", logoX, 27, logoWidth, logoHeight);
+
+      // Header text below logo
+      doc.setFontSize(16);
+      doc.text(`Customer Invoices - ${cust?.name}`, pageWidth / 2, 52, {
+        align: "center",
+      });
+      doc.setFontSize(10);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth / 2, 59, {
+        align: "center",
+      });
+
+      autoTable(doc, {
+        head: [
+          ["Date", "Invoice No.", "Amount", "Received", "Balance", "Status"],
+        ],
+        body: invs.map((i) => [
+          i.date,
+          i.invoiceNo,
+          `Rs. ${(i.netAmount || i.amount).toLocaleString()}`,
+          `Rs. ${i.received.toLocaleString()}`,
+          `Rs. ${i.balance.toLocaleString()}`,
+          i.status,
+        ]) as RowInput[],
+        startY: 65,
+        theme: "grid",
+        headStyles: {
+          fillColor: [10, 104, 2], // #0A6802
+          textColor: 255,
+          fontStyle: "bold",
+        },
+        bodyStyles: {
+          fillColor: [241, 252, 240], // #F1FCF0
+          textColor: 0,
+        },
+        didDrawPage: function (data) {
+          // Footer design asset
+          const pageSize = doc.internal.pageSize;
+          doc.addImage(
+            footerImg,
+            "JPEG",
+            0,
+            pageSize.getHeight() - 25,
+            pageSize.getWidth(),
+            25
+          );
+          doc.setFontSize(9);
+          doc.text(
+            `Page ${data.pageNumber}`,
+            pageSize.getWidth() - 40,
+            pageSize.getHeight() - 10
+          );
+        },
+      });
+
+      doc.save(`invoices_${cust?.name}.pdf`);
+    }
   };
 
   const renderStatus = (status: Invoice["status"]) => {
@@ -515,7 +650,9 @@ export default function AccountsReceivable({
                   <Table.Tr key={i.id}>
                     <Table.Td>{i.date}</Table.Td>
                     <Table.Td>{i.invoiceNo}</Table.Td>
-                    <Table.Td>Rs. {i.amount.toLocaleString()}</Table.Td>
+                    <Table.Td>
+                      Rs. {(i.netAmount || i.amount).toLocaleString()}
+                    </Table.Td>
                     <Table.Td c="#0A6802">
                       Rs. {i.received.toLocaleString()}
                     </Table.Td>

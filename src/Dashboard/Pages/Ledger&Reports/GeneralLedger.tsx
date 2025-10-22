@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import { useAccountsOpeningBalances } from "../../Context/AccountsOpeningbalancesContext";
 import {
   Card,
   Grid,
@@ -39,6 +40,8 @@ interface LedgerEntry {
 }
 
 export default function GeneralLedger() {
+  const { accounts } = useChartOfAccounts();
+  const { balances } = useAccountsOpeningBalances();
   const [account, setAccount] = useState<string | null>(null);
   const [accountType, setAccountType] = useState<string | null>(null);
   const [fromDate, setFromDate] = useState<Date | null>(null);
@@ -46,23 +49,84 @@ export default function GeneralLedger() {
   const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
+  // Convert Chart of Accounts to Ledger Entries
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    // Replace with your actual API endpoint
-    fetch("/api/ledger")
-      .then((res) => res.json())
-      .then((data) => {
-        setLedgerData(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError("Failed to load ledger data");
-        setLoading(false);
+    if (!accounts || accounts.length === 0) {
+      setLoading(true);
+      return;
+    }
+
+    interface AccountNode {
+      accountCode?: string;
+      selectedCode?: string;
+      openingBalance?: string | { debit: number; credit: number };
+      createdAt?: string;
+      accountName?: string;
+      children?: AccountNode[];
+    }
+
+    const flattenAccounts = (
+      accountsList: AccountNode[],
+      parentType = ""
+    ): LedgerEntry[] => {
+      const entries: LedgerEntry[] = [];
+
+      accountsList.forEach((acc) => {
+        // Determine account type from code or parent
+        let type = parentType;
+        if (!type) {
+          const code = acc.accountCode || acc.selectedCode || "";
+          if (code.startsWith("1")) type = "asset";
+          else if (code.startsWith("2")) type = "liability";
+          else if (code.startsWith("3")) type = "equity";
+          else if (code.startsWith("4")) type = "revenue";
+          else if (code.startsWith("5")) type = "expense";
+          else type = "other";
+        }
+
+        // Get opening balance from AccountsOpeningBalances context
+        const accountCode = String(acc.accountCode || acc.selectedCode || "");
+        const openingBalanceData = balances[accountCode];
+
+        let debitAmount = 0;
+        let creditAmount = 0;
+
+        if (openingBalanceData) {
+          debitAmount = openingBalanceData.debit || 0;
+          creditAmount = openingBalanceData.credit || 0;
+        }
+
+        const balance = debitAmount - creditAmount;
+
+        const entry: LedgerEntry = {
+          date: acc.createdAt || new Date().toISOString().split("T")[0],
+          account: acc.accountName || "Unknown Account",
+          type: type,
+          reference: acc.accountCode || acc.selectedCode || "N/A",
+          description: `Opening Balance - ${acc.accountName}`,
+          debit:
+            debitAmount > 0 ? `Rs. ${debitAmount.toLocaleString()}` : "Rs. 0",
+          credit:
+            creditAmount > 0 ? `Rs. ${creditAmount.toLocaleString()}` : "Rs. 0",
+          balance: `Rs. ${Math.abs(balance).toLocaleString()}`,
+        };
+
+        entries.push(entry);
+
+        // Recursively process child accounts
+        if (acc.children && acc.children.length > 0) {
+          entries.push(...flattenAccounts(acc.children, type));
+        }
       });
-  }, []);
+
+      return entries;
+    };
+
+    const entries = flattenAccounts(accounts);
+    setLedgerData(entries);
+    setLoading(false);
+  }, [accounts, balances]);
 
   const [activePage, setActivePage] = useState(1);
   const pageSize = 10;
@@ -383,10 +447,6 @@ export default function GeneralLedger() {
         {loading ? (
           <Text c="dimmed" style={{ textAlign: "center", padding: "2rem 0" }}>
             Loading...
-          </Text>
-        ) : error ? (
-          <Text c="red" style={{ textAlign: "center", padding: "2rem 0" }}>
-            {error}
           </Text>
         ) : (
           <Table highlightOnHover withTableBorder withColumnBorders>
