@@ -16,8 +16,9 @@ import {
   IconCreditCard,
   IconDownload,
   IconSearch,
+  IconPrinter,
 } from "@tabler/icons-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
@@ -26,9 +27,14 @@ import {
   type CreditSale,
   type CreditSaleItem,
 } from "../../Context/Invoicing/CreditSalesContext";
+import api from "../../../api_configuration/api";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import { getReceivableAccounts } from "../../utils/receivableAccounts";
+import type { AccountNode } from "../../Context/ChartOfAccountsContext";
 
 function CreditSaleInvoiceInner() {
   const { sales, addSale, updateSale, deleteSale } = useCreditSales();
+  const { accounts } = useChartOfAccounts();
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -59,6 +65,73 @@ function CreditSaleInvoiceInner() {
   const [invoiceNumber, setInvoiceNumber] = useState<string>("");
 
   const [items, setItems] = useState<CreditSaleItem[]>([]);
+
+  // Products state
+  const [products, setProducts] = useState<
+    Array<{
+      id: string;
+      code: string;
+      productName: string;
+      unitPrice: number | "";
+      productDescription: string;
+    }>
+  >([]);
+
+  // Fetch products on component mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        console.log("Fetching products...");
+        const response = await api.get("/products");
+        console.log("Products fetched:", response.data);
+
+        // Transform products to match our interface
+        if (response.data && Array.isArray(response.data)) {
+          const transformedProducts = response.data.map(
+            (product: {
+              id?: string;
+              _id?: string;
+              code?: string;
+              name?: string;
+              productname?: string;
+              productName?: string;
+              unitPrice?: number;
+              unit_price?: number;
+              description?: string;
+              productDescription?: string;
+            }) => ({
+              id:
+                product.id ||
+                product._id ||
+                `p-${Math.random().toString(36).slice(2, 8)}`,
+              code: String(product.code || ""),
+              productName: String(
+                product.name || product.productname || product.productName || ""
+              ),
+              unitPrice: product.unitPrice || product.unit_price || 0,
+              productDescription: String(
+                product.description || product.productDescription || ""
+              ),
+            })
+          );
+          console.log("Transformed products:", transformedProducts);
+          setProducts(transformedProducts);
+        } else {
+          setProducts([]);
+        }
+      } catch (error) {
+        console.error("Failed to fetch products:", error);
+        setProducts([]);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  // Debug: Log products when they change
+  useEffect(() => {
+    console.log("Products state updated:", products.length, "products");
+    console.log("Products:", products);
+  }, [products]);
 
   const activeSales = sales.length;
 
@@ -355,9 +428,60 @@ function CreditSaleInvoiceInner() {
     field: keyof CreditSaleItem,
     value: string | number
   ) => {
-    const updated = items.map((item, i) =>
-      i === index ? { ...item, [field]: value } : item
-    );
+    const updated = items.map((item, i) => {
+      if (i !== index) return item;
+
+      const newItem = { ...item, [field]: value };
+
+      // Auto-calculate amount when quantity or rate changes
+      if (field === "quantity" || field === "rate") {
+        newItem.amount = Number(newItem.quantity) * Number(newItem.rate);
+      }
+
+      // Auto-calculate netAmount when amount or discount changes
+      if (field === "amount" || field === "discount") {
+        const discountAmount =
+          (Number(newItem.amount) * Number(newItem.discount)) / 100;
+        newItem.netAmount = Number(newItem.amount) - discountAmount;
+      }
+
+      // If quantity or rate changed, also recalculate netAmount
+      if (field === "quantity" || field === "rate") {
+        const discountAmount =
+          (Number(newItem.amount) * Number(newItem.discount)) / 100;
+        newItem.netAmount = Number(newItem.amount) - discountAmount;
+      }
+
+      return newItem;
+    });
+    setItems(updated);
+  };
+
+  const handleProductSelect = (index: number, productId: string | null) => {
+    if (!productId) return;
+
+    const selectedProduct = products.find((p) => p.id === productId);
+    if (!selectedProduct) return;
+
+    const updated = items.map((item, i) => {
+      if (i !== index) return item;
+
+      const newItem = {
+        ...item,
+        code: selectedProduct.code,
+        productName: selectedProduct.productName,
+        description: selectedProduct.productDescription || "",
+        rate: Number(selectedProduct.unitPrice) || 0,
+      };
+
+      // Auto-calculate amount and netAmount
+      newItem.amount = Number(newItem.quantity) * Number(newItem.rate);
+      const discountAmount =
+        (Number(newItem.amount) * Number(newItem.discount)) / 100;
+      newItem.netAmount = Number(newItem.amount) - discountAmount;
+
+      return newItem;
+    });
     setItems(updated);
   };
 
@@ -376,58 +500,198 @@ function CreditSaleInvoiceInner() {
     setItems([]);
   };
 
-  const printCreditInvoiceWindow = (invoice: any) => {
-    const printWindow = window.open("", "_blank", "width=800,height=600");
-    if (printWindow) {
-      printWindow.document.open();
-      printWindow.document.write(PrintableCreditInvoiceContent(invoice));
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => printWindow.print(), 300);
-    }
+  const buildPrintableCreditSaleHtml = (sale: CreditSale) => {
+    const itemsList = sale.items || [];
+    const subtotal = itemsList.reduce((s, it) => s + (it.amount || 0), 0);
+    const totalDiscount = itemsList.reduce(
+      (s, it) => s + (it.discount || 0),
+      0
+    );
+    const netTotal = itemsList.reduce((s, it) => s + (it.netAmount || 0), 0);
+
+    const rowsHtml = itemsList
+      .map((item, idx) => {
+        return `<tr>
+          <td style="border:1px solid #000;padding:8px;text-align:center">${
+            idx + 1
+          }</td>
+          <td style="border:1px solid #000;padding:8px">${String(
+            item.code || ""
+          ).replace(/</g, "&lt;")}</td>
+          <td style="border:1px solid #000;padding:8px">${String(
+            item.productName || ""
+          ).replace(/</g, "&lt;")}</td>
+          <td style="border:1px solid #000;padding:8px">${String(
+            item.description || ""
+          ).replace(/</g, "&lt;")}</td>
+          <td style="border:1px solid #000;padding:8px;text-align:center">${(
+            item.quantity || 0
+          ).toFixed(2)}</td>
+          <td style="border:1px solid #000;padding:8px;text-align:center">${(
+            item.rate || 0
+          ).toFixed(2)}</td>
+          <td style="border:1px solid #000;padding:8px;text-align:right">${(
+            item.amount || 0
+          ).toFixed(2)}</td>
+          <td style="border:1px solid #000;padding:8px;text-align:center">${
+            item.discount || 0
+          }%</td>
+          <td style="border:1px solid #000;padding:8px;text-align:right">${(
+            item.netAmount || 0
+          ).toFixed(2)}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const desiredRows = 8;
+    const paddingCount = Math.max(0, desiredRows - itemsList.length);
+    const paddingRows = Array.from({ length: paddingCount })
+      .map(
+        () =>
+          `<tr><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td></tr>`
+      )
+      .join("");
+
+    const html =
+      `<!doctype html><html><head><meta charset="utf-8"/><title>Credit Sale Invoice</title><style>body{font-family:Arial,sans-serif;color:#222;margin:24px}table{width:100%;border-collapse:collapse;border:2px solid #000}th,td{border:1px solid #000;padding:8px;font-size:12px;vertical-align:top}thead th:nth-child(3){width:20%}tbody tr{height:48px}.right{text-align:right}.muted{color:#666;font-size:12px}</style></head><body>` +
+      `<div style="padding:0;margin-bottom:12px"><img src="/Header.jpg" style="display:block;width:100%;height:auto;max-height:120px;object-fit:contain"/></div>` +
+      `<div style="text-align:center;margin-bottom:12px"><h2 style="color:#819E00;margin:8px 0">Credit Sale Invoice</h2></div>` +
+      `<div style="display:flex;justify-content:space-between;margin-bottom:12px"><div style="border:1px solid #222;padding:8px;flex:1;margin-right:8px"><div><strong>Customer:</strong> ${
+        sale.customer || ""
+      }</div><div><strong>Customer Title:</strong> ${
+        sale.customerTitle || ""
+      }</div><div><strong>Sale Account:</strong> ${
+        sale.saleAccount || ""
+      }</div><div><strong>Sale Title:</strong> ${
+        sale.saleTitle || ""
+      }</div><div><strong>Salesman:</strong> ${
+        sale.salesman || ""
+      }</div></div><div style="width:320px;border:1px solid #222;padding:8px"><div><strong>Invoice No:</strong> ${
+        sale.id || ""
+      }</div><div><strong>Date:</strong> ${sale.date || ""}</div></div></div>` +
+      `<table><thead><tr><th>SR No</th><th>Code</th><th>Product Name</th><th>Description</th><th>Quantity</th><th>Rate</th><th>Amount</th><th>Discount %</th><th>Net Amount</th></tr></thead><tbody>` +
+      rowsHtml +
+      paddingRows +
+      `</tbody></table>` +
+      `<div style="margin-top:8px;font-size:12px;color:#666">*Computer generated invoice. No need for signature</div>` +
+      `<div style="margin-top:12px;display:flex;justify-content:flex-end"><div style="width:360px;border:1px solid #222;padding:12px"><div style="display:flex;justify-content:space-between"><div>Gross Total:</div><div>${subtotal.toFixed(
+        2
+      )}</div></div><div style="display:flex;justify-content:space-between"><div>Total Discount:</div><div>${totalDiscount.toFixed(
+        2
+      )}</div></div><hr/><div style="display:flex;justify-content:space-between;font-weight:bold"><div>Net Total:</div><div>${netTotal.toFixed(
+        2
+      )}</div></div></div></div>` +
+      `<div style="margin-top:18px;page-break-inside:avoid"><img src="/Footer.jpg" style="width:100%;max-height:120px;object-fit:contain"/></div>` +
+      `</body></html>`;
+
+    return html;
   };
 
-  function PrintableCreditInvoiceContent(invoice: any) {
-    return `
-      <html>
-        <head>
-          <title>Credit Sale Invoice ${invoice.number}</title>
-          <style>
-            body { font-family: Arial; color: #222; padding: 24px; }
-            h2 { margin-bottom: 8px; }
-            p { margin: 4px 0; }
-          </style>
-        </head>
-        <body>
-          <h2>Credit Sale Invoice #${invoice.number}</h2>
-          <p>Date: ${invoice.date}</p>
-          <p>Account: ${invoice.accountTitle}</p>
-          <p>Amount: $${invoice.amount?.toFixed(2)}</p>
-          <!-- Add more details as needed -->
-        </body>
-      </html>
-    `;
+  const printCreditInvoiceWindow = (sale: CreditSale) => {
+    const html = buildPrintableCreditSaleHtml(sale);
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => {
+      try {
+        w.focus();
+        w.print();
+      } catch (err) {
+        console.error(err);
+      }
+    }, 250);
+  };
+
+  // Get Sales Accounts dynamically from Chart of Accounts (selectedAccountType1 === '4100')
+  function getSalesAccounts(nodes: AccountNode[]): {
+    value: string;
+    label: string;
+    code: string;
+    accountName: string;
+    accountCode?: string;
+  }[] {
+    const result: {
+      value: string;
+      label: string;
+      code: string;
+      accountName: string;
+      accountCode?: string;
+    }[] = [];
+
+    function walk(node: AccountNode) {
+      if (!node) return;
+
+      // Map all accounts where selectedAccountType1 === '4100'
+      if (
+        node.selectedAccountType1 === "4100" &&
+        node.accountCode &&
+        node.accountName
+      ) {
+        result.push({
+          value: node.accountCode,
+          label: `${node.accountCode} - ${node.accountName}`,
+          code: node.accountCode,
+          accountName: node.accountName,
+          accountCode: node.accountCode,
+        });
+      }
+
+      // Continue to children
+      if (node.children && node.children.length > 0) {
+        node.children.forEach(walk);
+      }
+    }
+
+    // Traverse all nodes (including root level)
+    if (Array.isArray(nodes)) {
+      nodes.forEach(walk);
+    }
+    return result;
   }
 
-  // Sale Account mapping logic (same as SaleReturns)
-  const saleAccountTitleMap: Record<string, string> = {
-    "4111": "Sales Of Chemicals",
-    "4112": "Sale Of Equipments",
-    "4113": "Services",
-    "4114": "Sale Of Chemicals and Equipments",
-  };
+  const salesAccountOptions = getSalesAccounts(accounts as AccountNode[])
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .map((a) => ({
+      ...a,
+      value: a.code && a.accountName ? a.code : a.value,
+    }));
 
-  const saleAccountOptions = Object.entries(saleAccountTitleMap).map(
-    ([code, title]) => ({
-      value: code,
-      label: `${code} - ${title}`,
+  // Customer Account mapping (from receivables - account 1410 and children)
+  const receivablesAccounts = getReceivableAccounts(accounts as AccountNode[]);
+
+  const customerAccountOptions = receivablesAccounts.map(
+    (acc: AccountNode) => ({
+      value: acc.accountCode || acc.selectedCode,
+      label: `${acc.accountCode || acc.selectedCode} - ${acc.accountName}`,
     })
   );
 
-  function handleSaleAccountSelect(selectedValue: string | null) {
-    setSaleAccount(selectedValue || "");
-    setSaleTitle(selectedValue ? saleAccountTitleMap[selectedValue] : "");
-  }
+  const customerTitleOptions = receivablesAccounts.map((acc: AccountNode) => ({
+    value: acc.accountName,
+    label: acc.accountName,
+    code: acc.accountCode || acc.selectedCode,
+  }));
+
+  // Remove empty/duplicate options
+  const uniqueCustomerAccountOptions: { value: string; label: string }[] =
+    Array.from(
+      new Map(
+        customerAccountOptions
+          .filter((a: { value: string; label: string }) => a.value && a.label)
+          .map((a: { value: string; label: string }) => [a.value, a])
+      ).values()
+    );
+
+  const uniqueCustomerTitleOptions: { value: string; label: string }[] =
+    Array.from(
+      new Map(
+        customerTitleOptions
+          .filter((a: { value: string; label: string }) => a.value && a.label)
+          .map((a: { value: string; label: string }) => [a.value, a])
+      ).values()
+    );
 
   return (
     <div>
@@ -612,6 +876,14 @@ function CreditSaleInvoiceInner() {
                       >
                         <IconDownload size={16} />
                       </ActionIcon>
+                      <ActionIcon
+                        variant="light"
+                        color="#819E00"
+                        onClick={() => printCreditInvoiceWindow(row)}
+                        title="Print"
+                      >
+                        <IconPrinter size={16} />
+                      </ActionIcon>
                     </Group>
                   </Table.Td>
                 </Table.Tr>
@@ -668,39 +940,98 @@ function CreditSaleInvoiceInner() {
               />
             </Group>
             <Group mb="md" grow>
-              <TextInput
-                label="Customer"
-                placeholder="Enter customer"
+              <Select
+                label="Customer Account"
+                placeholder="Select Customer Account"
+                data={uniqueCustomerAccountOptions}
                 value={customer}
-                onChange={(e) => setCustomer(e.currentTarget.value)}
+                onChange={(v) => {
+                  setCustomer(v || "");
+                  // Find account by accountCode from receivablesAccounts
+                  const acc = receivablesAccounts.find(
+                    (a: AccountNode) => (a.accountCode || a.selectedCode) === v
+                  );
+                  if (acc) {
+                    setCustomerTitle(acc.accountName || "");
+                  } else {
+                    setCustomerTitle("");
+                  }
+                }}
+                clearable
+                searchable
               />
               <Select
                 label="Customer Title"
-                placeholder="Enter customer title"
+                placeholder="Select Customer Title"
+                data={uniqueCustomerTitleOptions}
                 value={customerTitle}
-                onChange={(value) => setCustomerTitle(value || "")}
+                onChange={(v) => {
+                  setCustomerTitle(v || "");
+                  // Find account by name from receivablesAccounts
+                  const acc = receivablesAccounts.find(
+                    (a: AccountNode) => a.accountName === v
+                  );
+                  if (acc) {
+                    setCustomer(
+                      acc.accountCode !== undefined
+                        ? String(acc.accountCode)
+                        : acc.selectedCode !== undefined
+                        ? String(acc.selectedCode)
+                        : ""
+                    );
+                  } else {
+                    setCustomer("");
+                  }
+                }}
+                clearable
+                searchable
               />
               {/* Sale Account Select Dropdown */}
               <Select
                 label="Sale Account"
-                placeholder="Select sale account"
-                data={saleAccountOptions}
+                placeholder="Select Sale Account"
+                data={salesAccountOptions}
                 value={saleAccount}
-                onChange={handleSaleAccountSelect}
+                onChange={(v) => {
+                  setSaleAccount(v || "");
+                  // Auto-fill Sale Account Title
+                  const acc = salesAccountOptions.find((a) => a.value === v);
+                  if (acc) {
+                    setSaleTitle(acc.accountName);
+                  } else {
+                    setSaleTitle("");
+                  }
+                }}
+                description="Select from sales accounts under 4100 - Sales"
+                clearable
+                searchable
+                error={
+                  salesAccountOptions.length === 0
+                    ? "No sales accounts available. Create them in Chart of Accounts first."
+                    : undefined
+                }
               />
               <TextInput
                 label="Sale Title"
                 placeholder="Sale title"
                 value={saleTitle}
                 readOnly
+                description="Auto-filled based on selected sale account"
               />
-              <Select
+              <TextInput
                 label="Salesman"
                 placeholder="Enter salesman"
                 value={salesman}
-                onChange={(value) => setSalesman(value || "")}
+                onChange={(e) => setSalesman(e.currentTarget.value)}
               />
             </Group>
+            <div
+              style={{ marginBottom: "8px", fontSize: "12px", color: "#666" }}
+            >
+              {products.length > 0
+                ? `${products.length} products available`
+                : "Loading products..."}
+            </div>
             <Table withTableBorder highlightOnHover>
               <Table.Thead>
                 <Table.Tr>
@@ -725,15 +1056,28 @@ function CreditSaleInvoiceInner() {
                           updateItem(idx, "code", e.currentTarget.value)
                         }
                         placeholder="Code"
+                        readOnly
+                        styles={{ input: { backgroundColor: "#f8f9fa" } }}
                       />
                     </Table.Td>
                     <Table.Td>
-                      <TextInput
-                        value={item.productName}
-                        onChange={(e) =>
-                          updateItem(idx, "productName", e.currentTarget.value)
+                      <Select
+                        value={
+                          products.find(
+                            (p) => p.productName === item.productName
+                          )?.id || null
                         }
-                        placeholder="Product Name"
+                        onChange={(value) => handleProductSelect(idx, value)}
+                        data={products
+                          .filter((p) => p.id && p.productName)
+                          .map((p) => ({
+                            value: p.id,
+                            label: `${p.code || ""} - ${p.productName}`,
+                          }))}
+                        placeholder="Select Product"
+                        searchable
+                        clearable
+                        disabled={products.length === 0}
                       />
                     </Table.Td>
                     <Table.Td>
@@ -773,14 +1117,9 @@ function CreditSaleInvoiceInner() {
                       <TextInput
                         type="number"
                         value={item.amount}
-                        onChange={(e) =>
-                          updateItem(
-                            idx,
-                            "amount",
-                            Number(e.currentTarget.value)
-                          )
-                        }
+                        readOnly
                         placeholder="Amount"
+                        styles={{ input: { backgroundColor: "#f8f9fa" } }}
                       />
                     </Table.Td>
                     <Table.Td>
@@ -801,14 +1140,9 @@ function CreditSaleInvoiceInner() {
                       <TextInput
                         type="number"
                         value={item.netAmount}
-                        onChange={(e) =>
-                          updateItem(
-                            idx,
-                            "netAmount",
-                            Number(e.currentTarget.value)
-                          )
-                        }
+                        readOnly
                         placeholder="Net Amount"
+                        styles={{ input: { backgroundColor: "#f8f9fa" } }}
                       />
                     </Table.Td>
                     <Table.Td>
@@ -831,7 +1165,21 @@ function CreditSaleInvoiceInner() {
           Add Item
         </Button>
         <Group justify="flex-end" mt="md">
-          <Button color="#0A6802" onClick={printCreditInvoiceWindow}>
+          <Button
+            color="#0A6802"
+            onClick={() =>
+              printCreditInvoiceWindow({
+                id: invoiceNumber,
+                date: saleDate,
+                customer,
+                customerTitle,
+                saleAccount,
+                saleTitle,
+                salesman,
+                items: [...items],
+              })
+            }
+          >
             Print
           </Button>
           <Button variant="default" onClick={() => setOpened(false)}>

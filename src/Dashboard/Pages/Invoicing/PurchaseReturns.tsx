@@ -326,10 +326,6 @@ export default function PurchaseReturnModal() {
 
   const [editingReturn, setEditingReturn] = useState<ReturnEntry | null>(null);
 
-  // Print logic state
-  const [currentReturnForPrint, setCurrentReturnForPrint] =
-    useState<ReturnEntry | null>(null);
-
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
 
@@ -908,35 +904,112 @@ export default function PurchaseReturnModal() {
 
   // Print logic using hidden div and window.print()
   const handlePrintReturn = (entry: ReturnEntry) => {
-    setCurrentReturnForPrint(entry);
+    const html = buildPrintableReturnHtml(entry);
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
     setTimeout(() => {
-      const printContent = document.getElementById(
-        "return-print-content"
-      )?.innerHTML;
-      if (printContent) {
-        const printWindow = window.open("", "_blank", "width=900,height=700");
-        if (printWindow) {
-          printWindow.document.open();
-          printWindow.document.write(`
-            <html>
-              <head>
-                <title>Purchase Return</title>
-                <style>
-                  body { font-family: Arial, sans-serif; padding: 24px; }
-                </style>
-              </head>
-              <body>
-                ${printContent}
-              </body>
-            </html>
-          `);
-          printWindow.document.close();
-          printWindow.focus();
-          setTimeout(() => printWindow.print(), 300);
-        }
+      try {
+        w.focus();
+        w.print();
+      } catch (err) {
+        console.error(err);
       }
-      setCurrentReturnForPrint(null);
-    }, 100);
+    }, 250);
+  };
+
+  const buildPrintableReturnHtml = (entry: ReturnEntry) => {
+    const itemsList = entry.items || [];
+    const subtotal = itemsList.reduce((s, it) => s + (it.amount || 0), 0);
+    const netTotal = itemsList.reduce((s, it) => s + (it.netAmount || 0), 0);
+
+    const rowsHtml = itemsList
+      .map((item, idx) => {
+        return `<tr>
+          <td style="border:1px solid #000;padding:8px;text-align:center">${
+            idx + 1
+          }</td>
+          <td style="border:1px solid #000;padding:8px">${String(
+            item.code || ""
+          ).replace(/</g, "&lt;")}</td>
+          <td style="border:1px solid #000;padding:8px">${String(
+            item.product || ""
+          ).replace(/</g, "&lt;")}</td>
+          <td style="border:1px solid #000;padding:8px;text-align:center">${
+            item.unit || ""
+          }</td>
+          <td style="border:1px solid #000;padding:8px;text-align:center">${(
+            item.quantity || 0
+          ).toFixed(2)}</td>
+          <td style="border:1px solid #000;padding:8px;text-align:center">${(
+            item.rate || 0
+          ).toFixed(2)}</td>
+          <td style="border:1px solid #000;padding:8px;text-align:right">${(
+            item.amount || 0
+          ).toFixed(2)}</td>
+          <td style="border:1px solid #000;padding:8px;text-align:center">${
+            item.discount || 0
+          }%</td>
+          <td style="border:1px solid #000;padding:8px;text-align:right">${(
+            item.netAmount || 0
+          ).toFixed(2)}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const desiredRows = 8;
+    const paddingCount = Math.max(0, desiredRows - itemsList.length);
+    const paddingRows = Array.from({ length: paddingCount })
+      .map(
+        () =>
+          `<tr><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td></tr>`
+      )
+      .join("");
+
+    const html =
+      `<!doctype html><html><head><meta charset="utf-8"/><title>Purchase Return</title><style>body{font-family:Arial,sans-serif;color:#222;margin:24px}table{width:100%;border-collapse:collapse;border:2px solid #000}th,td{border:1px solid #000;padding:8px;font-size:12px;vertical-align:top}thead th:nth-child(3){width:30%}tbody tr{height:48px}.right{text-align:right}.muted{color:#666;font-size:12px}</style></head><body>` +
+      `<div style="padding:0;margin-bottom:12px"><img src="/Header.jpg" style="display:block;width:100%;height:auto;max-height:120px;object-fit:contain"/></div>` +
+      `<div style="text-align:center;margin-bottom:12px"><h2 style="color:#819E00;margin:8px 0">Purchase Return</h2></div>` +
+      `<div style="display:flex;justify-content:space-between;margin-bottom:12px"><div style="border:1px solid #222;padding:8px;flex:1;margin-right:8px"><div><strong>Supplier Title:</strong> ${
+        entry.supplierTitle || ""
+      }</div><div><strong>Supplier No:</strong> ${
+        entry.supplierNumber || ""
+      }</div><div><strong>Purchase Account:</strong> ${
+        entry.purchaseAccount || ""
+      }</div><div><strong>Purchase Title:</strong> ${
+        entry.purchaseTitle || ""
+      }</div></div><div style="width:320px;border:1px solid #222;padding:8px"><div><strong>Return No:</strong> ${
+        entry.invoice || entry.id || ""
+      }</div><div><strong>Date:</strong> ${
+        entry.date || ""
+      }</div><div><strong>Reference No:</strong> ${
+        entry.referenceNumber || ""
+      }</div><div><strong>Reference Date:</strong> ${
+        entry.referenceDate || ""
+      }</div></div></div>` +
+      `<table><thead><tr><th>SR No</th><th>Code</th><th>Product</th><th>Unit</th><th>Quantity</th><th>Rate</th><th>Amount</th><th>Discount %</th><th>Net Amount</th></tr></thead><tbody>` +
+      rowsHtml +
+      paddingRows +
+      `</tbody></table>` +
+      `<div style="margin-top:8px;font-size:12px;color:#666">*Computer generated invoice. No need for signature</div>` +
+      `<div style="margin-top:12px;display:flex;justify-content:flex-end"><div style="width:360px;border:1px solid #222;padding:12px"><div style="display:flex;justify-content:space-between"><div>Gross Total:</div><div>${subtotal.toFixed(
+        2
+      )}</div></div><div style="display:flex;justify-content:space-between"><div>Discount:</div><div>${(
+        subtotal - netTotal
+      ).toFixed(
+        2
+      )}</div></div><hr/><div style="display:flex;justify-content:space-between;font-weight:bold"><div>Net Total:</div><div>${netTotal.toFixed(
+        2
+      )}</div></div></div></div>` +
+      `<div style="margin-top:12px;font-size:12px"><strong>Notes:</strong> ${
+        entry.notes || ""
+      }</div>` +
+      `<div style="margin-top:18px;page-break-inside:avoid"><img src="/Footer.jpg" style="width:100%;max-height:120px;object-fit:contain"/></div>` +
+      `</body></html>`;
+
+    return html;
   };
 
   const netTotal = items.reduce((sum, item) => sum + (item.netAmount ?? 0), 0);
@@ -965,26 +1038,6 @@ export default function PurchaseReturnModal() {
 
   return (
     <div>
-      {/* Printable return content (always rendered, hidden off-screen) */}
-      <div
-        style={{
-          position: "fixed",
-          left: "-9999px",
-          top: 0,
-          zIndex: -1,
-          width: "800px",
-        }}
-      >
-        {currentReturnForPrint && (
-          <PurchaseReturnPrintTemplate entry={currentReturnForPrint} />
-        )}
-      </div>
-      <div id="return-print-content" style={{ display: "none" }}>
-        {currentReturnForPrint && (
-          <PurchaseReturnPrintTemplate entry={currentReturnForPrint} />
-        )}
-      </div>
-
       <Card shadow="sm" p="lg" radius="md" withBorder mt={20} bg={"#F1FCF0"}>
         <Group justify="space-between" mb="md">
           <div>
@@ -1389,105 +1442,6 @@ export default function PurchaseReturnModal() {
           </Button>
         </Group>
       </Modal>
-    </div>
-  );
-}
-
-function PurchaseReturnPrintTemplate({ entry }: { entry: ReturnEntry }) {
-  if (!entry) return null;
-  return (
-    <div
-      style={{
-        fontFamily: "Arial, sans-serif",
-        background: "#fff",
-        padding: 24,
-        minWidth: 900,
-        position: "relative",
-      }}
-    >
-      <div style={{ textAlign: "center", marginBottom: 8 }}>
-        <h2 style={{ color: "#819E00", margin: "8px 0", fontSize: 32 }}>
-          Purchase Return
-        </h2>
-      </div>
-      <table style={{ width: "100%", fontSize: 14, marginBottom: 16 }}>
-        <tbody>
-          <tr>
-            <td style={{ fontWeight: "bold" }}>Invoice #</td>
-            <td>{entry.invoice || ""}</td>
-            <td style={{ fontWeight: "bold" }}>Date</td>
-            <td>{entry.date}</td>
-          </tr>
-          <tr>
-            <td style={{ fontWeight: "bold" }}>Reference Number</td>
-            <td>{entry.referenceNumber || ""}</td>
-            <td style={{ fontWeight: "bold" }}>Reference Date</td>
-            <td>{entry.referenceDate || ""}</td>
-          </tr>
-          <tr>
-            <td style={{ fontWeight: "bold" }}>Supplier Number</td>
-            <td>{entry.supplierNumber || ""}</td>
-            <td style={{ fontWeight: "bold" }}>Supplier Title</td>
-            <td>{entry.supplierTitle}</td>
-          </tr>
-          <tr>
-            <td style={{ fontWeight: "bold" }}>Purchase Account</td>
-            <td>{entry.purchaseAccount}</td>
-            <td style={{ fontWeight: "bold" }}>Purchase Title</td>
-            <td>{entry.purchaseTitle}</td>
-          </tr>
-        </tbody>
-      </table>
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          fontSize: 13,
-          marginBottom: 24,
-        }}
-      >
-        <thead>
-          <tr style={{ background: "#F8FFF6" }}>
-            <th style={{ border: "1px solid #222", padding: 4 }}>Code</th>
-            <th style={{ border: "1px solid #222", padding: 4 }}>Product</th>
-            <th style={{ border: "1px solid #222", padding: 4 }}>Unit</th>
-            <th style={{ border: "1px solid #222", padding: 4 }}>Quantity</th>
-            <th style={{ border: "1px solid #222", padding: 4 }}>Rate</th>
-            <th style={{ border: "1px solid #222", padding: 4 }}>Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entry.items.map((item, idx) => (
-            <tr key={idx}>
-              <td style={{ border: "1px solid #222", padding: 4 }}>
-                {item.code}
-              </td>
-              <td style={{ border: "1px solid #222", padding: 4 }}>
-                {item.product}
-              </td>
-              <td style={{ border: "1px solid #222", padding: 4 }}>
-                {item.unit}
-              </td>
-              <td style={{ border: "1px solid #222", padding: 4 }}>
-                {item.quantity}
-              </td>
-              <td style={{ border: "1px solid #222", padding: 4 }}>
-                {item.rate}
-              </td>
-              <td style={{ border: "1px solid #222", padding: 4 }}>
-                {item.amount}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div style={{ marginTop: 24, fontWeight: "bold", fontSize: 16 }}>
-        Total: {entry.amount?.toFixed(2)}
-      </div>
-      <div>
-        <b>Notes:</b> {entry.notes}
-      </div>
-      {/* Add footer, notes, etc. */}
     </div>
   );
 }
