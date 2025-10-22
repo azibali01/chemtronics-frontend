@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Card,
   Text,
@@ -49,16 +49,78 @@ function JournalVoucherList() {
   const [editVoucher, setEditVoucher] = useState<JournalVoucher | null>(null);
   const [nextVoucherNumber, setNextVoucherNumber] = useState<string>("");
 
+  // Helper function to get account name from chart of accounts
+  const getAccountName = useCallback(
+    (accountCode: string): string => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const flattenAccounts = (accounts: any[]): any[] => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let result: any[] = [];
+        accounts.forEach((account) => {
+          result.push(account);
+          if (account.children && account.children.length > 0) {
+            result = result.concat(flattenAccounts(account.children));
+          }
+        });
+        return result;
+      };
+
+      const flatAccounts = flattenAccounts(chartAccounts);
+      const account = flatAccounts.find((a) => a.accountCode === accountCode);
+      return account?.accountName || "Unknown Account";
+    },
+    [chartAccounts]
+  );
+
+  // Helper function to transform backend response (flat entries) to grouped vouchers
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const transformBackendResponse = useCallback(
+    (backendData: any[]) => {
+      const groupedVouchers: { [key: string]: JournalVoucher } = {};
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      backendData.forEach((entry: any) => {
+        const voucherNum = entry.voucherNumber;
+
+        if (!groupedVouchers[voucherNum]) {
+          groupedVouchers[voucherNum] = {
+            _id: entry._id,
+            voucherNumber: entry.voucherNumber,
+            date: entry.date,
+            description: entry.description || "",
+            entries: [],
+          };
+        }
+
+        // Add this entry to the voucher's entries array
+        groupedVouchers[voucherNum].entries.push({
+          accountCode: entry.accountNumber,
+          accountName: getAccountName(entry.accountNumber),
+          debit: entry.debit || 0,
+          credit: entry.credit || 0,
+        });
+      });
+
+      return Object.values(groupedVouchers);
+    },
+    [getAccountName]
+  );
+
   // Fetch journal vouchers from API
   useEffect(() => {
     const fetchJournalVouchers = async () => {
       try {
         const response = await api.get("/journal-vouchers");
         console.log("Journal Vouchers API response:", response.data);
-        setVouchers(response.data || []);
+
+        // Transform flat backend response to grouped vouchers
+        const vouchersArray = transformBackendResponse(response.data || []);
+        console.log("Grouped vouchers:", vouchersArray);
+
+        setVouchers(vouchersArray);
 
         // Generate next voucher number
-        generateNextVoucherNumber(response.data || []);
+        generateNextVoucherNumber(vouchersArray);
       } catch (error) {
         console.error("Failed to fetch journal vouchers:", error);
         setVouchers([]);
@@ -67,7 +129,7 @@ function JournalVoucherList() {
     };
 
     fetchJournalVouchers();
-  }, []);
+  }, [chartAccounts, getAccountName, transformBackendResponse]);
 
   const generateNextVoucherNumber = (vouchersList: JournalVoucher[]) => {
     if (vouchersList.length === 0) {
@@ -161,14 +223,20 @@ function JournalVoucherList() {
     doc.text(`Date: ${voucher.date}`, 250, 95);
     doc.text(`Description: ${voucher.description || "N/A"}`, 40, 115);
 
-    const totalDebit = voucher.entries.reduce((sum, e) => sum + e.debit, 0);
-    const totalCredit = voucher.entries.reduce((sum, e) => sum + e.credit, 0);
+    const totalDebit = (voucher.entries || []).reduce(
+      (sum, e) => sum + e.debit,
+      0
+    );
+    const totalCredit = (voucher.entries || []).reduce(
+      (sum, e) => sum + e.credit,
+      0
+    );
 
     autoTable(doc, {
       startY: 135,
       head: [["Account Code", "Account Name", "Debit", "Credit"]],
       body: [
-        ...voucher.entries.map((entry) => [
+        ...(voucher.entries || []).map((entry) => [
           entry.accountCode,
           entry.accountName,
           `Rs. ${entry.debit.toLocaleString()}`,
@@ -226,11 +294,11 @@ function JournalVoucherList() {
     }
 
     const totalDebit = filteredData.reduce(
-      (sum, v) => sum + v.entries.reduce((s, e) => s + e.debit, 0),
+      (sum, v) => sum + (v.entries || []).reduce((s, e) => s + e.debit, 0),
       0
     );
     const totalCredit = filteredData.reduce(
-      (sum, v) => sum + v.entries.reduce((s, e) => s + e.credit, 0),
+      (sum, v) => sum + (v.entries || []).reduce((s, e) => s + e.credit, 0),
       0
     );
 
@@ -242,8 +310,12 @@ function JournalVoucherList() {
           v.voucherNumber,
           v.date,
           v.description || "N/A",
-          `Rs. ${v.entries.reduce((s, e) => s + e.debit, 0).toLocaleString()}`,
-          `Rs. ${v.entries.reduce((s, e) => s + e.credit, 0).toLocaleString()}`,
+          `Rs. ${(v.entries || [])
+            .reduce((s, e) => s + e.debit, 0)
+            .toLocaleString()}`,
+          `Rs. ${(v.entries || [])
+            .reduce((s, e) => s + e.credit, 0)
+            .toLocaleString()}`,
         ]),
         [
           {
@@ -287,22 +359,63 @@ function JournalVoucherList() {
 
   const handleCreate = async (newVoucher: JournalVoucher) => {
     try {
-      await api.post("/journal-vouchers", newVoucher);
-      const response = await api.get("/journal-vouchers");
-      setVouchers(response.data || []);
-      generateNextVoucherNumber(response.data || []);
+      // Backend expects an array of DTOs, one for each entry
+      const payload = newVoucher.entries.map((entry) => ({
+        voucherNumber: newVoucher.voucherNumber,
+        accountNumber: entry.accountCode, // Use the account code from each entry
+        date: newVoucher.date,
+        description: newVoucher.description || "",
+        debit: Number(entry.debit) || 0,
+        credit: Number(entry.credit) || 0,
+      }));
+
+      console.log("Creating journal voucher with payload:", payload);
+      console.log("Making POST request to: /journal-vouchers");
+      const response = await api.post("/journal-vouchers", payload);
+      console.log("Create response:", response.data);
+
+      // Fetch and transform the updated data
+      const fetchResponse = await api.get("/journal-vouchers");
+      const transformedVouchers = transformBackendResponse(
+        fetchResponse.data || []
+      );
+      setVouchers(transformedVouchers);
+      generateNextVoucherNumber(transformedVouchers);
       setOpenedCreate(false);
-    } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
       console.error("Failed to create journal voucher:", error);
+      console.error("Error details:", error.response?.data);
+      console.error("Error status:", error.response?.status);
+      console.error("Error URL:", error.config?.url);
+      alert(
+        `Error creating journal voucher: ${
+          error.response?.data?.message || error.message
+        }`
+      );
     }
   };
 
   const handleEdit = async (updatedVoucher: JournalVoucher) => {
     try {
-      await api.put(`/journal-vouchers/${updatedVoucher._id}`, updatedVoucher);
+      // Backend expects an array of DTOs, one for each entry
+      const payload = updatedVoucher.entries.map((entry) => ({
+        voucherNumber: updatedVoucher.voucherNumber,
+        accountNumber: entry.accountCode, // Use the account code from each entry
+        date: updatedVoucher.date,
+        description: updatedVoucher.description || "",
+        debit: Number(entry.debit) || 0,
+        credit: Number(entry.credit) || 0,
+      }));
+
+      console.log("Updating journal voucher with payload:", payload);
+      await api.put(`/journal-vouchers/${updatedVoucher._id}`, payload);
+
+      // Fetch and transform the updated data
       const response = await api.get("/journal-vouchers");
-      setVouchers(response.data || []);
-      generateNextVoucherNumber(response.data || []);
+      const transformedVouchers = transformBackendResponse(response.data || []);
+      setVouchers(transformedVouchers);
+      generateNextVoucherNumber(transformedVouchers);
       setOpenedEdit(false);
     } catch (error) {
       console.error("Failed to update journal voucher:", error);
@@ -312,9 +425,12 @@ function JournalVoucherList() {
   const handleDelete = async (id: string) => {
     try {
       await api.delete(`/journal-vouchers/${id}`);
+
+      // Fetch and transform the updated data
       const response = await api.get("/journal-vouchers");
-      setVouchers(response.data || []);
-      generateNextVoucherNumber(response.data || []);
+      const transformedVouchers = transformBackendResponse(response.data || []);
+      setVouchers(transformedVouchers);
+      generateNextVoucherNumber(transformedVouchers);
     } catch (error) {
       console.error("Failed to delete journal voucher:", error);
     }
@@ -426,11 +542,15 @@ function JournalVoucherList() {
                 <Table.Td>{v.description || "N/A"}</Table.Td>
                 <Table.Td c="#0A6802">
                   Rs.{" "}
-                  {v.entries.reduce((s, e) => s + e.debit, 0).toLocaleString()}
+                  {(v.entries || [])
+                    .reduce((s, e) => s + e.debit, 0)
+                    .toLocaleString()}
                 </Table.Td>
                 <Table.Td c="red">
                   Rs.{" "}
-                  {v.entries.reduce((s, e) => s + e.credit, 0).toLocaleString()}
+                  {(v.entries || [])
+                    .reduce((s, e) => s + e.credit, 0)
+                    .toLocaleString()}
                 </Table.Td>
                 <Table.Td>
                   <Group gap="xs">
