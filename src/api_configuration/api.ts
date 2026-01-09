@@ -2,7 +2,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "https://chemtronics-backend.onrender.com/",
+  baseURL: "https://chemtronics-backend.vercel.app/",
   withCredentials: true, // ✅ Important for CORS + cookies
 });
 
