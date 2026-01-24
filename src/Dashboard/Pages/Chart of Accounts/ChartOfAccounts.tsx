@@ -649,6 +649,7 @@ function ChartOfAccounts() {
                     data={[
                       { value: "2210", label: "2210 - Purchase Party" },
                       { value: "2220", label: "2220 - Advance Exp." },
+                      { value: "2230", label: "2230 - Loan" },
                     ]}
                     value={selectedAccountType2}
                     onChange={(v) => setSelectedAccountType2(v || "")}
@@ -994,8 +995,10 @@ function renderAccountsTable(
     "1130": "Other Current Assets",
     "1410": "Receivables Accounts",
     "1510": "Salesman Account",
+    "1520": "Staff Account",
     "2210": "Purchase Party",
     "2220": "Advance Exp.",
+    "2230": "Loan",
     "4110": "Sales",
     "5110": "Salaries",
     "5120": "Rent",
