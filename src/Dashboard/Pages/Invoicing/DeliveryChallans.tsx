@@ -15,6 +15,7 @@ import {
   Pagination,
   SimpleGrid,
   ThemeIcon,
+  Autocomplete,
 } from "@mantine/core";
 import {
   IconPencil,
@@ -35,6 +36,8 @@ import {
   type DeliveryItem,
   type DeliveryChallan,
 } from "../../Context/Invoicing/DeliveryChallanContext";
+import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
+import type { AccountNode } from "../../Context/ChartOfAccountsContext";
 
 // Helper function to generate next challan number
 function getNextChallanNumber(challans: DeliveryChallan[]): string {
@@ -70,6 +73,21 @@ function DeliveryChallansInner() {
   const [poDate, setPoDate] = useState<string>("");
   const [partyName, setPartyName] = useState<string>("");
   const [partyAddress, setPartyAddress] = useState<string>("");
+
+  // derive party options from chart of accounts
+  const { accounts } = useChartOfAccounts();
+  const partyOptions = useMemo(() => {
+    const res: { name: string; address?: string }[] = [];
+    const traverse = (nodes: AccountNode[]) => {
+      nodes.forEach((n) => {
+        if (n.isParty) res.push({ name: n.accountName, address: n.address || "" });
+        if (n.children && n.children.length) traverse(n.children);
+      });
+    };
+    traverse(accounts as AccountNode[]);
+    // dedupe by name
+    return Array.from(new Map(res.map((p) => [p.name, p])).values());
+  }, [accounts]);
   const [deliveryDate, setDeliveryDate] = useState<string>(
     new Date().toISOString().slice(0, 10)
   );
@@ -1169,11 +1187,17 @@ function DeliveryChallansInner() {
             value={poDate}
             onChange={(e) => setPoDate(e.currentTarget.value)}
           />
-          <TextInput
+          <Autocomplete
             label="Party Name"
-            placeholder="Enter Party Name"
+            placeholder="Search or enter party name"
+            data={partyOptions.map((p) => p.name)}
             value={partyName}
-            onChange={(e) => setPartyName(e.currentTarget.value)}
+            onChange={(val) => {
+              setPartyName(val);
+              const match = partyOptions.find((p) => p.name === val);
+              if (match) setPartyAddress(match.address || "");
+            }}
+            searchable
           />
           <TextInput
             label="Party Address"
