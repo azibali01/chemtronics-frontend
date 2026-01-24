@@ -27,6 +27,17 @@ import api from "../../../api_configuration/api";
 export default function ManageUsers() {
   const { users, addUser, updateUser, deleteUser } = useUserContext();
 
+  const handleDeleteUser = async (index: number, id?: string) => {
+    try {
+      if (id) {
+        await api.delete(`/auth/delete-user-by-id/${id}`);
+      }
+      deleteUser(index);
+    } catch (error) {
+      console.error("Error deleting user:", error);
+    }
+  };
+
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -197,7 +208,7 @@ export default function ManageUsers() {
                       <ActionIcon
                         variant="light"
                         color="red"
-                        onClick={() => deleteUser(index)}
+                        onClick={() => handleDeleteUser(index, users[index]._id)}
                       >
                         <IconTrash size={16} />
                       </ActionIcon>

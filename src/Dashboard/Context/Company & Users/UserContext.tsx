@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
 type User = {
+  _id?: string;
   fullName: string;
   password?: string;
   role: string;
