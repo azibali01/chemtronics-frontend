@@ -170,7 +170,6 @@ export default function ManageUsers() {
             <Table.Tr>
               <Table.Th>User</Table.Th>
               <Table.Th>Role</Table.Th>
-              <Table.Th>Status</Table.Th>
               <Table.Th>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -217,7 +216,7 @@ export default function ManageUsers() {
               ))
             ) : (
               <Table.Tr>
-                <Table.Td colSpan={6}>
+                <Table.Td colSpan={3}>
                   <Text ta="center" c="dimmed">
                     No users found
                   </Text>
