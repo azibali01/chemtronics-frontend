@@ -611,7 +611,10 @@ function ChartOfAccounts() {
                   <Select
                     label="Account Type (Level 2)"
                     placeholder="Select subaccount of Advances & Commissions"
-                    data={[{ value: "1510", label: "1510 - Salesman Account" }]}
+                    data={[
+                      { value: "1510", label: "1510 - Salesman Account" },
+                      { value: "1520", label: "1520 - Staff Account" },
+                    ]}
                     value={selectedAccountType2}
                     onChange={(v) => setSelectedAccountType2(v || "")}
                     clearable
