@@ -81,7 +81,8 @@ const AccountsOpeningBalances: React.FC = () => {
       };
 
       loadBalancesFromNodes(accounts);
-      setBalances(initialBalances);
+      // Merge initial balances from chart with persisted balances so refresh doesn't clear user-entered values
+      setBalances((prev) => ({ ...initialBalances, ...prev }));
     }
   }, [accounts, setBalances]);
 
