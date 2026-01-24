@@ -170,9 +170,7 @@ export default function ManageUsers() {
             <Table.Tr>
               <Table.Th>User</Table.Th>
               <Table.Th>Role</Table.Th>
-              <Table.Th>Company</Table.Th>
               <Table.Th>Status</Table.Th>
-              <Table.Th>Last Login</Table.Th>
               <Table.Th>Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -185,7 +183,10 @@ export default function ManageUsers() {
                       <Avatar size="sm" color="gray" radius="xl">
                         <IconUser size={16} />
                       </Avatar>
-                    
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{user.fullName}</div>
+                        <div style={{ fontSize: 12, color: '#6b7280' }}>{user.role}</div>
+                      </div>
                     </Flex>
                   </Table.Td>
                   <Table.Td>
@@ -194,8 +195,6 @@ export default function ManageUsers() {
                     </Badge>
                   </Table.Td>
                 
-              
-                  <Table.Td>{user.lastLogin}</Table.Td>
                   <Table.Td>
                     <Group gap="xs">
                       <ActionIcon
