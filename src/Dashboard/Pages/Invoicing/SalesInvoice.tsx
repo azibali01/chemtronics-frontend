@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useBrand } from "../../Context/BrandContext";
 import {
   Card,
   Text,
@@ -166,6 +167,7 @@ function PrintableInvoice({ invoice }: { invoice: Invoice | null }) {
 import { getNextInvoiceNumber, mapRawToInvoice } from "../../../utils/invoice";
 
 export default function SalesInvoicePage() {
+  const { brand } = useBrand();
   // Always fetch latest Chart of Accounts on mount
   // get both accounts and setter from context
   const { accounts, setAccounts } = useChartOfAccounts();
@@ -1595,13 +1597,15 @@ export default function SalesInvoicePage() {
             />
           </Group>
 
-          <Switch
-            color="#0A6802"
-            label="Include GST (18%)"
-            checked={includeGST}
-            onChange={(e) => setIncludeGST(e.currentTarget.checked)}
-            mb="md"
-          />
+          {brand !== "hydroworx" && (
+            <Switch
+              color="#0A6802"
+              label="Include GST (18%)"
+              checked={includeGST}
+              onChange={(e) => setIncludeGST(e.currentTarget.checked)}
+              mb="md"
+            />
+          )}
 
           <Select
             label="Province"
@@ -1622,8 +1626,8 @@ export default function SalesInvoicePage() {
                 <Table.Th>Description</Table.Th>
                 <Table.Th>Qty</Table.Th>
                 <Table.Th>Rate</Table.Th>
-                <Table.Th>EX.GST Rate</Table.Th>
-                <Table.Th>EX.GST Amt</Table.Th>
+                {brand !== "hydroworx" && <Table.Th>EX.GST Rate</Table.Th>}
+                {brand !== "hydroworx" && <Table.Th>EX.GST Amt</Table.Th>}
                 <Table.Th>Amount</Table.Th>
                 <Table.Th>Remove</Table.Th>
               </Table.Tr>
@@ -1730,12 +1734,16 @@ export default function SalesInvoicePage() {
                         }}
                       />
                     </Table.Td>
-                    <Table.Td>
-                      <NumberInput value={gstRate} disabled />
-                    </Table.Td>
-                    <Table.Td>
-                      <NumberInput value={gstAmount} disabled />
-                    </Table.Td>
+                    {brand !== "hydroworx" && (
+                      <Table.Td>
+                        <NumberInput value={gstRate} disabled />
+                      </Table.Td>
+                    )}
+                    {brand !== "hydroworx" && (
+                      <Table.Td>
+                        <NumberInput value={gstAmount} disabled />
+                      </Table.Td>
+                    )}
                     <Table.Td>
                       <NumberInput value={amount} disabled />
                     </Table.Td>
@@ -1792,8 +1800,8 @@ export default function SalesInvoicePage() {
             }}
           >
             <Text>Subtotal: {subtotal.toFixed(2)}</Text>
-            <Text>Ex Gst Amount: {exGstAmount.toFixed(2)}</Text>
-            <Text>Total GST: {totalGst.toFixed(2)}</Text>
+            {brand !== "hydroworx" && <Text>Ex Gst Amount: {exGstAmount.toFixed(2)}</Text>}
+            {brand !== "hydroworx" && <Text>Total GST: {totalGst.toFixed(2)}</Text>}
             <Text fw={700}>Net Total: {netTotal.toFixed(2)}</Text>
           </div>
 
