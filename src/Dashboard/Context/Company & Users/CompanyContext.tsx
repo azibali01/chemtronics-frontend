@@ -28,36 +28,9 @@ export const useCompanyContext = (): CompanyContextType => {
   return ctx;
 };
 
+
 export const CompanyProvider = ({ children }: { children: ReactNode }) => {
-  const [companies, setCompanies] = useState<Company[]>([
-    {
-      name: "Acme Corporation",
-      address: "123 Business St, City, State 12345",
-      email: "admin@acme.com",
-      phone: "+1 (555) 123-4567",
-      users: 15,
-      status: "active",
-      created: "1/15/2024",
-    },
-    {
-      name: "TechStart Solutions",
-      address: "456 Innovation Ave, Tech City, TC 67890",
-      email: "contact@techstart.com",
-      phone: "+1 (555) 987-6543",
-      users: 8,
-      status: "active",
-      created: "2/20/2024",
-    },
-    {
-      name: "Global Enterprises",
-      address: "789 Corporate Blvd, Metro, MT 54321",
-      email: "info@global.com",
-      phone: "+1 (555) 456-7890",
-      users: 25,
-      status: "inactive",
-      created: "1/5/2024",
-    },
-  ]);
+  const [companies, setCompanies] = useState<Company[]>([]);
 
   const addCompany = (company: Company) => {
     setCompanies((prev) => [...prev, company]);
