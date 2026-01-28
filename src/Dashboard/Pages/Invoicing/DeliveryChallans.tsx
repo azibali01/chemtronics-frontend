@@ -1197,7 +1197,6 @@ function DeliveryChallansInner() {
               const match = partyOptions.find((p) => p.name === val);
               if (match) setPartyAddress(match.address || "");
             }}
-            searchable
           />
           <TextInput
             label="Party Address"
