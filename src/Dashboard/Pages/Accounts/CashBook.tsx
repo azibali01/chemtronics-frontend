@@ -580,7 +580,6 @@ export default function CashBook() {
             type="date"
             value={form.values.date}
             onChange={(e) => form.setFieldValue("date", e.currentTarget.value)}
-            required
             mb="md"
           />
 
@@ -588,7 +587,7 @@ export default function CashBook() {
             label="Entry Type"
             data={["Cash Receipt", "Cash Payment"]}
             value={form.values.type}
-            onChange={(v) => form.setFieldValue("type", v ?? "Cash Receipt")}
+            onChange={(e) => form.setFieldValue("type", e.currentTarget.value)}
             mb="md"
           />
 
