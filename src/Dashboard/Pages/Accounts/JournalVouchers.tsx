@@ -24,13 +24,14 @@ interface JournalVoucherEntry {
   accountName: string;
   debit: number;
   credit: number;
+  description?: string; // Added description field for each entry
 }
 
 interface JournalVoucher {
   _id?: string;
   voucherNumber: string;
   date: string;
-  description?: string;
+  description?: string; // Voucher-level description
   entries: JournalVoucherEntry[];
 }
 
@@ -98,6 +99,7 @@ function JournalVoucherList() {
           accountName: getAccountName(entry.accountNumber),
           debit: entry.debit || 0,
           credit: entry.credit || 0,
+          description: entry.description || "",
         });
       });
 
@@ -723,7 +725,7 @@ function VoucherForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <Group grow mb="md">
+      <Stack spacing="md">
         <TextInput
           label="Voucher Number"
           value={voucher.voucherNumber}
@@ -732,128 +734,107 @@ function VoucherForm({
           }
           readOnly={!initialData}
           disabled={!initialData}
-          required
         />
         <TextInput
           label="Date"
           type="date"
           value={voucher.date}
           onChange={(e) => handleVoucherChange("date", e.currentTarget.value)}
-          required
         />
-      </Group>
+        
 
-      <TextInput
-        label="Description"
-        value={voucher.description}
-        onChange={(e) =>
-          handleVoucherChange("description", e.currentTarget.value)
-        }
-        mb="md"
-      />
+        <Text fw={600} mb="sm">
+          Journal Entries
+        </Text>
 
-      <Text fw={600} mb="sm">
-        Journal Entries
-      </Text>
+        {voucher.entries.map((entry, index) => (
+          <Card key={index} shadow="sm" p="sm" mb="sm" withBorder>
+            <Stack spacing="md">
+              <TextInput
+                label="Account Code"
+                value={entry.accountCode}
+                onChange={(e) =>
+                  handleEntryChange(index, "accountCode", e.currentTarget.value)
+                }
+              />
+              <TextInput
+                label="Account Name"
+                value={entry.accountName}
+                onChange={(e) =>
+                  handleEntryChange(index, "accountName", e.currentTarget.value)
+                }
+              />
+              <NumberInput
+                label="Debit"
+                value={entry.debit}
+                onChange={(value) => handleEntryChange(index, "debit", value)}
+                min={0}
+                step={0.01}
+              />
+              <NumberInput
+                label="Credit"
+                value={entry.credit}
+                onChange={(value) => handleEntryChange(index, "credit", value)}
+                min={0}
+                step={0.01}
+              />
+              <TextInput
+                label="Description"
+                value={entry.description}
+                onChange={(e) =>
+                  handleEntryChange(index, "description", e.currentTarget.value)
+                }
+              />
+            </Stack>
+          </Card>
+        ))}
 
-      {voucher.entries.map((entry, index) => (
-        <Card key={index} shadow="sm" p="sm" mb="sm" withBorder>
-          <Group justify="space-between" mb="xs">
-            <Text size="sm" fw={500}>
-              Entry {index + 1}
-            </Text>
-            {voucher.entries.length > 2 && (
-              <ActionIcon
-                color="red"
-                variant="light"
-                onClick={() => removeEntry(index)}
-              >
-                <Trash2 size={16} />
-              </ActionIcon>
-            )}
-          </Group>
+        <Button
+          variant="light"
+          color="#0A6802"
+          leftSection={<Plus size={16} />}
+          onClick={addEntry}
+          mb="md"
+          fullWidth
+        >
+          Add Entry
+        </Button>
 
-          <Select
-            label="Account"
-            placeholder="Select account"
-            data={accountOptions}
-            value={entry.accountCode}
-            onChange={(value) =>
-              handleEntryChange(index, "accountCode", value || "")
-            }
-            searchable
-            required
-            mb="xs"
-          />
-
-          <Group grow>
-            <NumberInput
-              label="Debit"
-              value={entry.debit}
-              onChange={(value) =>
-                handleEntryChange(index, "debit", Number(value) || 0)
-              }
-              min={0}
-              step={0.01}
-            />
-            <NumberInput
-              label="Credit"
-              value={entry.credit}
-              onChange={(value) =>
-                handleEntryChange(index, "credit", Number(value) || 0)
-              }
-              min={0}
-              step={0.01}
-            />
+        <Card shadow="sm" p="md" mb="md" withBorder bg="#F1FCF0">
+          <Group justify="space-between">
+            <div>
+              <Text size="sm" c="dimmed">
+                Total Debit
+              </Text>
+              <Text fw={700} c="#0A6802">
+                Rs. {totalDebit.toLocaleString()}
+              </Text>
+            </div>
+            <div>
+              <Text size="sm" c="dimmed">
+                Total Credit
+              </Text>
+              <Text fw={700} c="red">
+                Rs. {totalCredit.toLocaleString()}
+              </Text>
+            </div>
+            <div>
+              <Text size="sm" c="dimmed">
+                Status
+              </Text>
+              <Text fw={700} c={isBalanced ? "#0A6802" : "orange"}>
+                {isBalanced ? "✓ Balanced" : "⚠ Not Balanced"}
+              </Text>
+            </div>
           </Group>
         </Card>
-      ))}
 
-      <Button
-        variant="light"
-        color="#0A6802"
-        leftSection={<Plus size={16} />}
-        onClick={addEntry}
-        mb="md"
-        fullWidth
-      >
-        Add Entry
-      </Button>
-
-      <Card shadow="sm" p="md" mb="md" withBorder bg="#F1FCF0">
-        <Group justify="space-between">
-          <div>
-            <Text size="sm" c="dimmed">
-              Total Debit
-            </Text>
-            <Text fw={700} c="#0A6802">
-              Rs. {totalDebit.toLocaleString()}
-            </Text>
-          </div>
-          <div>
-            <Text size="sm" c="dimmed">
-              Total Credit
-            </Text>
-            <Text fw={700} c="red">
-              Rs. {totalCredit.toLocaleString()}
-            </Text>
-          </div>
-          <div>
-            <Text size="sm" c="dimmed">
-              Status
-            </Text>
-            <Text fw={700} c={isBalanced ? "#0A6802" : "orange"}>
-              {isBalanced ? "✓ Balanced" : "⚠ Not Balanced"}
-            </Text>
-          </div>
+        <Group justify="flex-end" mt="md">
+          <Button type="submit" color="#0A6802" disabled={!isBalanced}>
+            Save Voucher
+          </Button>
         </Group>
-      </Card>
-
-      <Group justify="flex-end" mt="md">
-        <Button type="submit" color="#0A6802" disabled={!isBalanced}>
-          Save Voucher
-        </Button>
-      </Group>
+      </Stack>
     </form>
   );
 }
