@@ -587,7 +587,11 @@ export default function CashBook() {
             label="Entry Type"
             data={["Cash Receipt", "Cash Payment"]}
             value={form.values.type}
+<<<<<<< HEAD
             onChange={(value) => form.setFieldValue("type", value || "")}
+=======
+            onChange={(e) => form.setFieldValue("type", e.currentTarget.value)}
+>>>>>>> 1feffc68bfa580619edc29e7d2c173d5db8b16f6
             mb="md"
           />
 

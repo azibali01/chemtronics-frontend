@@ -91,13 +91,16 @@ function JournalVoucherList() {
         }
 
         // Add this entry to the voucher's entries array
-        const accountNumber = String(entry.accountNumber);
+        const accountCode = String(entry.accountNumber ?? "");
         groupedVouchers[voucherNum].entries.push({
-          accountCode: accountNumber,
-          accountName: getAccountName(accountNumber),
-          debit: Number(entry.debit || 0),
-          credit: Number(entry.credit || 0),
-          description: String(entry.description || ""),
+          accountCode,
+          accountName: getAccountName(accountCode),
+          debit: Number(entry.debit) || 0,
+          credit: Number(entry.credit) || 0,
+          description:
+            typeof entry.description === "string"
+              ? entry.description
+              : String(entry.description ?? ""),
         });
       });
 
