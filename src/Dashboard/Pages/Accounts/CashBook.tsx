@@ -120,7 +120,7 @@ export default function CashBook() {
     return flatAccounts.find(
       (acc) =>
         acc.accountCode?.startsWith("1101") ||
-        acc.accountName?.toLowerCase().includes("cash")
+        acc.accountName?.toLowerCase().includes("cash"),
     );
   }, [chartAccounts, flattenAccounts]);
 
@@ -167,7 +167,7 @@ export default function CashBook() {
 
   const [query, setQuery] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<"All" | "Receipt" | "Payment">(
-    "All"
+    "All",
   );
 
   const [dateRange, setDateRange] = useState<[string | null, string | null]>([
@@ -213,7 +213,7 @@ export default function CashBook() {
 
     return byFilters.sort(
       (a: Entry, b: Entry) =>
-        new Date(b.date).getTime() - new Date(a.date).getTime()
+        new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
   }, [entries, query, typeFilter, dateRange]);
 
@@ -238,7 +238,7 @@ export default function CashBook() {
   const totalPayments = Math.abs(
     filteredSorted
       .filter((e) => e.type === "Payment")
-      .reduce((sum, e) => sum + e.amount, 0)
+      .reduce((sum, e) => sum + e.amount, 0),
   );
 
   const closingBalance =
@@ -253,7 +253,7 @@ export default function CashBook() {
       // Find the contra account details
       const flatAccounts = flattenAccounts(chartAccounts);
       const contraAccount = flatAccounts.find(
-        (acc) => acc.accountCode === values.contraAccount
+        (acc) => acc.accountCode === values.contraAccount,
       );
 
       // Create journal voucher
@@ -307,7 +307,7 @@ export default function CashBook() {
     if (typeFilter !== "All") filterLineParts.push(`Type=${typeFilter}`);
     if (dateRange[0] || dateRange[1]) {
       filterLineParts.push(
-        `Range=${dateRange[0] ?? "—"} to ${dateRange[1] ?? "—"}`
+        `Range=${dateRange[0] ?? "—"} to ${dateRange[1] ?? "—"}`,
       );
     }
     if (filterLineParts.length) {
@@ -343,19 +343,19 @@ export default function CashBook() {
     doc.text(
       `Total Receipts: Rs. ${totalReceipts.toLocaleString()}`,
       14,
-      lastY + 10
+      lastY + 10,
     );
     doc.text(
       `Total Payments: Rs. ${totalPayments.toLocaleString()}`,
       14,
-      lastY + 17
+      lastY + 17,
     );
 
     doc.setTextColor(34, 139, 34);
     doc.text(
       `Closing Balance: Rs. ${closingBalance.toLocaleString()}`,
       14,
-      lastY + 24
+      lastY + 24,
     );
 
     doc.save("cashbook.pdf");
@@ -368,7 +368,7 @@ export default function CashBook() {
     [...entries]
       .sort(
         (a: Entry, b: Entry) =>
-          new Date(a.date).getTime() - new Date(b.date).getTime()
+          new Date(a.date).getTime() - new Date(b.date).getTime(),
       )
       .forEach((e) => {
         bal += e.amount;
@@ -381,7 +381,7 @@ export default function CashBook() {
       entries
         .filter((e) => e.type === "Receipt")
         .reduce((sum, e) => sum + e.amount, 0),
-    [entries]
+    [entries],
   );
 
   const allPayments = useMemo(
@@ -389,9 +389,9 @@ export default function CashBook() {
       Math.abs(
         entries
           .filter((e) => e.type === "Payment")
-          .reduce((sum, e) => sum + e.amount, 0)
+          .reduce((sum, e) => sum + e.amount, 0),
       ),
-    [entries]
+    [entries],
   );
 
   return (
@@ -587,7 +587,7 @@ export default function CashBook() {
             label="Entry Type"
             data={["Cash Receipt", "Cash Payment"]}
             value={form.values.type}
-            onChange={(e) => form.setFieldValue("type", e.currentTarget.value)}
+            onChange={(value) => form.setFieldValue("type", value || "")}
             mb="md"
           />
 

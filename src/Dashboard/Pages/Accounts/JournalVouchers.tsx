@@ -11,7 +11,6 @@ import {
   Modal,
   Stack,
   NumberInput,
-  ActionIcon,
 } from "@mantine/core";
 import { Download, Edit, Trash2, Plus } from "lucide-react";
 import jsPDF from "jspdf";
@@ -70,42 +69,41 @@ function JournalVoucherList() {
       const account = flatAccounts.find((a) => a.accountCode === accountCode);
       return account?.accountName || "Unknown Account";
     },
-    [chartAccounts]
+    [chartAccounts],
   );
 
   // Helper function to transform backend response (flat entries) to grouped vouchers
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const transformBackendResponse = useCallback(
-    (backendData: any[]) => {
+    (backendData: Array<Record<string, string | number>>) => {
       const groupedVouchers: { [key: string]: JournalVoucher } = {};
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      backendData.forEach((entry: any) => {
-        const voucherNum = entry.voucherNumber;
+      backendData.forEach((entry: Record<string, string | number>) => {
+        const voucherNum = String(entry.voucherNumber);
 
         if (!groupedVouchers[voucherNum]) {
           groupedVouchers[voucherNum] = {
-            _id: entry._id,
-            voucherNumber: entry.voucherNumber,
-            date: entry.date,
-            description: entry.description || "",
+            _id: String(entry._id),
+            voucherNumber: String(entry.voucherNumber),
+            date: String(entry.date),
+            description: String(entry.description || ""),
             entries: [],
           };
         }
 
         // Add this entry to the voucher's entries array
+        const accountNumber = String(entry.accountNumber);
         groupedVouchers[voucherNum].entries.push({
-          accountCode: entry.accountNumber,
-          accountName: getAccountName(entry.accountNumber),
-          debit: entry.debit || 0,
-          credit: entry.credit || 0,
-          description: entry.description || "",
+          accountCode: accountNumber,
+          accountName: getAccountName(accountNumber),
+          debit: Number(entry.debit || 0),
+          credit: Number(entry.credit || 0),
+          description: String(entry.description || ""),
         });
       });
 
       return Object.values(groupedVouchers);
     },
-    [getAccountName]
+    [getAccountName],
   );
 
   // Fetch journal vouchers from API
@@ -194,7 +192,7 @@ function JournalVoucherList() {
         (v) =>
           v.voucherNumber.toLowerCase().includes(search.toLowerCase()) ||
           (v.description &&
-            v.description.toLowerCase().includes(search.toLowerCase()))
+            v.description.toLowerCase().includes(search.toLowerCase())),
       );
     }
     return result;
@@ -227,11 +225,11 @@ function JournalVoucherList() {
 
     const totalDebit = (voucher.entries || []).reduce(
       (sum, e) => sum + e.debit,
-      0
+      0,
     );
     const totalCredit = (voucher.entries || []).reduce(
       (sum, e) => sum + e.credit,
-      0
+      0,
     );
 
     autoTable(doc, {
@@ -261,7 +259,7 @@ function JournalVoucherList() {
     doc.text(
       `Generated on: ${currentDate}`,
       40,
-      doc.internal.pageSize.height - 30
+      doc.internal.pageSize.height - 30,
     );
     doc.text(`Page 1 of 1`, 480, doc.internal.pageSize.height - 30);
 
@@ -297,11 +295,11 @@ function JournalVoucherList() {
 
     const totalDebit = filteredData.reduce(
       (sum, v) => sum + (v.entries || []).reduce((s, e) => s + e.debit, 0),
-      0
+      0,
     );
     const totalCredit = filteredData.reduce(
       (sum, v) => sum + (v.entries || []).reduce((s, e) => s + e.credit, 0),
-      0
+      0,
     );
 
     autoTable(doc, {
@@ -346,12 +344,12 @@ function JournalVoucherList() {
         doc.text(
           `Generated on: ${currentDate}`,
           40,
-          doc.internal.pageSize.height - 30
+          doc.internal.pageSize.height - 30,
         );
         doc.text(
           `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
           480,
-          doc.internal.pageSize.height - 30
+          doc.internal.pageSize.height - 30,
         );
       },
     });
@@ -379,7 +377,7 @@ function JournalVoucherList() {
       // Fetch and transform the updated data
       const fetchResponse = await api.get("/journal-vouchers");
       const transformedVouchers = transformBackendResponse(
-        fetchResponse.data || []
+        fetchResponse.data || [],
       );
       setVouchers(transformedVouchers);
       generateNextVoucherNumber(transformedVouchers);
@@ -393,7 +391,7 @@ function JournalVoucherList() {
       alert(
         `Error creating journal voucher: ${
           error.response?.data?.message || error.message
-        }`
+        }`,
       );
     }
   };
@@ -648,7 +646,7 @@ function VoucherForm({
         { accountCode: "", accountName: "", debit: 0, credit: 0 },
         { accountCode: "", accountName: "", debit: 0, credit: 0 },
       ],
-    }
+    },
   );
 
   // Update voucher number when autoVoucherNumber changes
@@ -665,7 +663,7 @@ function VoucherForm({
   const handleEntryChange = (
     index: number,
     field: keyof JournalVoucherEntry,
-    value: string | number
+    value: string | number,
   ) => {
     const newEntries = [...voucher.entries];
 
@@ -695,22 +693,13 @@ function VoucherForm({
     }));
   };
 
-  const removeEntry = (index: number) => {
-    if (voucher.entries.length > 2) {
-      setVoucher((prev) => ({
-        ...prev,
-        entries: prev.entries.filter((_, i) => i !== index),
-      }));
-    }
-  };
-
   const totalDebit = voucher.entries.reduce(
     (sum, e) => sum + Number(e.debit),
-    0
+    0,
   );
   const totalCredit = voucher.entries.reduce(
     (sum, e) => sum + Number(e.credit),
-    0
+    0,
   );
   const isBalanced = totalDebit === totalCredit && totalDebit > 0;
 
@@ -725,7 +714,7 @@ function VoucherForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <Stack spacing="md">
+      <Stack gap="md">
         <TextInput
           label="Voucher Number"
           value={voucher.voucherNumber}
@@ -741,7 +730,6 @@ function VoucherForm({
           value={voucher.date}
           onChange={(e) => handleVoucherChange("date", e.currentTarget.value)}
         />
-        
 
         <Text fw={600} mb="sm">
           Journal Entries
@@ -749,7 +737,7 @@ function VoucherForm({
 
         {voucher.entries.map((entry, index) => (
           <Card key={index} shadow="sm" p="sm" mb="sm" withBorder>
-            <Stack spacing="md">
+            <Stack gap="md">
               <TextInput
                 label="Account Code"
                 value={entry.accountCode}
