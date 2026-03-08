@@ -40,7 +40,6 @@ function ChartOfAccounts() {
   const [page, setPage] = useState(1);
   const [selectedCode, setSelectedCode] = useState("");
   const [accountCode, setAccountCode] = useState("");
-  const [level, setLevel] = useState("");
   const [accountName, setAccountName] = useState("");
   const [accountType, setAccountType] = useState<AccountType | null>(null);
   const [parentAccount, setParentAccount] = useState<string>("");
@@ -193,7 +192,6 @@ function ChartOfAccounts() {
       if (!editing) {
         setSelectedCode("");
         setAccountCode("");
-        setLevel("");
         setAccountName("");
         setAccountType(null);
         setParentAccount("");
@@ -220,7 +218,6 @@ function ChartOfAccounts() {
     setEditing(acc);
     setAccountCode(acc.accountCode);
     setSelectedCode(acc.selectedCode);
-    setLevel(acc.level);
     setAccountName(acc.accountName);
     const validAccountTypes: AccountType[] = [
       "Asset",
@@ -360,7 +357,6 @@ function ChartOfAccounts() {
               if (!isNaN(codeNum) && codeNum > maxCode) maxCode = codeNum;
             });
             setAccountCode(maxCode ? String(maxCode + 1) : "1001");
-            setLevel("");
             setAccountName("");
             setAccountType(null);
             setParentAccount("");
