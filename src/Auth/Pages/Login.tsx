@@ -18,21 +18,51 @@ import api from "../../api_configuration/api";
 const Login = () => {
   const { login } = useAuth();
   const [visible, { toggle }] = useDisclosure(false);
-  const [fullName, setFullName] = useState("");
+  const [userName, setUserName] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async () => {
+    if (!userName || !password) {
+      notifications.show({
+        message: "Please enter username and password",
+        color: "red",
+      });
+      return;
+    }
+
+    setLoading(true);
     try {
       const res = await api.post("/auth/login", {
-        fullName,
+        userName,
         password,
       });
-      login(res.data);
+
+      // Store the JWT token
+      localStorage.setItem("access_token", res.data.access_token);
+
+      // Update auth context with user data
+      login(res.data.user);
+
+      notifications.show({
+        message: "Login successful",
+        color: "green",
+      });
+
       navigate("/dashboard");
-      notifications.show({ message: "Login successful", color: "green" });
-    } catch {
-      notifications.show({ message: "Login failed", color: "red" });
+    } catch (error: unknown) {
+      const errorMessage =
+        (error as { response?: { data?: { message?: string } } })?.response
+          ?.data?.message || "Invalid username or password";
+
+      notifications.show({
+        message: errorMessage,
+        color: "red",
+        title: "Login Failed",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -77,10 +107,11 @@ const Login = () => {
           >
             <Stack gap="md">
               <TextInput
-                value={fullName}
-                onChange={(event) => setFullName(event.currentTarget.value)}
-                label="Email"
-                placeholder="Enter your email"
+                value={userName}
+                onChange={(event) => setUserName(event.currentTarget.value)}
+                label="Username"
+                placeholder="Enter your username"
+                required
                 styles={{
                   label: { color: "#dfd6d1", fontWeight: 600 },
                   input: {
@@ -100,6 +131,7 @@ const Login = () => {
                 onChange={(event) => setPassword(event.currentTarget.value)}
                 label="Password"
                 placeholder="Enter your password"
+                required
                 visible={visible}
                 onVisibilityChange={toggle}
                 styles={{
@@ -120,6 +152,7 @@ const Login = () => {
                 fullWidth
                 mt="sm"
                 color="#83746e"
+                loading={loading}
                 styles={{
                   root: {
                     color: "#ffffff",

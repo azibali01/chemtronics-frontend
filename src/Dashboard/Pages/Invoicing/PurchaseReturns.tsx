@@ -145,11 +145,12 @@ export default function PurchaseReturnModal() {
 
         // Get the account code
         const accountCode = String(
-          node.accountCode ?? node.code ?? node.selectedCode ?? ""
+          node.accountCode ?? node.code ?? node.selectedCode ?? "",
         );
 
         // Check if this is a Purchase Party account (code starts with "221")
-        const isPurchaseParty = accountCode.startsWith("221");
+        const isPurchaseParty =
+          accountCode.startsWith("221") && Boolean(node.isParty);
 
         if (isPurchaseParty) {
           results.push({
@@ -173,12 +174,12 @@ export default function PurchaseReturnModal() {
     // Remove duplicates
     const uniqueResults = results.filter(
       (r, idx, arr) =>
-        arr.findIndex((x) => x.accountCode === r.accountCode) === idx
+        arr.findIndex((x) => x.accountCode === r.accountCode) === idx,
     );
 
     console.log(
       "Purchase Party Accounts (Suppliers) - codes starting with 221:",
-      uniqueResults
+      uniqueResults,
     );
     return uniqueResults;
   })();
@@ -204,11 +205,11 @@ export default function PurchaseReturnModal() {
         s.accountName === selectedValue ||
         s.name === selectedValue ||
         `${s.accountCode || s.code} - ${s.accountName || s.name}` ===
-          selectedValue
+          selectedValue,
     );
     if (selectedSupplier) {
       setSupplierNumber(
-        selectedSupplier.accountCode || selectedSupplier.code || ""
+        selectedSupplier.accountCode || selectedSupplier.code || "",
       );
       setSupplierTitle(selectedSupplier.accountName || selectedSupplier.name);
     }
@@ -228,7 +229,7 @@ export default function PurchaseReturnModal() {
 
         // Get the account code
         const accountCode = String(
-          node.accountCode ?? node.code ?? node.selectedCode ?? ""
+          node.accountCode ?? node.code ?? node.selectedCode ?? "",
         );
 
         // Log all accounts for debugging
@@ -271,13 +272,13 @@ export default function PurchaseReturnModal() {
     // Remove duplicates
     const uniqueResults = results.filter(
       (r, idx, arr) =>
-        arr.findIndex((x) => x.accountCode === r.accountCode) === idx
+        arr.findIndex((x) => x.accountCode === r.accountCode) === idx,
     );
 
     console.log("All accounts starting with 13 (Inventories):", allAccounts);
     console.log(
       "Purchase Accounts from Inventories (filtered):",
-      uniqueResults
+      uniqueResults,
     );
 
     return uniqueResults.length > 0
@@ -294,12 +295,12 @@ export default function PurchaseReturnModal() {
   // Function to handle purchase account selection
   const handleSaleAccountSelect = (selectedValue: string) => {
     const selectedAccount = purchaseAccountOptions.find(
-      (opt: any) => opt.value === selectedValue
+      (opt: any) => opt.value === selectedValue,
     );
     if (selectedAccount && "data" in selectedAccount && selectedAccount.data) {
       setPurchaseAccount(selectedValue);
       setPurchaseTitle(
-        selectedAccount.data.accountName || selectedAccount.data.name
+        selectedAccount.data.accountName || selectedAccount.data.name,
       );
     } else {
       setPurchaseAccount(selectedValue);
@@ -439,12 +440,12 @@ export default function PurchaseReturnModal() {
 
       const response = await api.put(
         `/purchase-return/${returnData.id}`,
-        payload
+        payload,
       );
 
       if (response.data) {
         setReturns((prev) =>
-          prev.map((r) => (r.id === returnData.id ? response.data : r))
+          prev.map((r) => (r.id === returnData.id ? response.data : r)),
         );
         notifications.show({
           title: "Success",
@@ -540,7 +541,7 @@ export default function PurchaseReturnModal() {
   const updateItem = (
     index: number,
     field: keyof ReturnItem,
-    value: string | number
+    value: string | number,
   ) => {
     setItems((prev) => {
       const newItems = [...prev];
@@ -712,18 +713,18 @@ export default function PurchaseReturnModal() {
     doc.text(
       "*Computer generated invoice. No need for signature",
       14,
-      pageHeight - 20
+      pageHeight - 20,
     );
     doc.setFontSize(11);
     doc.text(
       "HEAD OFFICE: 552 Mujtaba Canal View, Main Qasimpur Canal Road, Multan",
       14,
-      pageHeight - 14
+      pageHeight - 14,
     );
     doc.text(
       "PLANT SITE: 108-1 Tufailabad Industrial Estate Multan",
       14,
-      pageHeight - 8
+      pageHeight - 8,
     );
 
     doc.save(`${entry.id}.pdf`);
@@ -744,7 +745,7 @@ export default function PurchaseReturnModal() {
   // Pagination logic
   const paginatedReturns = filteredReturns.slice(
     (page - 1) * pageSize,
-    page * pageSize
+    page * pageSize,
   );
 
   const exportFilteredPDF = () => {
@@ -798,7 +799,7 @@ export default function PurchaseReturnModal() {
             .reduce((sum, entry) => sum + entry.amount, 0)
             .toFixed(2)}`,
           80,
-          finalY
+          finalY,
         );
       },
     });
@@ -809,18 +810,18 @@ export default function PurchaseReturnModal() {
     doc.text(
       "*Computer generated invoice. No need for signature",
       14,
-      pageHeight - 20
+      pageHeight - 20,
     );
     doc.setFontSize(11);
     doc.text(
       "HEAD OFFICE: 552 Mujtaba Canal View, Main Qasimpur Canal Road, Multan",
       14,
-      pageHeight - 14
+      pageHeight - 14,
     );
     doc.text(
       "PLANT SITE: 108-1 Tufailabad Industrial Estate Multan",
       14,
-      pageHeight - 8
+      pageHeight - 8,
     );
 
     doc.save("purchase_returns.pdf");
@@ -882,7 +883,7 @@ export default function PurchaseReturnModal() {
               productName: p.productName || "",
               description: p.productDescription || p.description || "",
               rate: p.unitPrice || 0,
-            }))
+            })),
           );
         }
       } catch {
@@ -932,10 +933,10 @@ export default function PurchaseReturnModal() {
             idx + 1
           }</td>
           <td style="border:1px solid #000;padding:8px">${String(
-            item.code || ""
+            item.code || "",
           ).replace(/</g, "&lt;")}</td>
           <td style="border:1px solid #000;padding:8px">${String(
-            item.product || ""
+            item.product || "",
           ).replace(/</g, "&lt;")}</td>
           <td style="border:1px solid #000;padding:8px;text-align:center">${
             item.unit || ""
@@ -964,7 +965,7 @@ export default function PurchaseReturnModal() {
     const paddingRows = Array.from({ length: paddingCount })
       .map(
         () =>
-          `<tr><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td></tr>`
+          `<tr><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td></tr>`,
       )
       .join("");
 
@@ -995,13 +996,13 @@ export default function PurchaseReturnModal() {
       `</tbody></table>` +
       `<div style="margin-top:8px;font-size:12px;color:#666">*Computer generated invoice. No need for signature</div>` +
       `<div style="margin-top:12px;display:flex;justify-content:flex-end"><div style="width:360px;border:1px solid #222;padding:12px"><div style="display:flex;justify-content:space-between"><div>Gross Total:</div><div>${subtotal.toFixed(
-        2
+        2,
       )}</div></div><div style="display:flex;justify-content:space-between"><div>Discount:</div><div>${(
         subtotal - netTotal
       ).toFixed(
-        2
+        2,
       )}</div></div><hr/><div style="display:flex;justify-content:space-between;font-weight:bold"><div>Net Total:</div><div>${netTotal.toFixed(
-        2
+        2,
       )}</div></div></div></div>` +
       `<div style="margin-top:12px;font-size:12px"><strong>Notes:</strong> ${
         entry.notes || ""
@@ -1017,7 +1018,7 @@ export default function PurchaseReturnModal() {
   // Add this missing editNetTotal calculation
   const editNetTotal = items.reduce(
     (sum, item) => sum + (item.netAmount ?? 0),
-    0
+    0,
   );
 
   // Add this missing handleEdit function
@@ -1454,7 +1455,7 @@ interface ReturnFormProps {
   updateItem: (
     index: number,
     field: keyof ReturnItem,
-    value: string | number
+    value: string | number,
   ) => void;
   addItem: () => void;
   removeItem: (index: number) => void;
@@ -1502,13 +1503,13 @@ function ReturnForm({
                       description: p.description,
                       rate: p.rate,
                     },
-                  ])
-                ).values()
+                  ]),
+                ).values(),
               )}
               value={item.code}
               onChange={(v) => {
                 const selected = productCodes.find(
-                  (p) => String(p.value) === v
+                  (p) => String(p.value) === v,
                 );
                 const newItems = [...items];
                 newItems[index].code = v || "";
@@ -1532,8 +1533,8 @@ function ReturnForm({
                       description: p.description,
                       rate: p.rate,
                     },
-                  ])
-                ).values()
+                  ]),
+                ).values(),
               )}
               value={item.product}
               onChange={(v) => {

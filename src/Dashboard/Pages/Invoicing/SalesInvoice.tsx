@@ -101,18 +101,18 @@ function addHeaderFooter(doc: jsPDF, title: string) {
   doc.text(
     "*Computer generated invoice. No need for signature",
     14,
-    pageHeight - 20
+    pageHeight - 20,
   );
   doc.setFontSize(11);
   doc.text(
     "HEAD OFFICE: 552 Mujtaba Canal View, Main Qasimpur Canal Road, Multan",
     14,
-    pageHeight - 14
+    pageHeight - 14,
   );
   doc.text(
     "PLANT SITE: 108-1 Tufailabad Industrial Estate Multan",
     14,
-    pageHeight - 8
+    pageHeight - 8,
   );
 }
 
@@ -215,7 +215,7 @@ export default function SalesInvoicePage() {
   const [search, setSearch] = useState("");
   const [createModal, setCreateModal] = useState(false);
   const [newInvoiceNumber, setNewInvoiceNumber] = useState(
-    getNextInvoiceNumber(invoices)
+    getNextInvoiceNumber(invoices),
   );
   const [newInvoiceDate, setNewInvoiceDate] = useState(() => {
     const today = new Date();
@@ -267,14 +267,14 @@ export default function SalesInvoicePage() {
 
   const subtotal = items.reduce(
     (acc: number, i: InvoiceItem) => acc + i.qty * i.rate,
-    0
+    0,
   );
 
   // Compute GST per-item using HS code + province via getTaxRate (keeps variable names consistent)
   const exGstAmount = items.reduce(
     (acc: number, i: InvoiceItem) =>
       acc + (i.qty * i.rate * getTaxRate(i.hsCode, province)) / 100,
-    0
+    0,
   );
 
   const gstAmount = includeGST ? exGstAmount : 0;
@@ -284,7 +284,7 @@ export default function SalesInvoicePage() {
   // totalGst (sum of percentages) was confusing in the UI; keep it if needed elsewhere
   const totalGst = items.reduce(
     (acc: number, i: InvoiceItem) => acc + getTaxRate(i.hsCode, province),
-    0
+    0,
   );
 
   useEffect(() => {
@@ -312,7 +312,7 @@ export default function SalesInvoicePage() {
               productName: p.productName || p.name || "",
               description: p.productDescription || p.description || "",
               rate: p.unitPrice || 0,
-            }))
+            })),
           );
         }
       } catch {
@@ -340,7 +340,7 @@ export default function SalesInvoicePage() {
       // Map backend 'products' to frontend 'items' for table compatibility
       const mapped = Array.isArray(response.data)
         ? (response.data as unknown[]).map((invRaw) =>
-            mapRawToInvoice(invRaw as Record<string, unknown>)
+            mapRawToInvoice(invRaw as Record<string, unknown>),
           )
         : [];
       setInvoices(mapped);
@@ -394,7 +394,7 @@ export default function SalesInvoicePage() {
       if (response.data) {
         // Map the backend response to our Invoice shape and add to state
         const mappedNew = mapRawToInvoice(
-          response.data as Record<string, unknown>
+          response.data as Record<string, unknown>,
         );
         setInvoices((prev) => {
           const next: Invoice[] = [mappedNew, ...prev];
@@ -445,7 +445,7 @@ export default function SalesInvoicePage() {
 
       const response = await api.put(
         `/sale-invoice/${invoiceData.id}`,
-        payload
+        payload,
       );
 
       if (response.data) {
@@ -453,10 +453,10 @@ export default function SalesInvoicePage() {
         const itemsSource = Array.isArray(res.products)
           ? res.products
           : Array.isArray(res.items)
-          ? res.items
-          : Array.isArray(invoiceData.items)
-          ? invoiceData.items
-          : [];
+            ? res.items
+            : Array.isArray(invoiceData.items)
+              ? invoiceData.items
+              : [];
 
         const updatedInvoice: Invoice = {
           id: res._id ? String(res._id) : String(res.id ?? invoiceData.id),
@@ -485,8 +485,8 @@ export default function SalesInvoicePage() {
             typeof res.amount === "number"
               ? res.amount
               : typeof res.netAmount === "number"
-              ? res.netAmount
-              : invoiceData.amount,
+                ? res.netAmount
+                : invoiceData.amount,
           netAmount:
             typeof res.netAmount === "number"
               ? res.netAmount
@@ -501,14 +501,14 @@ export default function SalesInvoicePage() {
                 obj.id !== undefined
                   ? String(obj.id)
                   : obj._id !== undefined
-                  ? String(obj._id)
-                  : String(Math.random()),
+                    ? String(obj._id)
+                    : String(Math.random()),
             } as InvoiceItem;
           }),
         } as Invoice;
 
         setInvoices((prev) =>
-          prev.map((inv) => (inv.id === invoiceData.id ? updatedInvoice : inv))
+          prev.map((inv) => (inv.id === invoiceData.id ? updatedInvoice : inv)),
         );
 
         notifications.show({
@@ -542,7 +542,7 @@ export default function SalesInvoicePage() {
       await api.delete(`/sale-invoice/${invoiceId}`);
 
       setInvoices((prev) =>
-        prev.filter((i) => String(i.id) !== String(invoiceId))
+        prev.filter((i) => String(i.id) !== String(invoiceId)),
       );
 
       notifications.show({
@@ -688,7 +688,7 @@ export default function SalesInvoicePage() {
             .reduce((sum, i) => sum + (i.amount || 0), 0)
             .toFixed(2)}`,
           80,
-          finalY
+          finalY,
         );
       },
     });
@@ -753,7 +753,7 @@ export default function SalesInvoicePage() {
     // Totals calculation
     const subtotal = (invoice.items ?? []).reduce(
       (s, it) => s + (it.qty || 0) * (it.rate || 0),
-      0
+      0,
     );
     const salesTax = (invoice.items ?? []).reduce(
       (s, it) =>
@@ -762,7 +762,7 @@ export default function SalesInvoicePage() {
           (it.rate || 0) *
           getTaxRate(it.hsCode, invoice.province ?? "Punjab")) /
           100,
-      0
+      0,
     );
     const discount = 0;
     const grandTotal = subtotal + salesTax - discount;
@@ -862,7 +862,7 @@ export default function SalesInvoicePage() {
     doc.text(
       `Amount in words: ${numberToWords(Math.round(grandTotal))}`,
       14,
-      totalsY + 30
+      totalsY + 30,
     );
 
     doc.save(`invoice_${invoice.invoiceNumber}.pdf`);
@@ -878,7 +878,7 @@ export default function SalesInvoicePage() {
       const itemsList = invoice.items || [];
       const subtotal = itemsList.reduce(
         (s, it) => s + (it.qty || 0) * (it.rate || 0),
-        0
+        0,
       );
       const salesTax = itemsList.reduce(
         (s, it) =>
@@ -887,7 +887,7 @@ export default function SalesInvoicePage() {
             (it.rate || 0) *
             getTaxRate(it.hsCode, invoice.province || "Punjab")) /
             100,
-        0
+        0,
       );
       const discount = 0;
       const grandTotal = subtotal + salesTax - discount;
@@ -977,8 +977,8 @@ export default function SalesInvoicePage() {
         })
         .join("");
 
-      // desired visible rows on a printed page (approx)
-      const desiredRows = 8; // reduced so totals + footer fit on same printed page
+      // Keep one fewer filler row so totals and footer stay on the first printed page.
+      const desiredRows = 7;
       const paddingCount = Math.max(0, desiredRows - _itemsForRows.length);
       const paddingRows = Array.from({ length: paddingCount })
         .map(() => {
@@ -1002,7 +1002,10 @@ export default function SalesInvoicePage() {
           <meta charset="utf-8" />
           <title>Invoice ${invoice.invoiceNumber}</title>
           <style>
-            body { font-family: Arial, sans-serif; color: #222; margin: 24px; }
+            @page { size: A4 portrait; margin: 8mm; }
+            html, body { margin: 0; padding: 0; }
+            body { font-family: Arial, sans-serif; color: #222; }
+            .page { padding: 24px; box-sizing: border-box; }
             .header { display:flex; align-items:center; gap:12px; }
             .company { color: #0A6802; font-weight:700; font-size:18px; }
             .meta { margin-top: 12px; display: flex; justify-content: space-between; gap:12px; }
@@ -1021,11 +1024,13 @@ export default function SalesInvoicePage() {
             tbody td:last-child { border-right: 1px solid #000; }
             .totals { margin-top: 12px; width: 100%; display: flex; justify-content: flex-end; }
             .totals .block { width: 320px; border: 1px solid #222; padding: 12px; }
+            .totals, .totals .block, .footer { break-inside: avoid; page-break-inside: avoid; }
             .right { text-align: right; }
             .muted { color: #666; font-size: 12px; }
           </style>
         </head>
         <body>
+          <div class="page">
           <div class="header" style="padding:0;">
             <img src="/Header.jpg" alt="Header" style="display:block; width:calc(100% + 48px);  height:auto;  object-fit: cover;" />
           </div>
@@ -1088,13 +1093,14 @@ export default function SalesInvoicePage() {
                 <div>PKR ${grandTotal.toFixed(2)}</div>
               </div>
               <div style="margin-top:10px; font-size:12px;">Amount in words: ${numberToWordsLocal(
-                Math.round(grandTotal)
+                Math.round(grandTotal),
               )}</div>
             </div>
           </div>
 
-            <div style="margin-top:18px; page-break-inside:avoid;" class="footer">
+          <div style="margin-top:18px;" class="footer">
             <img src="/Footer.jpg" alt="Footer" style="width:100%; height:auto; max-height:120px; object-fit:contain;" />
+          </div>
           </div>
 
         </body>
@@ -1127,7 +1133,7 @@ export default function SalesInvoicePage() {
   const editSubtotal =
     editInvoice?.items?.reduce(
       (acc: number, i: InvoiceItem) => acc + i.qty * i.rate,
-      0
+      0,
     ) || 0;
   const editGstAmount = includeGST ? editSubtotal * 0.18 : 0;
   const editTotal = editSubtotal + editGstAmount;
@@ -1137,12 +1143,12 @@ export default function SalesInvoicePage() {
     editInvoice?.items?.reduce(
       (acc: number, i: InvoiceItem) =>
         acc + (i.qty * i.rate * getTaxRate(i.hsCode, province)) / 100,
-      0
+      0,
     ) || 0;
   const editTotalGst =
     editInvoice?.items?.reduce(
       (acc: number, i: InvoiceItem) => acc + getTaxRate(i.hsCode, province),
-      0
+      0,
     ) || 0;
 
   const handleOpenCreateModal = async () => {
@@ -1201,7 +1207,9 @@ export default function SalesInvoicePage() {
   }
 
   // Use utility to get all receivable accounts (1410 and children)
-  const receivablesAccounts = getReceivableAccounts(accounts as AccountNode[]);
+  const receivablesAccounts = getReceivableAccounts(
+    accounts as AccountNode[],
+  ).filter((account: AccountNode) => account.isParty);
 
   const accountNoOptions = receivablesAccounts.map((acc: AccountNode) => ({
     value: acc.accountCode || acc.selectedCode,
@@ -1218,8 +1226,8 @@ export default function SalesInvoicePage() {
     new Map(
       accountNoOptions
         .filter((a: { value: string; label: string }) => a.value && a.label)
-        .map((a: { value: string; label: string }) => [a.value, a])
-    ).values()
+        .map((a: { value: string; label: string }) => [a.value, a]),
+    ).values(),
   ) as { value: string; label: string }[];
   const uniqueAccountTitleOptions = Array.from(
     new Map(
@@ -1228,8 +1236,8 @@ export default function SalesInvoicePage() {
         .map((a: { value: string; label: string; code: string }) => [
           a.value,
           a,
-        ])
-    ).values()
+        ]),
+    ).values(),
   ) as { value: string; label: string; code: string }[];
 
   // Sales account options are already formatted in getSalesAccounts
@@ -1416,7 +1424,7 @@ export default function SalesInvoicePage() {
                         variant="light"
                         onClick={() =>
                           setEditInvoice(
-                            mapRawToInvoice(i as Record<string, unknown>)
+                            mapRawToInvoice(i as Record<string, unknown>),
                           )
                         }
                       >
@@ -1524,7 +1532,7 @@ export default function SalesInvoicePage() {
                 setNewAccountNumber(v || "");
                 // Find account by accountCode from receivablesAccounts
                 const acc = receivablesAccounts.find(
-                  (a: AccountNode) => (a.accountCode || a.code) === v
+                  (a: AccountNode) => (a.accountCode || a.code) === v,
                 );
                 if (acc) {
                   setNewAccountTitle(acc.accountName || "");
@@ -1543,15 +1551,15 @@ export default function SalesInvoicePage() {
                 setNewAccountTitle(v || "");
                 // Find account by name from receivablesAccounts
                 const acc = receivablesAccounts.find(
-                  (a: AccountNode) => a.accountName === v
+                  (a: AccountNode) => a.accountName === v,
                 );
                 if (acc) {
                   setNewAccountNumber(
                     acc.accountCode !== undefined
                       ? String(acc.accountCode)
                       : acc.code !== undefined
-                      ? String(acc.code)
-                      : ""
+                        ? String(acc.code)
+                        : "",
                   );
                 } else {
                   setNewAccountNumber("");
@@ -1654,13 +1662,13 @@ export default function SalesInvoicePage() {
                                 description: p.description,
                                 rate: p.rate,
                               },
-                            ])
-                          ).values()
+                            ]),
+                          ).values(),
                         )}
                         value={item.code}
                         onChange={(v) => {
                           const selected = productCodes.find(
-                            (p) => String(p.value) === v
+                            (p) => String(p.value) === v,
                           );
                           const newItems = [...items];
                           newItems[index].code = v || "";
@@ -1753,7 +1761,7 @@ export default function SalesInvoicePage() {
                         variant="light"
                         onClick={() =>
                           setItems((prev) =>
-                            prev.filter((i) => i.id !== item.id)
+                            prev.filter((i) => i.id !== item.id),
                           )
                         }
                       >
@@ -1800,8 +1808,12 @@ export default function SalesInvoicePage() {
             }}
           >
             <Text>Subtotal: {subtotal.toFixed(2)}</Text>
-            {brand !== "hydroworx" && <Text>Ex Gst Amount: {exGstAmount.toFixed(2)}</Text>}
-            {brand !== "hydroworx" && <Text>Total GST: {totalGst.toFixed(2)}</Text>}
+            {brand !== "hydroworx" && (
+              <Text>Ex Gst Amount: {exGstAmount.toFixed(2)}</Text>
+            )}
+            {brand !== "hydroworx" && (
+              <Text>Total GST: {totalGst.toFixed(2)}</Text>
+            )}
             <Text fw={700}>Net Total: {netTotal.toFixed(2)}</Text>
           </div>
 
@@ -2139,7 +2151,7 @@ export default function SalesInvoicePage() {
                             variant="light"
                             onClick={() => {
                               const newItems = (editInvoice.items || []).filter(
-                                (i) => i.id !== item.id
+                                (i) => i.id !== item.id,
                               );
                               setEditInvoice({
                                 ...editInvoice,
@@ -2273,11 +2285,38 @@ function InvoicePrintTemplate({ invoice }: { invoice: Invoice }) {
   if (brand === "hydroworx") {
     // Hydroworx: Crystal Report PDF design
     return (
-      <div style={{ fontFamily: "Arial, sans-serif", background: "#fff", padding: 24, minWidth: 900, position: "relative" }}>
+      <div
+        style={{
+          fontFamily: "Arial, sans-serif",
+          background: "#fff",
+          padding: 24,
+          minWidth: 900,
+          position: "relative",
+        }}
+      >
         <div style={{ textAlign: "center", marginBottom: 8, padding: 0 }}>
-          <img src="/Header.jpg" alt="Header" style={{ display: "block", width: "calc(100% + 48px)", marginLeft: -24, height: "auto", maxHeight: 120, objectFit: "contain" }} />
+          <img
+            src="/Header.jpg"
+            alt="Header"
+            style={{
+              display: "block",
+              width: "calc(100% + 48px)",
+              marginLeft: -24,
+              height: "auto",
+              maxHeight: 120,
+              objectFit: "contain",
+            }}
+          />
         </div>
-        <table style={{ width: "100%", fontSize: 14, marginBottom: 16, border: "2px solid #000", borderCollapse: "collapse" }}>
+        <table
+          style={{
+            width: "100%",
+            fontSize: 14,
+            marginBottom: 16,
+            border: "2px solid #000",
+            borderCollapse: "collapse",
+          }}
+        >
           <tbody>
             <tr>
               <td style={{ fontWeight: "bold" }}>Invoice #</td>
@@ -2299,16 +2338,88 @@ function InvoicePrintTemplate({ invoice }: { invoice: Invoice }) {
             </tr>
           </tbody>
         </table>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginBottom: 24, border: "2px solid #000" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 13,
+            marginBottom: 24,
+            border: "2px solid #000",
+          }}
+        >
           <thead>
             <tr style={{ background: "#e9e9e9" }}>
-              <th style={{ border: "1px solid #000", padding: 8, color: "#0B4AA6", fontWeight: 700 }}>Code</th>
-              <th style={{ border: "1px solid #000", padding: 8, width: "40%", color: "#0B4AA6", fontWeight: 700 }}>Product</th>
-              <th style={{ border: "1px solid #000", padding: 8, color: "#0B4AA6", fontWeight: 700 }}>HS Code</th>
-              <th style={{ border: "1px solid #000", padding: 8, color: "#0B4AA6", fontWeight: 700 }}>Description</th>
-              <th style={{ border: "1px solid #000", padding: 8, color: "#0B4AA6", fontWeight: 700 }}>Qty</th>
-              <th style={{ border: "1px solid #000", padding: 8, color: "#0B4AA6", fontWeight: 700 }}>Rate</th>
-              <th style={{ border: "1px solid #000", padding: 8, color: "#0B4AA6", fontWeight: 700 }}>Amount</th>
+              <th
+                style={{
+                  border: "1px solid #000",
+                  padding: 8,
+                  color: "#0B4AA6",
+                  fontWeight: 700,
+                }}
+              >
+                Code
+              </th>
+              <th
+                style={{
+                  border: "1px solid #000",
+                  padding: 8,
+                  width: "40%",
+                  color: "#0B4AA6",
+                  fontWeight: 700,
+                }}
+              >
+                Product
+              </th>
+              <th
+                style={{
+                  border: "1px solid #000",
+                  padding: 8,
+                  color: "#0B4AA6",
+                  fontWeight: 700,
+                }}
+              >
+                HS Code
+              </th>
+              <th
+                style={{
+                  border: "1px solid #000",
+                  padding: 8,
+                  color: "#0B4AA6",
+                  fontWeight: 700,
+                }}
+              >
+                Description
+              </th>
+              <th
+                style={{
+                  border: "1px solid #000",
+                  padding: 8,
+                  color: "#0B4AA6",
+                  fontWeight: 700,
+                }}
+              >
+                Qty
+              </th>
+              <th
+                style={{
+                  border: "1px solid #000",
+                  padding: 8,
+                  color: "#0B4AA6",
+                  fontWeight: 700,
+                }}
+              >
+                Rate
+              </th>
+              <th
+                style={{
+                  border: "1px solid #000",
+                  padding: 8,
+                  color: "#0B4AA6",
+                  fontWeight: 700,
+                }}
+              >
+                Amount
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -2321,35 +2432,83 @@ function InvoicePrintTemplate({ invoice }: { invoice: Invoice }) {
                   const amount = (item.qty || 0) * (item.rate || 0);
                   return (
                     <tr key={idx} style={{ height: 48 }}>
-                      <td style={{ border: "1px solid #000", padding: 8 }}>{item.code}</td>
-                      <td style={{ border: "1px solid #000", padding: 8 }}>{item.product}</td>
-                      <td style={{ border: "1px solid #000", padding: 8 }}>{item.hsCode}</td>
-                      <td style={{ border: "1px solid #000", padding: 8 }}>{item.description}</td>
-                      <td style={{ border: "1px solid #000", padding: 8 }}>{item.qty}</td>
-                      <td style={{ border: "1px solid #000", padding: 8 }}>{(item.rate || 0).toFixed(2)}</td>
-                      <td style={{ border: "1px solid #000", padding: 8 }}>{amount.toFixed(2)}</td>
+                      <td style={{ border: "1px solid #000", padding: 8 }}>
+                        {item.code}
+                      </td>
+                      <td style={{ border: "1px solid #000", padding: 8 }}>
+                        {item.product}
+                      </td>
+                      <td style={{ border: "1px solid #000", padding: 8 }}>
+                        {item.hsCode}
+                      </td>
+                      <td style={{ border: "1px solid #000", padding: 8 }}>
+                        {item.description}
+                      </td>
+                      <td style={{ border: "1px solid #000", padding: 8 }}>
+                        {item.qty}
+                      </td>
+                      <td style={{ border: "1px solid #000", padding: 8 }}>
+                        {(item.rate || 0).toFixed(2)}
+                      </td>
+                      <td style={{ border: "1px solid #000", padding: 8 }}>
+                        {amount.toFixed(2)}
+                      </td>
                     </tr>
                   );
                 }
                 return (
                   <tr key={idx} style={{ height: 48 }}>
-                    <td style={{ border: "1px solid #000", padding: 8 }}>&nbsp;</td>
-                    <td style={{ border: "1px solid #000", padding: 8 }}>&nbsp;</td>
-                    <td style={{ border: "1px solid #000", padding: 8 }}>&nbsp;</td>
-                    <td style={{ border: "1px solid #000", padding: 8 }}>&nbsp;</td>
-                    <td style={{ border: "1px solid #000", padding: 8 }}>&nbsp;</td>
-                    <td style={{ border: "1px solid #000", padding: 8 }}>&nbsp;</td>
-                    <td style={{ border: "1px solid #000", padding: 8 }}>&nbsp;</td>
+                    <td style={{ border: "1px solid #000", padding: 8 }}>
+                      &nbsp;
+                    </td>
+                    <td style={{ border: "1px solid #000", padding: 8 }}>
+                      &nbsp;
+                    </td>
+                    <td style={{ border: "1px solid #000", padding: 8 }}>
+                      &nbsp;
+                    </td>
+                    <td style={{ border: "1px solid #000", padding: 8 }}>
+                      &nbsp;
+                    </td>
+                    <td style={{ border: "1px solid #000", padding: 8 }}>
+                      &nbsp;
+                    </td>
+                    <td style={{ border: "1px solid #000", padding: 8 }}>
+                      &nbsp;
+                    </td>
+                    <td style={{ border: "1px solid #000", padding: 8 }}>
+                      &nbsp;
+                    </td>
                   </tr>
                 );
               });
             })()}
           </tbody>
         </table>
-        <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>*Computer generated invoice. No need for signature</div>
-        <div style={{ marginTop: 24, fontWeight: "bold", fontSize: 16, pageBreakInside: "avoid" }}>Total: PKR {invoice.amount?.toFixed(2)}</div>
+        <div style={{ marginTop: 8, fontSize: 12, color: "#666" }}>
+          *Computer generated invoice. No need for signature
+        </div>
+        <div
+          style={{
+            marginTop: 24,
+            fontWeight: "bold",
+            fontSize: 16,
+            pageBreakInside: "avoid",
+          }}
+        >
+          Total: PKR {invoice.amount?.toFixed(2)}
+        </div>
         <div style={{ marginTop: 18, pageBreakInside: "avoid" }}>
-          <img src="/Footer.jpg" alt="Footer Banner" style={{ width: "100%", height: "auto", maxHeight: 120, objectFit: "contain" }} />
+          <img
+            src="/Footer.jpg"
+            alt="Footer Banner"
+            style={{
+              width: "100%",
+              height: "auto",
+              maxHeight: 120,
+              objectFit: "contain",
+            }}
+          />
         </div>
       </div>
     );

@@ -2,7 +2,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "https://chemtronics-backend-xufv.onrender.com",
+  baseURL: "http://localhost:3000",
   withCredentials: true, // ✅ Important for CORS + cookies
 });
 
@@ -11,6 +11,13 @@ api.interceptors.request.use((config) => {
     (localStorage.getItem("brand") as "chemtronics" | "hydroworx") ||
     "chemtronics";
   config.headers["x-brand"] = brand;
+
+  // Add JWT token if available
+  const token = localStorage.getItem("access_token");
+  if (token) {
+    config.headers["Authorization"] = `Bearer ${token}`;
+  }
+
   return config;
 });
 

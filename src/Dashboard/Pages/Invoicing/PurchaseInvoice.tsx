@@ -118,16 +118,17 @@ export default function PurchaseInvoice(): JSX.Element {
 
         // Get the account code
         const accountCode = String(
-          n.accountCode ?? n.code ?? n.selectedCode ?? ""
+          n.accountCode ?? n.code ?? n.selectedCode ?? "",
         );
 
         // Check if this is a Purchase Party account (code starts with "221")
-        const isPurchaseParty = accountCode.startsWith("221");
+        const isPurchaseParty =
+          accountCode.startsWith("221") && Boolean(n.isParty);
 
         if (isPurchaseParty) {
           results.push({
             value: String(
-              n.accountCode ?? n.code ?? n.selectedCode ?? n._id ?? ""
+              n.accountCode ?? n.code ?? n.selectedCode ?? n._id ?? "",
             ),
             label: `${n.accountCode ?? n.code ?? ""} - ${
               n.accountName ?? n.name ?? ""
@@ -150,7 +151,7 @@ export default function PurchaseInvoice(): JSX.Element {
 
     // remove duplicate values
     const uniqueResults = results.filter(
-      (r, idx, arr) => arr.findIndex((x) => x.value === r.value) === idx
+      (r, idx, arr) => arr.findIndex((x) => x.value === r.value) === idx,
     );
 
     // Debug log
@@ -183,7 +184,7 @@ export default function PurchaseInvoice(): JSX.Element {
         if (isInventory) {
           results.push({
             value: String(
-              n.accountCode ?? n.code ?? n.selectedCode ?? n._id ?? ""
+              n.accountCode ?? n.code ?? n.selectedCode ?? n._id ?? "",
             ),
             label: `${n.accountCode ?? n.code ?? ""} - ${
               n.accountName ?? n.name ?? n.accountName ?? ""
@@ -201,7 +202,7 @@ export default function PurchaseInvoice(): JSX.Element {
     walk(accounts as AccountNode[]);
     // remove duplicate values (Mantine Select throws on duplicate option values)
     return results.filter(
-      (r, idx, arr) => arr.findIndex((x) => x.value === r.value) === idx
+      (r, idx, arr) => arr.findIndex((x) => x.value === r.value) === idx,
     );
   })();
 
@@ -240,27 +241,27 @@ export default function PurchaseInvoice(): JSX.Element {
           const itemsRaw = Array.isArray(r.items)
             ? (r.items as unknown[])
             : Array.isArray(r.products)
-            ? (r.products as unknown[])
-            : [];
+              ? (r.products as unknown[])
+              : [];
           const items = (itemsRaw as Record<string, unknown>[]).map(
             (itRaw, idx) => {
               const it = itRaw as Record<string, unknown>;
               return {
                 id: (it.id ?? it._id ?? idx) as string | number,
                 code: String(
-                  it.code ?? it.productCode ?? it.sku ?? it.barcode ?? ""
+                  it.code ?? it.productCode ?? it.sku ?? it.barcode ?? "",
                 ),
                 product: String(
-                  it.product ?? it.productName ?? it.name ?? it.title ?? ""
+                  it.product ?? it.productName ?? it.name ?? it.title ?? "",
                 ),
                 description: String(
-                  it.description ?? it.productDescription ?? ""
+                  it.description ?? it.productDescription ?? "",
                 ),
                 hsCode: String(it.hsCode ?? it.hs_code ?? ""),
                 qty: Number(it.qty ?? it.quantity ?? 0),
                 rate: Number(it.rate ?? it.unitPrice ?? it.price ?? 0),
               } as Item;
-            }
+            },
           );
           return {
             id: (r.id ?? r._id ?? Date.now()) as string | number,
@@ -272,14 +273,14 @@ export default function PurchaseInvoice(): JSX.Element {
                 (r.supplier as Record<string, unknown> | undefined)
                   ?.accountCode ??
                 r.supplierNo ??
-                ""
+                "",
             ),
             supplierTitle: String(
               (r.supplier as Record<string, unknown> | undefined)?.name ??
                 (r.supplier as Record<string, unknown> | undefined)
                   ?.accountName ??
                 r.supplierTitle ??
-                ""
+                "",
             ),
             purchaseAccount: String(
               r.purchaseAccount ??
@@ -288,7 +289,7 @@ export default function PurchaseInvoice(): JSX.Element {
                   ?.purchaseAccount ??
                 (r.supplier as Record<string, unknown> | undefined)
                   ?.purchase_account ??
-                ""
+                "",
             ),
             purchaseTitle: String(
               r.purchase_account ??
@@ -296,7 +297,7 @@ export default function PurchaseInvoice(): JSX.Element {
                   ?.purchaseTitle ??
                 (r.supplier as Record<string, unknown> | undefined)
                   ?.purchase_title ??
-                ""
+                "",
             ),
             items,
             amount: Number(r.totalAmount ?? r.amount ?? 0),
@@ -340,7 +341,7 @@ export default function PurchaseInvoice(): JSX.Element {
               productName: p.productName ?? p.name ?? "",
               description: p.productDescription ?? p.description ?? "",
               rate: Number(p.unitPrice ?? p.price ?? 0),
-            }))
+            })),
           );
         }
       } catch {
@@ -353,7 +354,7 @@ export default function PurchaseInvoice(): JSX.Element {
   const resetForm = () => {
     setEditing(null);
     setInvoiceNumber(
-      `PUR-${(invoices.length + 1).toString().padStart(3, "0")}`
+      `PUR-${(invoices.length + 1).toString().padStart(3, "0")}`,
     );
     setDate(new Date().toISOString().slice(0, 10));
     setSupplierNo("");
@@ -397,7 +398,7 @@ export default function PurchaseInvoice(): JSX.Element {
         hsCode: it.hsCode ?? it.hs_code ?? "",
         qty: Number(it.qty ?? it.quantity ?? 0),
         rate: Number(it.rate ?? it.unitPrice ?? it.price ?? 0),
-      })
+      }),
     );
     const supplierObj = raw.supplier ?? raw.party ?? {};
     setInvoiceNumber(raw.number ?? raw.invoiceNumber ?? raw.invoiceNo ?? "");
@@ -405,25 +406,25 @@ export default function PurchaseInvoice(): JSX.Element {
       raw.date ??
         raw.invoiceDate ??
         raw.invoice_date ??
-        new Date().toISOString().slice(0, 10)
+        new Date().toISOString().slice(0, 10),
     );
     setSupplierNo(
-      raw.supplierNo ?? supplierObj.code ?? supplierObj.accountCode ?? ""
+      raw.supplierNo ?? supplierObj.code ?? supplierObj.accountCode ?? "",
     );
     setSupplierTitle(
-      raw.supplierTitle ?? supplierObj.name ?? supplierObj.accountName ?? ""
+      raw.supplierTitle ?? supplierObj.name ?? supplierObj.accountName ?? "",
     );
     setPurchaseTitle(
       raw.purchaseTitle ??
         raw.purchase_account ??
         supplierObj.purchaseTitle ??
-        ""
+        "",
     );
     setPurchaseAccount(
       raw.purchaseAccount ??
         raw.purchase_account ??
         supplierObj.purchaseAccount ??
-        ""
+        "",
     );
     setNtnNo(raw.ntnNo ?? supplierObj.ntn ?? supplierObj.salesTaxNo ?? "");
     setDiscount(Number(raw.discount ?? 0));
@@ -467,10 +468,10 @@ export default function PurchaseInvoice(): JSX.Element {
   const updateItem = <K extends keyof Item>(
     id: string | number,
     field: K,
-    value: Item[K]
+    value: Item[K],
   ) =>
     setItems((s) =>
-      s.map((it) => (it.id === id ? { ...it, [field]: value } : it))
+      s.map((it) => (it.id === id ? { ...it, [field]: value } : it)),
     );
   const removeItem = (id: string | number) =>
     setItems((s) => s.filter((i) => i.id !== id));
@@ -479,14 +480,14 @@ export default function PurchaseInvoice(): JSX.Element {
     const itemsList = invoice.items || [];
     const subtotal = itemsList.reduce(
       (s, it) => s + (it.qty || 0) * (it.rate || 0),
-      0
+      0,
     );
     const salesTax = itemsList.reduce(
       (s, it) =>
         s +
         ((it.qty || 0) * (it.rate || 0) * getTaxRate(it.hsCode, province)) /
           100,
-      0
+      0,
     );
     const grandTotal = subtotal + salesTax;
 
@@ -497,24 +498,24 @@ export default function PurchaseInvoice(): JSX.Element {
         return `<tr><td style="border:1px solid #000;padding:8px;text-align:center">${
           idx + 1
         }</td><td style="border:1px solid #000;padding:8px">${String(
-          item.product || item.description || ""
+          item.product || item.description || "",
         ).replace(
           /</g,
-          "&lt;"
+          "&lt;",
         )}</td><td style="border:1px solid #000;padding:8px;text-align:center">${
           item.hsCode || ""
         }</td><td style="border:1px solid #000;padding:8px;text-align:center">${gst.toFixed(
-          2
+          2,
         )}</td><td style="border:1px solid #000;padding:8px;text-align:center">${(
           item.rate || 0
         ).toFixed(
-          2
+          2,
         )}</td><td style="border:1px solid #000;padding:8px;text-align:center">${(
           item.qty || 0
         ).toFixed(
-          2
+          2,
         )}</td><td style="border:1px solid #000;padding:8px;text-align:right">${net.toFixed(
-          2
+          2,
         )}</td></tr>`;
       })
       .join("");
@@ -524,7 +525,7 @@ export default function PurchaseInvoice(): JSX.Element {
     const paddingRows = Array.from({ length: paddingCount })
       .map(
         () =>
-          `<tr><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td></tr>`
+          `<tr><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td></tr>`,
       )
       .join("");
 
@@ -548,19 +549,19 @@ export default function PurchaseInvoice(): JSX.Element {
       `</tbody></table>` +
       `<div style="margin-top:8px;font-size:12px;color:#666">*Computer generated invoice. No need for signature</div>` +
       `<div style="margin-top:12px;display:flex;justify-content:flex-end"><div style="width:360px;border:1px solid #222;padding:12px"><div style="display:flex;justify-content:space-between"><div>Gross Total:</div><div>${subtotal.toFixed(
-        2
+        2,
       )}</div></div><div style="display:flex;justify-content:space-between"><div>Sales Tax:</div><div>${salesTax.toFixed(
-        2
+        2,
       )}</div></div><div style="display:flex;justify-content:space-between"><div>Discount:</div><div>${(
         invoice.discount ?? 0
       ).toFixed(
-        2
+        2,
       )}</div></div><hr/><div style="display:flex;justify-content:space-between;font-weight:bold"><div>Grand Total Inclusive Tax:</div><div>${(
         grandTotal - (invoice.discount ?? 0)
       ).toFixed(
-        2
+        2,
       )}</div></div><div style="margin-top:10px;font-size:12px">Amount in words: ${numberToWordsLocal(
-        Math.round(grandTotal - (invoice.discount ?? 0))
+        Math.round(grandTotal - (invoice.discount ?? 0)),
       )}</div></div></div>` +
       `<div style="margin-top:18px;page-break-inside:avoid"><img src="/Footer.jpg" style="width:100%;max-height:120px;object-fit:contain"/></div>` +
       `</body></html>`;
@@ -626,7 +627,7 @@ export default function PurchaseInvoice(): JSX.Element {
       if (editing) {
         await api.put(
           `/purchase-invoice/update-purchase-invoice/${editing.id}`,
-          payload
+          payload,
         );
         notifications.show({
           title: "Success",
@@ -671,8 +672,8 @@ export default function PurchaseInvoice(): JSX.Element {
             const itemsRaw = Array.isArray(obj.items)
               ? (obj.items as unknown[])
               : Array.isArray(obj.products)
-              ? (obj.products as unknown[])
-              : [];
+                ? (obj.products as unknown[])
+                : [];
             type RawItem = {
               id?: string | number;
               _id?: string | number;
@@ -703,7 +704,7 @@ export default function PurchaseInvoice(): JSX.Element {
                   qty: Number(it.qty ?? it.quantity ?? 0),
                   rate: Number(it.rate ?? it.unitPrice ?? it.price ?? 0),
                 };
-              }
+              },
             );
             const amount = (obj.totalAmount ?? obj.amount ?? 0) as number;
 
@@ -951,26 +952,26 @@ export default function PurchaseInvoice(): JSX.Element {
                           value={it.code || ""}
                           onChange={(val) => {
                             const selected = productOptions.find(
-                              (p) => p.value === val
+                              (p) => p.value === val,
                             );
                             updateItem(it.id, "code", val ?? "");
                             if (selected) {
                               updateItem(
                                 it.id,
                                 "product",
-                                selected.productName
+                                selected.productName,
                               );
                               if (selected.rate !== undefined)
                                 updateItem(
                                   it.id,
                                   "rate",
-                                  selected.rate as number
+                                  selected.rate as number,
                                 );
                               if (selected.description)
                                 updateItem(
                                   it.id,
                                   "description",
-                                  selected.description
+                                  selected.description,
                                 );
                             }
                           }}
@@ -986,31 +987,31 @@ export default function PurchaseInvoice(): JSX.Element {
                           }))}
                           value={
                             productOptions.find(
-                              (p) => p.value === (it.code || "")
+                              (p) => p.value === (it.code || ""),
                             )?.value ?? ""
                           }
                           onChange={(val) => {
                             const selected = productOptions.find(
-                              (p) => p.value === val
+                              (p) => p.value === val,
                             );
                             if (selected) {
                               updateItem(it.id, "code", selected.value);
                               updateItem(
                                 it.id,
                                 "product",
-                                selected.productName
+                                selected.productName,
                               );
                               if (selected.rate !== undefined)
                                 updateItem(
                                   it.id,
                                   "rate",
-                                  selected.rate as number
+                                  selected.rate as number,
                                 );
                               if (selected.description)
                                 updateItem(
                                   it.id,
                                   "description",
-                                  selected.description
+                                  selected.description,
                                 );
                             }
                           }}

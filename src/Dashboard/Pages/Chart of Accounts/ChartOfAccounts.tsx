@@ -11,7 +11,6 @@ import {
   Select,
   Divider,
   ActionIcon,
-  Checkbox,
   Pagination,
   Tooltip,
   Loader,
@@ -63,6 +62,16 @@ function ChartOfAccounts() {
   const equityAccountTypeOptions = [
     { value: "Share Capital", label: "Share Capital" },
   ];
+  const autoLevel = selectedAccountType2
+    ? "Level 2"
+    : selectedAccountType1
+      ? "Level 1"
+      : parentAccount
+        ? "Parent"
+        : "General";
+  const autoIsParty = ["1410", "2210"].includes(selectedAccountType2);
+  const autoType: AccountGroupType = editing ? type : "Group";
+
   const parentOptions = [
     { value: "1000", label: "1000 - Assets" },
     { value: "2000", label: "2000 - Liabilities" },
@@ -82,19 +91,19 @@ function ChartOfAccounts() {
       return;
     }
     const duplicateCode = accounts.some(
-      (acc) =>
+      (acc: any) =>
         acc.accountCode === accountCode &&
-        (!editing || acc.selectedCode !== editing.selectedCode)
+        (!editing || acc.selectedCode !== editing.selectedCode),
     );
     if (duplicateCode) {
       setFormError("Account Code already exists. Please choose another.");
       return;
     }
     const duplicateName = accounts.some(
-      (acc) =>
+      (acc: any) =>
         acc.accountName.trim().toLowerCase() ===
           accountName.trim().toLowerCase() &&
-        (!editing || acc.selectedCode !== editing.selectedCode)
+        (!editing || acc.selectedCode !== editing.selectedCode),
     );
     if (duplicateName) {
       setFormError("Account Name already exists. Please choose another.");
@@ -122,7 +131,7 @@ function ChartOfAccounts() {
       resolvedAccountType = "Asset";
     } else if (
       ["2000", "2100", "2200", "2300", "2400", "2500", "2210", "2220"].includes(
-        parentAccount
+        parentAccount,
       ) ||
       selectedAccountType1?.startsWith("2")
     ) {
@@ -163,12 +172,12 @@ function ChartOfAccounts() {
       selectedAccountType1,
       selectedAccountType2,
       accountCode,
-      level,
+      level: autoLevel,
       accountName,
       accountType: resolvedAccountType,
       parentAccount,
-      type,
-      isParty,
+      type: autoType,
+      isParty: editing ? isParty : autoIsParty,
       address,
       phoneNo,
       salesTaxNo,
@@ -176,15 +185,9 @@ function ChartOfAccounts() {
     };
     try {
       if (editing && editing._id) {
-        await api.put(
-          `/chart-of-account/${editing._id}`,
-          payload
-        );
+        await api.put(`/chart-of-account/${editing._id}`, payload);
       } else {
-        await api.post(
-          "/chart-of-account",
-          payload
-        );
+        await api.post("/chart-of-account", payload);
       }
       await fetchAccounts(setAccounts);
       if (!editing) {
@@ -229,7 +232,7 @@ function ChartOfAccounts() {
     setAccountType(
       validAccountTypes.includes(acc.accountType as AccountType)
         ? (acc.accountType as AccountType)
-        : null
+        : null,
     );
     if (["1000", "2000", "3000", "4000", "5000"].includes(acc.selectedCode)) {
       setParentAccount(acc.selectedCode);
@@ -245,18 +248,13 @@ function ChartOfAccounts() {
     setOpened(true);
   };
 
-
-   
-
   const handleDelete = (_id: string) => {
     setDeleteId(_id);
   };
   const confirmDelete = async () => {
     if (deleteId) {
       try {
-        await api.delete(
-          `/chart-of-account/${deleteId}`
-        );
+        await api.delete(`/chart-of-account/${deleteId}`);
         await fetchAccounts(setAccounts);
       } catch (err) {
         alert("Failed to delete account. Please try again.");
@@ -276,19 +274,19 @@ function ChartOfAccounts() {
   };
   const currentParentCode = tabParentCodes[tab];
   let filteredAccounts = accounts.filter(
-    (acc) =>
+    (acc: any) =>
       acc.selectedCode === currentParentCode ||
-      acc.parentAccount?.split("-")[0] === currentParentCode
+      acc.parentAccount?.split("-")[0] === currentParentCode,
   );
   if (search.trim() !== "") {
     const searchLower = search.trim().toLowerCase();
     filteredAccounts = filteredAccounts.filter(
-      (acc) =>
-        acc.accountName && acc.accountName.toLowerCase().includes(searchLower)
+      (acc: any) =>
+        acc.accountName && acc.accountName.toLowerCase().includes(searchLower),
     );
   }
   if (filterParent) {
-    filteredAccounts = filteredAccounts.filter((acc) => {
+    filteredAccounts = filteredAccounts.filter((acc: any) => {
       if (!acc.parentAccount) return false;
       const parentCode = acc.parentAccount.split("-")[0];
       return parentCode === filterParent;
@@ -297,7 +295,7 @@ function ChartOfAccounts() {
   const totalPages = Math.ceil(filteredAccounts.length / PAGE_SIZE) || 1;
   const paginatedAccounts = filteredAccounts.slice(
     (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE
+    page * PAGE_SIZE,
   );
 
   useEffect(() => {
@@ -314,19 +312,19 @@ function ChartOfAccounts() {
     } else if (selectedAccountType1) {
       codePrefix = selectedAccountType1.split("-")[0];
     }
-    const siblings = accounts.filter((acc) => {
+    const siblings = accounts.filter((acc: any) => {
       if (!acc.accountCode) return false;
       return acc.accountCode.startsWith(codePrefix);
     });
     const usedSuffixes = new Set(
       siblings
-        .map((acc) => {
+        .map((acc: any) => {
           const code = acc.accountCode;
           const suffix = code.slice(codePrefix.length);
           const parsed = parseInt(suffix, 10);
           return !isNaN(parsed) && parsed > 0 ? parsed : null;
         })
-        .filter((v) => v !== null)
+        .filter((v: any) => v !== null),
     );
     let nextSuffix = 1;
     while (usedSuffixes.has(nextSuffix)) {
@@ -345,7 +343,6 @@ function ChartOfAccounts() {
   const revenueCount = countAccountsByParentCode(accounts, "4000");
   const expenseCount = countAccountsByParentCode(accounts, "5000");
 
-
   return (
     <div className="p-6">
       <Group justify="space-between" mb="lg">
@@ -358,7 +355,7 @@ function ChartOfAccounts() {
             setEditing(null);
             setSelectedCode("");
             let maxCode = 0;
-            accounts.forEach((acc) => {
+            accounts.forEach((acc: any) => {
               const codeNum = parseInt(acc.accountCode, 10);
               if (!isNaN(codeNum) && codeNum > maxCode) maxCode = codeNum;
             });
@@ -475,7 +472,7 @@ function ChartOfAccounts() {
             paginatedAccounts,
             accounts,
             handleEdit,
-            handleDelete
+            handleDelete,
           )}
           <Group justify="center" mt="md">
             <Pagination
@@ -548,7 +545,7 @@ function ChartOfAccounts() {
               clearable
             />
             {!["1000", "2000", "3000", "4000", "5000"].includes(
-              parentAccount
+              parentAccount,
             ) && (
               <Select
                 label="Account Type"
@@ -772,34 +769,12 @@ function ChartOfAccounts() {
           </Group>
           <Group grow>
             <TextInput
-              label="Level"
-              placeholder="Level"
-              value={level}
-              onChange={(e) => setLevel(e.currentTarget.value)}
-            />
-            <TextInput
               label="Account Name"
               placeholder="Account Name"
               value={accountName}
               onChange={(e) => setAccountName(e.currentTarget.value)}
             />
           </Group>
-          <Group grow>
-            <Select
-              label="Type"
-              data={["Group", "Detail"]}
-              value={type}
-              onChange={(v) => setType((v as AccountGroupType) || "Group")}
-            />
-          </Group>
-          <Checkbox
-            label="Is Party"
-            color="#0A6802"
-            labelPosition="left"
-            size="md"
-            checked={isParty}
-            onChange={(e) => setIsParty(e.currentTarget.checked)}
-          />
           <Group grow>
             <TextInput
               label="Address"
@@ -889,7 +864,7 @@ type FlattenedAccount = {
 
 function flattenAccounts(
   accounts: AccountNode[],
-  allAccounts: AccountNode[]
+  allAccounts: AccountNode[],
 ): FlattenedAccount[] {
   const result: FlattenedAccount[] = [];
   function walk(nodes: AccountNode[]) {
@@ -933,7 +908,7 @@ function getAccountPath(accounts: AccountNode[], code: string): string {
 
 function countAccountsByParentCode(
   accounts: AccountNode[],
-  parentCode: string
+  parentCode: string,
 ): number {
   let count = 0;
   function walk(nodes: AccountNode[]) {
@@ -953,9 +928,7 @@ function countAccountsByParentCode(
 
 async function fetchAccounts(setAccounts: (accs: AccountNode[]) => void) {
   try {
-    const res = await api.get(
-      "/chart-of-account"
-    );
+    const res = await api.get("/chart-of-account");
     if (Array.isArray(res.data)) {
       setAccounts(res.data);
     }
@@ -968,7 +941,7 @@ function renderAccountsTable(
   accounts: AccountNode[],
   allAccounts: AccountNode[],
   onEdit: (acc: AccountNode) => void,
-  onDelete: (code: string) => void
+  onDelete: (code: string) => void,
 ): JSX.Element {
   const flat = flattenAccounts(accounts, allAccounts);
   const level1Map: Record<string, string> = {
@@ -1053,7 +1026,7 @@ function renderAccountsTable(
           let parentLabel = "-";
           if (parent) {
             const parentAcc = allAccounts.find(
-              (a) => a.selectedCode === parent
+              (a) => a.selectedCode === parent,
             );
             if (parentAcc && parentAcc.accountName) {
               parentLabel = parentAcc.accountName;

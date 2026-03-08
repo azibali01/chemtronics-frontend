@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import {
   Card,
   Group,
@@ -11,11 +11,15 @@ import {
   Modal,
   Select,
   TextInput,
-  NumberInput, // <-- Add this import
+  NumberInput,
   Pagination,
   SimpleGrid,
   ThemeIcon,
   Autocomplete,
+  Loader,
+  Alert,
+  Center,
+  Stack,
 } from "@mantine/core";
 import {
   IconPencil,
@@ -38,6 +42,16 @@ import {
 } from "../../Context/Invoicing/DeliveryChallanContext";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import type { AccountNode } from "../../Context/ChartOfAccountsContext";
+import { useBrand } from "../../Context/BrandContext";
+import { PrintableChallan } from "./PrintableChallan";
+import { getReceivableAccounts } from "../../utils/receivableAccounts";
+import api from "../../../api_configuration/api";
+
+type ProductLookup = {
+  code: string;
+  name: string;
+  description: string;
+};
 
 // Helper function to generate next challan number
 function getNextChallanNumber(challans: DeliveryChallan[]): string {
@@ -55,8 +69,16 @@ function getNextChallanNumber(challans: DeliveryChallan[]): string {
 }
 
 function DeliveryChallansInner() {
-  const { challans, addChallan, updateChallan, deleteChallan } =
-    useDeliveryChallan();
+  const {
+    challans,
+    isLoading,
+    error,
+    addChallan,
+    updateChallan,
+    deleteChallan,
+    searchChallans,
+  } = useDeliveryChallan();
+  const { brand } = useBrand();
 
   const [items, setItems] = useState<DeliveryItem[]>([]);
   const [page, setPage] = useState(1);
@@ -68,6 +90,8 @@ function DeliveryChallansInner() {
   const [editData, setEditData] = useState<DeliveryChallan | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteChallanId, setDeleteChallanId] = useState<string | null>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [productLookup, setProductLookup] = useState<ProductLookup[]>([]);
 
   const [poNo, setPoNo] = useState<string>("");
   const [poDate, setPoDate] = useState<string>("");
@@ -76,20 +100,25 @@ function DeliveryChallansInner() {
 
   // derive party options from chart of accounts
   const { accounts } = useChartOfAccounts();
+  const receivablePartyAccounts = useMemo(
+    () =>
+      getReceivableAccounts(accounts as AccountNode[]).filter(
+        (account) => account.isParty,
+      ),
+    [accounts],
+  );
   const partyOptions = useMemo(() => {
-    const res: { name: string; address?: string }[] = [];
-    const traverse = (nodes: AccountNode[]) => {
-      nodes.forEach((n) => {
-        if (n.isParty) res.push({ name: n.accountName, address: n.address || "" });
-        if (n.children && n.children.length) traverse(n.children);
-      });
-    };
-    traverse(accounts as AccountNode[]);
-    // dedupe by name
-    return Array.from(new Map(res.map((p) => [p.name, p])).values());
-  }, [accounts]);
+    return Array.from(
+      new Map(
+        receivablePartyAccounts.map((account) => [
+          account.accountName,
+          { name: account.accountName, address: account.address || "" },
+        ]),
+      ).values(),
+    );
+  }, [receivablePartyAccounts]);
   const [deliveryDate, setDeliveryDate] = useState<string>(
-    new Date().toISOString().slice(0, 10)
+    new Date().toISOString().slice(0, 10),
   );
   const [status, setStatus] = useState<DeliveryChallan["status"]>("Pending");
   const [challanId, setChallanId] = useState<string>("");
@@ -100,15 +129,116 @@ function DeliveryChallansInner() {
   // Only one set of refs and handlers!
   const printRef = useRef<HTMLDivElement>(null);
 
-  // Filtered Data
+  // Debounced backend search (300ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (search.trim()) {
+        searchChallans(search);
+      } else {
+        // If search is empty, refetch all challans
+        searchChallans();
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await api.get("/products");
+        if (!Array.isArray(response.data)) {
+          setProductLookup([]);
+          return;
+        }
+
+        const normalizedProducts = response.data
+          .map((product: Record<string, unknown>) => ({
+            code: String(product.code || "").trim(),
+            name: String(
+              product.name || product.productname || product.productName || "",
+            ).trim(),
+            description: String(
+              product.description || product.productDescription || "",
+            ).trim(),
+          }))
+          .filter((product: ProductLookup) => product.code || product.name);
+
+        setProductLookup(normalizedProducts);
+      } catch (fetchError) {
+        console.error(
+          "Failed to load products for delivery challan",
+          fetchError,
+        );
+        setProductLookup([]);
+      }
+    };
+
+    fetchProducts();
+  }, []);
+
+  const productCodeOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(productLookup.map((product) => product.code).filter(Boolean)),
+      ),
+    [productLookup],
+  );
+
+  const productNameOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          productLookup
+            .map((product) => product.name || product.description)
+            .filter(Boolean),
+        ),
+      ),
+    [productLookup],
+  );
+
+  const syncItemWithProduct = (
+    index: number,
+    field: "itemCode" | "particulars",
+    value: string,
+  ) => {
+    const trimmedValue = value.trim();
+    const matchedProduct = productLookup.find((product) =>
+      field === "itemCode"
+        ? product.code.toLowerCase() === trimmedValue.toLowerCase()
+        : [product.name, product.description]
+            .filter(Boolean)
+            .some(
+              (candidate) =>
+                candidate.toLowerCase() === trimmedValue.toLowerCase(),
+            ),
+    );
+
+    setItems((prev) =>
+      prev.map((item, itemIndex) => {
+        if (itemIndex !== index) return item;
+
+        if (!matchedProduct) {
+          return { ...item, [field]: value };
+        }
+
+        return {
+          ...item,
+          itemCode: matchedProduct.code || item.itemCode,
+          particulars:
+            matchedProduct.name ||
+            matchedProduct.description ||
+            item.particulars,
+        };
+      }),
+    );
+  };
+
+  // Filtered Data (now only handles date filtering, search is done on backend)
   const filteredData = useMemo(
     () =>
       challans.filter((row) => {
-        const matchesSearch =
-          row.id.toLowerCase().includes(search.toLowerCase()) ||
-          row.poNo.toLowerCase().includes(search.toLowerCase()) ||
-          row.partyName.toLowerCase().includes(search.toLowerCase());
-
         const deliveryDateValue = new Date(row.deliveryDate).getTime();
         const fromOk = fromDate
           ? deliveryDateValue >= new Date(fromDate).getTime()
@@ -117,9 +247,9 @@ function DeliveryChallansInner() {
           ? deliveryDateValue <= new Date(toDate).getTime()
           : true;
 
-        return matchesSearch && fromOk && toOk;
+        return fromOk && toOk;
       }),
-    [challans, search, fromDate, toDate]
+    [challans, fromDate, toDate],
   );
 
   const start = (page - 1) * pageSize;
@@ -128,7 +258,7 @@ function DeliveryChallansInner() {
   // Stats
   const activeCount = challans.filter((d) => d.status !== "Delivered").length;
   const deliveredCount = challans.filter(
-    (d) => d.status === "Delivered"
+    (d) => d.status === "Delivered",
   ).length;
   const pendingCount = challans.filter((d) => d.status === "Pending").length;
 
@@ -153,7 +283,7 @@ function DeliveryChallansInner() {
     setOpened(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (
       !challanId ||
       !poNo ||
@@ -176,13 +306,18 @@ function DeliveryChallansInner() {
       items: [...items],
     };
 
-    if (editData) {
-      updateChallan(newChallan);
-    } else {
-      addChallan(newChallan);
+    try {
+      if (editData) {
+        await updateChallan(newChallan);
+      } else {
+        await addChallan(newChallan);
+      }
+      setOpened(false);
+      resetForm();
+    } catch (error) {
+      // Error is handled in context with notifications
+      console.error("Failed to save challan:", error);
     }
-    setOpened(false);
-    resetForm();
   };
 
   const resetForm = () => {
@@ -240,449 +375,6 @@ function DeliveryChallansInner() {
     }
   }
 
-  function ChallanPrintTemplate({
-    challan,
-    items,
-  }: {
-    challan: {
-      challanId: string;
-      deliveryDate: string;
-      poNo: string;
-      poDate: string;
-      partyName: string;
-      partyAddress: string;
-      contactPerson?: string;
-      partyPhone?: string;
-      other?: string;
-      vehicleNo?: string;
-      deliveredBy?: string;
-      driverCellNo?: string;
-    };
-    items: DeliveryItem[];
-  }) {
-    return (
-      <div
-        style={{
-          fontFamily: "Arial, sans-serif",
-          background: "#fff",
-          padding: 24,
-          minWidth: 900,
-          position: "relative",
-        }}
-      >
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 8 }}>
-          <img src="/CmLogo.png" alt="Logo" style={{ height: 60 }} />
-          <h2
-            style={{
-              color: "#819E00",
-              margin: "8px 0",
-              fontSize: 32,
-              fontWeight: "bold",
-              letterSpacing: 2,
-            }}
-          >
-            Delivery Challan
-          </h2>
-        </div>
-        {/* Original/Duplicate/Triplicate */}
-        <div style={{ position: "absolute", top: 32, right: 32 }}>
-          <table style={{ border: "1px solid #222", fontSize: 12 }}>
-            <tbody>
-              <tr>
-                <td style={{ border: "1px solid #222", padding: "2px 12px" }}>
-                  Original
-                </td>
-              </tr>
-              <tr>
-                <td style={{ border: "1px solid #222", padding: "2px 12px" }}>
-                  Duplicate
-                </td>
-              </tr>
-              <tr>
-                <td style={{ border: "1px solid #222", padding: "2px 12px" }}>
-                  Triplicate
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        {/* Party Info */}
-        <table style={{ width: "100%", fontSize: 14, marginBottom: 16 }}>
-          <tbody>
-            <tr>
-              <td
-                style={{
-                  color: "#0A6802",
-                  fontWeight: "bold",
-                  width: 120,
-                  paddingBottom: 6,
-                }}
-              >
-                Party Name
-              </td>
-              <td
-                style={{ color: "#222", fontWeight: "bold", paddingBottom: 6 }}
-              >
-                {challan.partyName}
-              </td>
-              <td
-                style={{
-                  color: "#0A6802",
-                  fontWeight: "bold",
-                  width: 120,
-                  paddingBottom: 6,
-                }}
-              >
-                Delivery Date
-              </td>
-              <td style={{ color: "#222", paddingBottom: 6 }}>
-                {challan.deliveryDate}
-              </td>
-            </tr>
-            <tr>
-              <td
-                style={{
-                  color: "#0A6802",
-                  fontWeight: "bold",
-                  paddingBottom: 6,
-                }}
-              >
-                Party Address
-              </td>
-              <td style={{ color: "#222", paddingBottom: 6 }}>
-                {challan.partyAddress}
-              </td>
-              <td
-                style={{
-                  color: "#0A6802",
-                  fontWeight: "bold",
-                  paddingBottom: 6,
-                }}
-              >
-                DC No#
-              </td>
-              <td style={{ color: "#222", paddingBottom: 6 }}>
-                {challan.challanId}
-              </td>
-            </tr>
-            <tr>
-              <td
-                style={{
-                  color: "#0A6802",
-                  fontWeight: "bold",
-                  paddingBottom: 6,
-                }}
-              >
-                PO No#
-              </td>
-              <td style={{ color: "#222", paddingBottom: 6 }}>
-                {challan.poNo}
-              </td>
-              <td
-                style={{
-                  color: "#0A6802",
-                  fontWeight: "bold",
-                  paddingBottom: 6,
-                }}
-              >
-                PO Date
-              </td>
-              <td style={{ color: "#222", paddingBottom: 6 }}>
-                {challan.poDate}
-              </td>
-            </tr>
-            <tr>
-              <td
-                style={{
-                  color: "#0A6802",
-                  fontWeight: "bold",
-                  paddingBottom: 6,
-                }}
-              >
-                Contact Person
-              </td>
-              <td style={{ color: "#222", paddingBottom: 6 }}>
-                {challan.contactPerson || "-"}
-              </td>
-              <td
-                style={{
-                  color: "#0A6802",
-                  fontWeight: "bold",
-                  paddingBottom: 6,
-                }}
-              >
-                Party Phone #
-              </td>
-              <td style={{ color: "#222", paddingBottom: 6 }}>
-                {challan.partyPhone || "-"}
-              </td>
-            </tr>
-            <tr>
-              <td
-                style={{
-                  color: "#0A6802",
-                  fontWeight: "bold",
-                  paddingBottom: 6,
-                }}
-              >
-                Other
-              </td>
-              <td style={{ color: "#222", paddingBottom: 6 }}>
-                {challan.other || "-"}
-              </td>
-              <td></td>
-              <td></td>
-            </tr>
-          </tbody>
-        </table>
-        {/* Vehicle/Delivery Info */}
-        <table style={{ width: "100%", fontSize: 13, marginBottom: 16 }}>
-          <tbody>
-            <tr>
-              <td style={{ width: "33%", paddingBottom: 6 }}>
-                <span style={{ color: "#0A6802", fontWeight: "bold" }}>
-                  Vehicle No.
-                </span>{" "}
-                <span
-                  style={{
-                    borderBottom: "1px solid #222",
-                    minWidth: 80,
-                    display: "inline-block",
-                    marginLeft: 8,
-                  }}
-                >
-                  {challan.vehicleNo || ""}
-                </span>
-              </td>
-              <td style={{ width: "33%", paddingBottom: 6 }}>
-                <span style={{ color: "#0A6802", fontWeight: "bold" }}>
-                  Delivered By
-                </span>{" "}
-                <span
-                  style={{
-                    borderBottom: "1px solid #222",
-                    minWidth: 80,
-                    display: "inline-block",
-                    marginLeft: 8,
-                  }}
-                >
-                  {challan.deliveredBy || ""}
-                </span>
-              </td>
-              <td style={{ width: "33%", paddingBottom: 6 }}>
-                <span style={{ color: "#0A6802", fontWeight: "bold" }}>
-                  Driver Cell No.
-                </span>{" "}
-                <span
-                  style={{
-                    borderBottom: "1px solid #222",
-                    minWidth: 80,
-                    display: "inline-block",
-                    marginLeft: 8,
-                  }}
-                >
-                  {challan.driverCellNo || ""}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        {/* Table */}
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            fontSize: 13,
-            marginBottom: 24,
-          }}
-        >
-          <thead>
-            <tr style={{ background: "#F8FFF6" }}>
-              <th style={{ border: "1px solid #222", padding: 4 }}>SR.</th>
-              <th style={{ border: "1px solid #222", padding: 4 }}>
-                Item Code
-              </th>
-              <th
-                style={{ border: "1px solid #222", padding: 4, minWidth: 180 }}
-              >
-                Particulars
-              </th>
-              <th style={{ border: "1px solid #222", padding: 4 }}>Unit</th>
-              <th style={{ border: "1px solid #222", padding: 4 }}>Length</th>
-              <th style={{ border: "1px solid #222", padding: 4 }}>Width</th>
-              <th style={{ border: "1px solid #222", padding: 4 }}>Qty</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, idx) => (
-              <tr key={idx}>
-                <td
-                  style={{
-                    border: "1px solid #222",
-                    padding: 4,
-                    textAlign: "center",
-                  }}
-                >
-                  {item.sr}
-                </td>
-                <td style={{ border: "1px solid #222", padding: 4 }}>
-                  {item.itemCode}
-                </td>
-                <td style={{ border: "1px solid #222", padding: 4 }}>
-                  {item.particulars}
-                </td>
-                <td style={{ border: "1px solid #222", padding: 4 }}>
-                  {item.unit}
-                </td>
-                <td style={{ border: "1px solid #222", padding: 4 }}>
-                  {item.length}
-                </td>
-                <td style={{ border: "1px solid #222", padding: 4 }}>
-                  {item.width}
-                </td>
-                <td style={{ border: "1px solid #222", padding: 4 }}>
-                  {item.qty}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {/* Footer */}
-        <div style={{ marginTop: 24 }}>
-          <table style={{ width: "100%", fontSize: 13, marginBottom: 16 }}>
-            <tbody>
-              <tr>
-                <td
-                  style={{
-                    width: "33%",
-                    textAlign: "center",
-                    paddingBottom: 12,
-                  }}
-                >
-                  <span
-                    style={{
-                      color: "#0A6802",
-                      fontWeight: "bold",
-                      borderBottom: "1px solid #222",
-                      paddingBottom: 2,
-                    }}
-                  >
-                    Prepared By
-                  </span>
-                </td>
-                <td
-                  style={{
-                    width: "33%",
-                    textAlign: "center",
-                    paddingBottom: 12,
-                  }}
-                >
-                  <span
-                    style={{
-                      color: "#0A6802",
-                      fontWeight: "bold",
-                      borderBottom: "1px solid #222",
-                      paddingBottom: 2,
-                    }}
-                  >
-                    Checked By
-                  </span>
-                </td>
-                <td
-                  style={{
-                    width: "33%",
-                    textAlign: "center",
-                    paddingBottom: 12,
-                  }}
-                >
-                  <span
-                    style={{
-                      color: "#0A6802",
-                      fontWeight: "bold",
-                      borderBottom: "1px solid #222",
-                      paddingBottom: 2,
-                    }}
-                  >
-                    Manager
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div style={{ margin: "16px 0", fontSize: 12 }}>
-            Please receive the above material and return duplicate of this
-            challan duly received and signed for record
-          </div>
-          <div
-            style={{
-              textAlign: "right",
-              fontWeight: "bold",
-              color: "#0A6802",
-              fontSize: 13,
-              marginTop: 16,
-              borderBottom: "1px solid #222",
-              paddingBottom: 2,
-            }}
-          >
-            Receiver Signature
-          </div>
-        </div>
-        {/* Footer Banner */}
-        <div
-          style={{
-            width: "100%",
-            marginTop: 24,
-            background: "#eaf6ff",
-            borderTop: "2px solid #819E00",
-            padding: "8px 0 8px 0",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "row",
-              alignItems: "flex-start",
-              gap: 32,
-              fontSize: 12,
-              color: "#222",
-              padding: "8px 16px",
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ minWidth: 90, fontWeight: "bold" }}>Expertise</div>
-            <div>
-              <strong>HEAD OFFICE:</strong> 45-B, PECHS, 42-Faced Canal View
-              Phase-II, Multan &nbsp; Tel: 922-345129-271-3
-            </div>
-            <div>
-              <strong>MULTAN:</strong> S-6, Rawat Plaza, Main Model Town, Tel:
-              051-609-1611
-            </div>
-            <div>
-              <strong>RAWALPINDI:</strong> S-6, Rawat Plaza, Main Model Town,
-              Tel: 051-609-1611
-            </div>
-            <div>
-              <strong>FAISALABAD:</strong> Filter Colony, Sargodha Road, Tel:
-              0345-862-2246
-            </div>
-            <div>
-              <strong>KARACHI:</strong> E-86, Ground Floor, Block 2, Tel:
-              021-3375-0175
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Ref for printable table
-  // Duplicate refs removed
-
-  // Print handler
-  // Duplicate handlers removed
-
   const exportPDF = (row: DeliveryChallan) => {
     const doc = new jsPDF("p", "pt", "a4");
     const companyName = "Chemtronix Engineering Solutions";
@@ -736,7 +428,7 @@ function DeliveryChallansInner() {
         doc.text(
           `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
           480,
-          doc.internal.pageSize.height - 30
+          doc.internal.pageSize.height - 30,
         );
       },
     });
@@ -835,7 +527,7 @@ function DeliveryChallansInner() {
         doc.text(
           `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
           480,
-          doc.internal.pageSize.height - 30
+          doc.internal.pageSize.height - 30,
         );
       },
     });
@@ -866,37 +558,14 @@ function DeliveryChallansInner() {
     doc.save("delivery_challans.pdf");
   };
 
-  // Add this function for modal print
-  // const handleModalPrint = useReactToPrint({
-  //   content: () => modalPrintRef.current,
-  //   documentTitle: challanId || "Delivery Challan",
-  // });
-
-  // Custom print function
-  const handleCustomPrint = () => {
-    // Render your ChallanPrintTemplate to a string
-    const printContent = `
-    <html>
-      <head>
-        <title>Delivery Challan</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 24px; }
-          /* Add more print styles here if needed */
-        </style>
-      </head>
-      <body>
-        ${document.getElementById("challan-print-content")?.innerHTML}
-      </body>
-    </html>
-  `;
-    const printWindow = window.open("", "_blank", "width=900,height=700");
-    if (printWindow) {
-      printWindow.document.open();
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => printWindow.print(), 300);
-    }
+  // Safe print function using window.print() with CSS media queries
+  const handlePrint = () => {
+    setIsPrinting(true);
+    // Use setTimeout to ensure React has rendered the print component
+    setTimeout(() => {
+      window.print();
+      setIsPrinting(false);
+    }, 100);
   };
 
   // Open delete modal
@@ -906,11 +575,16 @@ function DeliveryChallansInner() {
   };
 
   // Confirm delete
-  const confirmDeleteChallan = () => {
+  const confirmDeleteChallan = async () => {
     if (deleteChallanId) {
-      deleteChallan(deleteChallanId);
-      setDeleteChallanId(null);
-      setDeleteModalOpen(false);
+      try {
+        await deleteChallan(deleteChallanId);
+        setDeleteChallanId(null);
+        setDeleteModalOpen(false);
+      } catch (error) {
+        // Error is handled in context with notifications
+        console.error("Failed to delete challan:", error);
+      }
     }
   };
 
@@ -921,483 +595,560 @@ function DeliveryChallansInner() {
   };
 
   return (
-    <div>
-      <Group justify="space-between" mb="md">
-        <div>
-          <Title order={2}>Delivery Challans</Title>
-          <Text c="dimmed" size="sm">
-            Create and manage delivery challans for shipments
-          </Text>
+    <>
+      <style>{`
+        @media print {
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+          }
+
+          body * {
+            visibility: hidden;
+          }
+
+          .printable-challan-container {
+            display: block !important;
+            visibility: visible !important;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            min-height: 100vh;
+            background: white;
+            z-index: 99999;
+          }
+
+          .printable-challan-container * {
+            visibility: visible !important;
+          }
+
+          /* Reset all margins and padding for print */
+          @page {
+            margin: 0.5cm;
+            size: A4;
+          }
+        }
+        @media screen {
+          .printable-challan-container {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      {/* Print-only view */}
+      {isPrinting && (
+        <div className="printable-challan-container">
+          <PrintableChallan
+            challan={{
+              challanId,
+              deliveryDate,
+              poNo,
+              poDate,
+              partyName,
+              partyAddress,
+            }}
+            items={items}
+            brand={brand}
+          />
         </div>
-        <Button
-          leftSection={<IconPlus size={16} />}
-          color="#0A6802"
-          onClick={openCreate}
+      )}
+
+      <div className="screen-content">
+        {/* Loading State */}
+        {isLoading && (
+          <Center py="xl">
+            <Stack align="center" gap="md">
+              <Loader color="#0A6802" size="lg" />
+              <Text c="dimmed">Loading delivery challans...</Text>
+            </Stack>
+          </Center>
+        )}
+
+        {/* Error State */}
+        {error && !isLoading && (
+          <Alert
+            color="red"
+            title="Error"
+            mb="md"
+            withCloseButton
+            onClose={() => {}}
+          >
+            {error}
+          </Alert>
+        )}
+
+        {/* Content - only show when not loading */}
+        {!isLoading && (
+          <>
+            <Group justify="space-between" mb="md">
+              <div>
+                <Title order={2}>Delivery Challans</Title>
+                <Text c="dimmed" size="sm">
+                  Create and manage delivery challans for shipments
+                </Text>
+              </div>
+              <Button
+                leftSection={<IconPlus size={16} />}
+                color="#0A6802"
+                onClick={openCreate}
+              >
+                Create Delivery Challan
+              </Button>
+            </Group>
+
+            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg" mb="lg">
+              <Card shadow="sm" radius="md" withBorder bg={"#F1FCF0"}>
+                <Group justify="space-between">
+                  <Text>Active Challans</Text>
+                  <ThemeIcon color="teal" variant="light">
+                    <IconPackageExport size={20} />
+                  </ThemeIcon>
+                </Group>
+                <Title order={3} mt={8}>
+                  {activeCount}
+                </Title>
+              </Card>
+
+              <Card shadow="sm" radius="md" withBorder bg={"#F1FCF0"}>
+                <Group justify="space-between">
+                  <Text>Delivered</Text>
+                  <ThemeIcon color="#0A6802" variant="light">
+                    <IconCheck size={20} />
+                  </ThemeIcon>
+                </Group>
+                <Title order={3} mt={8}>
+                  {deliveredCount}
+                </Title>
+              </Card>
+
+              <Card shadow="sm" radius="md" withBorder bg={"#F1FCF0"}>
+                <Group justify="space-between">
+                  <Text>Pending</Text>
+                  <ThemeIcon color="gray" variant="light">
+                    <IconClock size={20} />
+                  </ThemeIcon>
+                </Group>
+                <Title order={3} mt={8}>
+                  {pendingCount}
+                </Title>
+              </Card>
+            </SimpleGrid>
+
+            <Card withBorder radius="md" shadow="sm" p="md" bg={"#F1FCF0"}>
+              <Group mb="sm">
+                <IconTruck size={20} />
+                <Text fw={600}>Delivery Challans List</Text>
+              </Group>
+
+              <Group mb="md" gap="xs" grow>
+                <TextInput
+                  label="Search"
+                  placeholder="Search by Challan #"
+                  leftSection={<IconSearch size={16} />}
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.currentTarget.value);
+                    setPage(1);
+                  }}
+                />
+                <TextInput
+                  label="From Date"
+                  type="date"
+                  placeholder="From Date"
+                  value={fromDate}
+                  onChange={(e) => {
+                    setFromDate(e.currentTarget.value);
+                    setPage(1);
+                  }}
+                  style={{ minWidth: 140 }}
+                />
+                <TextInput
+                  label="To Date"
+                  type="date"
+                  placeholder="To Date"
+                  value={toDate}
+                  onChange={(e) => {
+                    setToDate(e.currentTarget.value);
+                    setPage(1);
+                  }}
+                  style={{ minWidth: 140 }}
+                />
+                <Group mt={24} gap="xs">
+                  {/* Print button removed from here */}
+                  <Button
+                    variant="outline"
+                    color="#0A6802"
+                    onClick={() => {
+                      setSearch("");
+                      setFromDate("");
+                      setToDate("");
+                      setPage(1);
+                    }}
+                  >
+                    Clear
+                  </Button>
+                  <Button
+                    variant="filled"
+                    color="#0A6802"
+                    leftSection={<IconDownload size={16} />}
+                    onClick={exportFilteredPDF}
+                  >
+                    Export
+                  </Button>
+                </Group>
+                <Select
+                  label="Rows per page"
+                  data={["5", "10", "20", "50"]}
+                  value={pageSize.toString()}
+                  onChange={(val) => {
+                    setPageSize(Number(val));
+                    setPage(1);
+                  }}
+                  style={{ width: 120 }}
+                  size="xs"
+                />
+              </Group>
+              {/* Printable Table */}
+              <div ref={printRef}>
+                <Table highlightOnHover withTableBorder>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Challan #</Table.Th>
+                      <Table.Th>Delivery Date</Table.Th>
+                      <Table.Th>PO No</Table.Th>
+                      <Table.Th>PO Date</Table.Th>
+                      <Table.Th>Party Name</Table.Th>
+                      <Table.Th>Party Address</Table.Th>
+                      <Table.Th>Particulars</Table.Th>
+                      <Table.Th>Qty</Table.Th>
+                      <Table.Th>Status</Table.Th>
+                      <Table.Th>Actions</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {paginatedData.map((row) => (
+                      <Table.Tr key={row.id}>
+                        <Table.Td>{row.id}</Table.Td>
+                        <Table.Td>{row.deliveryDate}</Table.Td>
+                        <Table.Td>{row.poNo}</Table.Td>
+                        <Table.Td>{row.poDate}</Table.Td>
+                        <Table.Td>{row.partyName}</Table.Td>
+                        <Table.Td>{row.partyAddress}</Table.Td>
+                        <Table.Td>
+                          {row.items && row.items.length > 0 ? (
+                            row.items.map((item) => item.particulars).join(", ")
+                          ) : (
+                            <Text c="dimmed" size="sm">
+                              -
+                            </Text>
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {row.items && row.items.length > 0 ? (
+                            row.items.map((item) => item.qty).join(", ")
+                          ) : (
+                            <Text c="dimmed" size="sm">
+                              -
+                            </Text>
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          <StatusBadge status={row.status} />
+                        </Table.Td>
+                        <Table.Td>
+                          <Group gap="xs">
+                            <ActionIcon
+                              variant="light"
+                              color="#0A6802"
+                              onClick={() => openEdit(row)}
+                            >
+                              <IconPencil size={16} />
+                            </ActionIcon>
+                            <ActionIcon
+                              variant="light"
+                              color="red"
+                              onClick={() => openDeleteModal(row.id)}
+                            >
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                            <ActionIcon
+                              variant="light"
+                              color="#819E00"
+                              onClick={() => exportPDF(row)}
+                            >
+                              <IconDownload size={16} />
+                            </ActionIcon>
+                          </Group>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                    {paginatedData.length === 0 && (
+                      <Table.Tr>
+                        <Table.Td colSpan={10} style={{ textAlign: "center" }}>
+                          No results found
+                        </Table.Td>
+                      </Table.Tr>
+                    )}
+                  </Table.Tbody>
+                </Table>
+              </div>
+              <Group justify="center" mt="md">
+                <Pagination
+                  total={Math.ceil(filteredData.length / pageSize)}
+                  value={page}
+                  onChange={setPage}
+                  size="sm"
+                  color="#0A6802"
+                />
+              </Group>
+            </Card>
+          </>
+        )}
+
+        <Modal
+          opened={opened}
+          onClose={() => setOpened(false)}
+          title={
+            editData ? (
+              <strong>Edit Delivery Challan</strong>
+            ) : (
+              <strong>Create New Delivery Challan</strong>
+            )
+          }
+          centered
+          size="70%"
         >
-          Create Delivery Challan
-        </Button>
-      </Group>
-
-      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg" mb="lg">
-        <Card shadow="sm" radius="md" withBorder bg={"#F1FCF0"}>
-          <Group justify="space-between">
-            <Text>Active Challans</Text>
-            <ThemeIcon color="teal" variant="light">
-              <IconPackageExport size={20} />
-            </ThemeIcon>
+          {/* Only one print template block */}
+          <Group mb="md" w="50%" grow>
+            <TextInput
+              label="Challan #"
+              placeholder="Enter Challan Number"
+              value={challanId}
+              onChange={(e) => setChallanId(e.currentTarget.value)}
+            />
+            <TextInput
+              label="Delivery Date"
+              type="date"
+              value={deliveryDate}
+              onChange={(e) => setDeliveryDate(e.currentTarget.value)}
+            />
           </Group>
-          <Title order={3} mt={8}>
-            {activeCount}
-          </Title>
-        </Card>
 
-        <Card shadow="sm" radius="md" withBorder bg={"#F1FCF0"}>
-          <Group justify="space-between">
-            <Text>Delivered</Text>
-            <ThemeIcon color="#0A6802" variant="light">
-              <IconCheck size={20} />
-            </ThemeIcon>
+          <Group grow mb="md">
+            <TextInput
+              label="PO No"
+              placeholder="Enter PO Number"
+              value={poNo}
+              onChange={(e) => setPoNo(e.currentTarget.value)}
+            />
+            <TextInput
+              label="PO Date"
+              type="date"
+              value={poDate}
+              onChange={(e) => setPoDate(e.currentTarget.value)}
+            />
+            <Autocomplete
+              label="Party Name"
+              placeholder="Search or enter party name"
+              data={partyOptions.map((p) => p.name)}
+              value={partyName}
+              onChange={(val) => {
+                setPartyName(val);
+                const match = partyOptions.find((p) => p.name === val);
+                if (match) setPartyAddress(match.address || "");
+              }}
+            />
+            <TextInput
+              label="Party Address"
+              placeholder="Enter Party Address"
+              value={partyAddress}
+              onChange={(e) => setPartyAddress(e.currentTarget.value)}
+            />
           </Group>
-          <Title order={3} mt={8}>
-            {deliveredCount}
-          </Title>
-        </Card>
 
-        <Card shadow="sm" radius="md" withBorder bg={"#F1FCF0"}>
-          <Group justify="space-between">
-            <Text>Pending</Text>
-            <ThemeIcon color="gray" variant="light">
-              <IconClock size={20} />
-            </ThemeIcon>
+          <Group mb="md">
+            <Button color="#0A6802" onClick={handleAddItem}>
+              Add Item
+            </Button>
           </Group>
-          <Title order={3} mt={8}>
-            {pendingCount}
-          </Title>
-        </Card>
-      </SimpleGrid>
+          {items.length > 0 &&
+            (() => {
+              // REMOVE totalAmount calculation
+              // const totalAmount = items.reduce((sum, item) => {
+              //   return sum + (typeof item.amount === "number" ? item.amount : 0);
+              // }, 0);
 
-      <Card withBorder radius="md" shadow="sm" p="md" bg={"#F1FCF0"}>
-        <Group mb="sm">
-          <IconTruck size={20} />
-          <Text fw={600}>Delivery Challans List</Text>
-        </Group>
+              return (
+                <Table withTableBorder highlightOnHover>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>SR</Table.Th>
+                      <Table.Th>Item Code</Table.Th>
+                      <Table.Th style={{ minWidth: 230 }}>Particulars</Table.Th>
+                      <Table.Th>Unit</Table.Th>
+                      <Table.Th>Length</Table.Th>
+                      <Table.Th>Width</Table.Th>
+                      <Table.Th>Qty</Table.Th>
+                      {/* <Table.Th>Amount</Table.Th> REMOVE this column */}
+                      <Table.Th>Actions</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {items.map((item, idx) => (
+                      <Table.Tr key={idx}>
+                        <Table.Td style={{ textAlign: "center" }}>
+                          {item.sr}
+                        </Table.Td>
+                        <Table.Td>
+                          <Autocomplete
+                            value={item.itemCode ?? ""}
+                            data={productCodeOptions}
+                            onChange={(value) =>
+                              syncItemWithProduct(idx, "itemCode", value)
+                            }
+                            placeholder="Item Code"
+                          />
+                        </Table.Td>
+                        <Table.Td>
+                          <Autocomplete
+                            value={item.particulars ?? ""}
+                            data={productNameOptions}
+                            onChange={(value) =>
+                              syncItemWithProduct(idx, "particulars", value)
+                            }
+                            placeholder="Particulars"
+                          />
+                        </Table.Td>
+                        <Table.Td>
+                          <TextInput
+                            value={item.unit ?? ""}
+                            onChange={(e) => {
+                              const value = e?.currentTarget?.value ?? "";
+                              setItems((prev) =>
+                                prev.map((itm, i) =>
+                                  i === idx ? { ...itm, unit: value } : itm,
+                                ),
+                              );
+                            }}
+                            placeholder="Unit"
+                          />
+                        </Table.Td>
+                        <Table.Td>
+                          <NumberInput
+                            value={
+                              item.length ? Number(item.length) : undefined
+                            }
+                            onChange={(value) =>
+                              setItems((prev) =>
+                                prev.map((itm, i) =>
+                                  i === idx
+                                    ? {
+                                        ...itm,
+                                        length: value?.toString() || "",
+                                      }
+                                    : itm,
+                                ),
+                              )
+                            }
+                            placeholder="Length"
+                            min={0}
+                          />
+                        </Table.Td>
+                        <Table.Td>
+                          <NumberInput
+                            value={item.width ? Number(item.width) : undefined}
+                            onChange={(value) =>
+                              setItems((prev) =>
+                                prev.map((itm, i) =>
+                                  i === idx
+                                    ? { ...itm, width: value?.toString() || "" }
+                                    : itm,
+                                ),
+                              )
+                            }
+                            placeholder="Width"
+                            min={0}
+                          />
+                        </Table.Td>
+                        <Table.Td>
+                          <NumberInput
+                            value={item.qty ? Number(item.qty) : undefined}
+                            onChange={(value) =>
+                              setItems((prev) =>
+                                prev.map((itm, i) =>
+                                  i === idx
+                                    ? { ...itm, qty: value?.toString() || "" }
+                                    : itm,
+                                ),
+                              )
+                            }
+                            placeholder="Qty"
+                            min={0}
+                          />
+                        </Table.Td>
+                        {/* REMOVE Amount cell */}
+                        <Table.Td style={{ textAlign: "center" }}>
+                          <ActionIcon
+                            variant="light"
+                            color="red"
+                            onClick={() => handleRemoveItem(idx)}
+                          >
+                            <IconTrash size={16} />
+                          </ActionIcon>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                    {/* REMOVE total amount row */}
+                  </Table.Tbody>
+                </Table>
+              );
+            })()}
 
-        <Group mb="md" gap="xs" grow>
-          <TextInput
-            label="Search"
-            placeholder="Search by Challan #"
-            leftSection={<IconSearch size={16} />}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.currentTarget.value);
-              setPage(1);
-            }}
-          />
-          <TextInput
-            label="From Date"
-            type="date"
-            placeholder="From Date"
-            value={fromDate}
-            onChange={(e) => {
-              setFromDate(e.currentTarget.value);
-              setPage(1);
-            }}
-            style={{ minWidth: 140 }}
-          />
-          <TextInput
-            label="To Date"
-            type="date"
-            placeholder="To Date"
-            value={toDate}
-            onChange={(e) => {
-              setToDate(e.currentTarget.value);
-              setPage(1);
-            }}
-            style={{ minWidth: 140 }}
-          />
-          <Group mt={24} gap="xs">
-            {/* Print button removed from here */}
+          <Group justify="right" mt="md">
+            <Button color="#819E00" variant="outline" onClick={handlePrint}>
+              Print
+            </Button>
+            <Button color="#0A6802" onClick={handleSave}>
+              {editData ? "Update Challan" : "Create Challan"}
+            </Button>
             <Button
               variant="outline"
               color="#0A6802"
-              onClick={() => {
-                setSearch("");
-                setFromDate("");
-                setToDate("");
-                setPage(1);
-              }}
+              onClick={() => setOpened(false)}
             >
-              Clear
-            </Button>
-            <Button
-              variant="filled"
-              color="#0A6802"
-              leftSection={<IconDownload size={16} />}
-              onClick={exportFilteredPDF}
-            >
-              Export
+              Cancel
             </Button>
           </Group>
-          <Select
-            label="Rows per page"
-            data={["5", "10", "20", "50"]}
-            value={pageSize.toString()}
-            onChange={(val) => {
-              setPageSize(Number(val));
-              setPage(1);
-            }}
-            style={{ width: 120 }}
-            size="xs"
-          />
-        </Group>
-        {/* Printable Table */}
-        <div ref={printRef}>
-          <Table highlightOnHover withTableBorder>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Challan #</Table.Th>
-                <Table.Th>Delivery Date</Table.Th>
-                <Table.Th>PO No</Table.Th>
-                <Table.Th>PO Date</Table.Th>
-                <Table.Th>Party Name</Table.Th>
-                <Table.Th>Party Address</Table.Th>
-                <Table.Th>Particulars</Table.Th>
-                <Table.Th>Qty</Table.Th>
-                <Table.Th>Status</Table.Th>
-                <Table.Th>Actions</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {paginatedData.map((row) => (
-                <Table.Tr key={row.id}>
-                  <Table.Td>{row.id}</Table.Td>
-                  <Table.Td>{row.deliveryDate}</Table.Td>
-                  <Table.Td>{row.poNo}</Table.Td>
-                  <Table.Td>{row.poDate}</Table.Td>
-                  <Table.Td>{row.partyName}</Table.Td>
-                  <Table.Td>{row.partyAddress}</Table.Td>
-                  <Table.Td>
-                    {row.items && row.items.length > 0 ? (
-                      row.items.map((item) => item.particulars).join(", ")
-                    ) : (
-                      <Text c="dimmed" size="sm">
-                        -
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    {row.items && row.items.length > 0 ? (
-                      row.items.map((item) => item.qty).join(", ")
-                    ) : (
-                      <Text c="dimmed" size="sm">
-                        -
-                      </Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    <StatusBadge status={row.status} />
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <ActionIcon
-                        variant="light"
-                        color="#0A6802"
-                        onClick={() => openEdit(row)}
-                      >
-                        <IconPencil size={16} />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="light"
-                        color="red"
-                        onClick={() => openDeleteModal(row.id)}
-                      >
-                        <IconTrash size={16} />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="light"
-                        color="#819E00"
-                        onClick={() => exportPDF(row)}
-                      >
-                        <IconDownload size={16} />
-                      </ActionIcon>
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-              {paginatedData.length === 0 && (
-                <Table.Tr>
-                  <Table.Td colSpan={10} style={{ textAlign: "center" }}>
-                    No results found
-                  </Table.Td>
-                </Table.Tr>
-              )}
-            </Table.Tbody>
-          </Table>
-        </div>
-        <Group justify="center" mt="md">
-          <Pagination
-            total={Math.ceil(filteredData.length / pageSize)}
-            value={page}
-            onChange={setPage}
-            size="sm"
-            color="#0A6802"
-          />
-        </Group>
-      </Card>
+        </Modal>
 
-      <Modal
-        opened={opened}
-        onClose={() => setOpened(false)}
-        title={
-          editData ? (
-            <strong>Edit Delivery Challan</strong>
-          ) : (
-            <strong>Create New Delivery Challan</strong>
-          )
-        }
-        centered
-        size="70%"
-      >
-        {/* Only one print template block */}
-        <Group mb="md" w="50%" grow>
-          <TextInput
-            label="Challan #"
-            placeholder="Enter Challan Number"
-            value={challanId}
-            onChange={(e) => setChallanId(e.currentTarget.value)}
-          />
-          <TextInput
-            label="Delivery Date"
-            type="date"
-            value={deliveryDate}
-            onChange={(e) => setDeliveryDate(e.currentTarget.value)}
-          />
-        </Group>
-
-        <Group grow mb="md">
-          <TextInput
-            label="PO No"
-            placeholder="Enter PO Number"
-            value={poNo}
-            onChange={(e) => setPoNo(e.currentTarget.value)}
-          />
-          <TextInput
-            label="PO Date"
-            type="date"
-            value={poDate}
-            onChange={(e) => setPoDate(e.currentTarget.value)}
-          />
-          <Autocomplete
-            label="Party Name"
-            placeholder="Search or enter party name"
-            data={partyOptions.map((p) => p.name)}
-            value={partyName}
-            onChange={(val) => {
-              setPartyName(val);
-              const match = partyOptions.find((p) => p.name === val);
-              if (match) setPartyAddress(match.address || "");
-            }}
-          />
-          <TextInput
-            label="Party Address"
-            placeholder="Enter Party Address"
-            value={partyAddress}
-            onChange={(e) => setPartyAddress(e.currentTarget.value)}
-          />
-        </Group>
-
-        <Group mb="md">
-          <Button color="#0A6802" onClick={handleAddItem}>
-            Add Item
-          </Button>
-        </Group>
-        {items.length > 0 &&
-          (() => {
-            // REMOVE totalAmount calculation
-            // const totalAmount = items.reduce((sum, item) => {
-            //   return sum + (typeof item.amount === "number" ? item.amount : 0);
-            // }, 0);
-
-            return (
-              <Table withTableBorder highlightOnHover>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>SR</Table.Th>
-                    <Table.Th>Item Code</Table.Th>
-                    <Table.Th style={{ minWidth: 230 }}>Particulars</Table.Th>
-                    <Table.Th>Unit</Table.Th>
-                    <Table.Th>Length</Table.Th>
-                    <Table.Th>Width</Table.Th>
-                    <Table.Th>Qty</Table.Th>
-                    {/* <Table.Th>Amount</Table.Th> REMOVE this column */}
-                    <Table.Th>Actions</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {items.map((item, idx) => (
-                    <Table.Tr key={idx}>
-                      <Table.Td style={{ textAlign: "center" }}>
-                        {item.sr}
-                      </Table.Td>
-                      <Table.Td>
-                        <TextInput
-                          value={item.itemCode ?? ""}
-                          onChange={(e) => {
-                            const value = e?.currentTarget?.value ?? "";
-                            setItems((prev) =>
-                              prev.map((itm, i) =>
-                                i === idx ? { ...itm, itemCode: value } : itm
-                              )
-                            );
-                          }}
-                          placeholder="Item Code"
-                        />
-                      </Table.Td>
-                      <Table.Td>
-                        <TextInput
-                          value={item.particulars ?? ""}
-                          onChange={(e) => {
-                            const value = e?.currentTarget?.value ?? "";
-                            setItems((prev) =>
-                              prev.map((itm, i) =>
-                                i === idx ? { ...itm, particulars: value } : itm
-                              )
-                            );
-                          }}
-                          placeholder="Particulars"
-                        />
-                      </Table.Td>
-                      <Table.Td>
-                        <TextInput
-                          value={item.unit ?? ""}
-                          onChange={(e) => {
-                            const value = e?.currentTarget?.value ?? "";
-                            setItems((prev) =>
-                              prev.map((itm, i) =>
-                                i === idx ? { ...itm, unit: value } : itm
-                              )
-                            );
-                          }}
-                          placeholder="Unit"
-                        />
-                      </Table.Td>
-                      <Table.Td>
-                        <NumberInput
-                          value={item.length ? Number(item.length) : undefined}
-                          onChange={(value) =>
-                            setItems((prev) =>
-                              prev.map((itm, i) =>
-                                i === idx
-                                  ? { ...itm, length: value?.toString() || "" }
-                                  : itm
-                              )
-                            )
-                          }
-                          placeholder="Length"
-                          min={0}
-                        />
-                      </Table.Td>
-                      <Table.Td>
-                        <NumberInput
-                          value={item.width ? Number(item.width) : undefined}
-                          onChange={(value) =>
-                            setItems((prev) =>
-                              prev.map((itm, i) =>
-                                i === idx
-                                  ? { ...itm, width: value?.toString() || "" }
-                                  : itm
-                              )
-                            )
-                          }
-                          placeholder="Width"
-                          min={0}
-                        />
-                      </Table.Td>
-                      <Table.Td>
-                        <NumberInput
-                          value={item.qty ? Number(item.qty) : undefined}
-                          onChange={(value) =>
-                            setItems((prev) =>
-                              prev.map((itm, i) =>
-                                i === idx
-                                  ? { ...itm, qty: value?.toString() || "" }
-                                  : itm
-                              )
-                            )
-                          }
-                          placeholder="Qty"
-                          min={0}
-                        />
-                      </Table.Td>
-                      {/* REMOVE Amount cell */}
-                      <Table.Td style={{ textAlign: "center" }}>
-                        <ActionIcon
-                          variant="light"
-                          color="red"
-                          onClick={() => handleRemoveItem(idx)}
-                        >
-                          <IconTrash size={16} />
-                        </ActionIcon>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                  {/* REMOVE total amount row */}
-                </Table.Tbody>
-              </Table>
-            );
-          })()}
-
-        <Group justify="right" mt="md">
-          <div id="challan-print-content" style={{ display: "none" }}>
-            <ChallanPrintTemplate
-              challan={{
-                challanId,
-                deliveryDate,
-                poNo,
-                poDate,
-                partyName,
-                partyAddress,
-              }}
-              items={items}
-            />
-          </div>
-          <Button color="#819E00" variant="outline" onClick={handleCustomPrint}>
-            Print
-          </Button>
-          <Button color="#0A6802" onClick={handleSave}>
-            {editData ? "Update Challan" : "Create Challan"}
-          </Button>
-          <Button
-            variant="outline"
-            color="#0A6802"
-            onClick={() => setOpened(false)}
-          >
-            Cancel
-          </Button>
-        </Group>
-      </Modal>
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        opened={deleteModalOpen}
-        onClose={cancelDeleteChallan}
-        title={<strong>Delete Delivery Challan</strong>}
-        centered
-        size="sm"
-      >
-        <Text mb="md">
-          Are you sure you want to delete this delivery challan?
-        </Text>
-        <Group justify="right">
-          <Button variant="outline" color="gray" onClick={cancelDeleteChallan}>
-            Cancel
-          </Button>
-          <Button color="red" onClick={confirmDeleteChallan}>
-            Delete
-          </Button>
-        </Group>
-      </Modal>
-    </div>
+        {/* Delete Confirmation Modal */}
+        <Modal
+          opened={deleteModalOpen}
+          onClose={cancelDeleteChallan}
+          title={<strong>Delete Delivery Challan</strong>}
+          centered
+          size="sm"
+        >
+          <Text mb="md">
+            Are you sure you want to delete this delivery challan?
+          </Text>
+          <Group justify="right">
+            <Button
+              variant="outline"
+              color="gray"
+              onClick={cancelDeleteChallan}
+            >
+              Cancel
+            </Button>
+            <Button color="red" onClick={confirmDeleteChallan}>
+              Delete
+            </Button>
+          </Group>
+        </Modal>
+      </div>
+    </>
   );
 }
 
