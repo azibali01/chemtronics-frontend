@@ -45,7 +45,7 @@ export const useDeliveryChallan = () => {
   const context = useContext(DeliveryChallanContext);
   if (!context)
     throw new Error(
-      "useDeliveryChallan must be used within DeliveryChallanProvider"
+      "useDeliveryChallan must be used within DeliveryChallanProvider",
     );
   return context;
 };
@@ -66,7 +66,8 @@ export const DeliveryChallanProvider: React.FC<{
       setChallans(response.data);
     } catch (err) {
       const error = err as { response?: { data?: { message?: string } } };
-      const errorMsg = error.response?.data?.message || "Failed to fetch delivery challans";
+      const errorMsg =
+        error.response?.data?.message || "Failed to fetch delivery challans";
       setError(errorMsg);
       notifications.show({
         title: "Error",
@@ -86,7 +87,7 @@ export const DeliveryChallanProvider: React.FC<{
     try {
       setError(null);
       const response = await api.post("/delivery-chalan", challan);
-      
+
       if (response.status === 201) {
         setChallans((prev) => [...prev, response.data]);
         notifications.show({
@@ -97,7 +98,8 @@ export const DeliveryChallanProvider: React.FC<{
       }
     } catch (err) {
       const error = err as { response?: { data?: { message?: string } } };
-      const errorMsg = error.response?.data?.message || "Failed to create delivery challan";
+      const errorMsg =
+        error.response?.data?.message || "Failed to create delivery challan";
       setError(errorMsg);
       notifications.show({
         title: "Error",
@@ -111,10 +113,13 @@ export const DeliveryChallanProvider: React.FC<{
   const updateChallan = async (challan: DeliveryChallan) => {
     try {
       setError(null);
-      const response = await api.patch(`/delivery-chalan/${challan.id}`, challan);
-      
-      setChallans((prev) => 
-        prev.map((c) => (c.id === challan.id ? response.data : c))
+      const response = await api.patch(
+        `/delivery-chalan/${challan.id}`,
+        challan,
+      );
+
+      setChallans((prev) =>
+        prev.map((c) => (c.id === challan.id ? response.data : c)),
       );
       notifications.show({
         title: "Success",
@@ -123,7 +128,8 @@ export const DeliveryChallanProvider: React.FC<{
       });
     } catch (err) {
       const error = err as { response?: { data?: { message?: string } } };
-      const errorMsg = error.response?.data?.message || "Failed to update delivery challan";
+      const errorMsg =
+        error.response?.data?.message || "Failed to update delivery challan";
       setError(errorMsg);
       notifications.show({
         title: "Error",
@@ -138,7 +144,7 @@ export const DeliveryChallanProvider: React.FC<{
     try {
       setError(null);
       await api.delete(`/delivery-chalan/${id}`);
-      
+
       setChallans((prev) => prev.filter((c) => c.id !== id));
       notifications.show({
         title: "Success",
@@ -147,7 +153,8 @@ export const DeliveryChallanProvider: React.FC<{
       });
     } catch (err) {
       const error = err as { response?: { data?: { message?: string } } };
-      const errorMsg = error.response?.data?.message || "Failed to delete delivery challan";
+      const errorMsg =
+        error.response?.data?.message || "Failed to delete delivery challan";
       setError(errorMsg);
       notifications.show({
         title: "Error",
@@ -162,16 +169,17 @@ export const DeliveryChallanProvider: React.FC<{
     try {
       setIsLoading(true);
       setError(null);
-      
+
       const params: Record<string, string> = {};
       if (term && term.trim()) params.term = term.trim();
       if (status && status.trim()) params.status = status.trim();
-      
+
       const response = await api.get("/delivery-chalan/search", { params });
       setChallans(response.data);
     } catch (err) {
       const error = err as { response?: { data?: { message?: string } } };
-      const errorMsg = error.response?.data?.message || "Failed to search delivery challans";
+      const errorMsg =
+        error.response?.data?.message || "Failed to search delivery challans";
       setError(errorMsg);
       notifications.show({
         title: "Error",

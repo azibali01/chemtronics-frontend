@@ -1,8 +1,19 @@
 // src/api_configuration/api.ts
 import axios from "axios";
 
+const productionApiBaseURL = "https://chemtronics-backend-xufv.onrender.com";
+
+const configuredApiBaseURL = import.meta.env.VITE_API_BASE_URL?.trim().replace(
+  /\/+$/,
+  ""
+);
+
+const apiBaseURL =
+  configuredApiBaseURL ||
+  (import.meta.env.DEV ? "http://localhost:3000" : productionApiBaseURL);
+
 const api = axios.create({
-  baseURL: "http://localhost:3000",
+  baseURL: apiBaseURL,
   withCredentials: true, // ✅ Important for CORS + cookies
 });
 
