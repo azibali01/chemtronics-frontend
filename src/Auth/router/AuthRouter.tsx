@@ -1,15 +1,21 @@
 import type { RouteObject } from "react-router";
 import AuthLayout from "../Layout/AuthLayout";
 import Login from "../Pages/Login";
+import GuestRoute from "../guards/GuestRoute";
 
 const routes: RouteObject[] = [
   {
-    path: "/auth",
-    element: <AuthLayout />,
+    element: <GuestRoute />,
     children: [
       {
-        index: true,
-        element: <Login />,
+        path: "/auth",
+        element: <AuthLayout />,
+        children: [
+          {
+            index: true,
+            element: <Login />,
+          },
+        ],
       },
     ],
   },

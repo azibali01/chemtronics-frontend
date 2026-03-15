@@ -1,6 +1,7 @@
 import type { RouteObject } from "react-router";
 import DashboardLayout from "../dashboardlayout/DashboardLayout";
 import DashboardHome from "../Pages/DashboardHome";
+import ProtectedRoute from "../guards/ProtectedRoute";
 
 // Invoicing
 import SalesInvoice from "../Pages/Invoicing/SalesInvoice";
@@ -36,6 +37,9 @@ import TrialBalance from "../Pages/Ledger&Reports/TrialBalance";
 import CashBook from "../Pages/Accounts/CashBook";
 import JournalVouchers from "../Pages/Accounts/JournalVouchers";
 
+// Audit Logs
+import AuditLogs from "../Pages/Company & Users/AuditLogs";
+
 // Tax & Invoices
 
 // Analytics
@@ -43,56 +47,64 @@ import Analytics from "../Pages/Analytics/Analytics";
 
 const routes: RouteObject[] = [
   {
-    path: "/dashboard",
-    element: <DashboardLayout />,
+    element: <ProtectedRoute />,
     children: [
       {
-        index: true,
-        element: <DashboardHome />,
+        path: "/dashboard",
+        element: <DashboardLayout />,
+        children: [
+          {
+            index: true,
+            element: <DashboardHome />,
+          },
+          { path: "dashboard-home", element: <DashboardHome /> },
+
+          // Company & Users
+          { path: "manage-companies", element: <ManageCompanies /> },
+          { path: "manage-users", element: <ManageUsers /> },
+          { path: "permissions", element: <Permissions /> },
+
+          // Chart of Accounts
+          { path: "chart-of-accounts", element: <ChartOfAccounts /> },
+          {
+            path: "accounts-opening-balances",
+            element: <AccountsOpeningBalances />,
+          },
+
+          // Invoicing
+          { path: "sales-invoice", element: <SalesInvoice /> },
+          { path: "purchase-invoice", element: <PurchaseInvoice /> },
+          { path: "purchase-returns", element: <PurchaseReturns /> },
+          { path: "credit-sale-invoice", element: <CreditSaleInvoice /> },
+          { path: "sale-returns", element: <SaleReturns /> },
+          { path: "delivery-challans", element: <DeliveryChallans /> },
+
+          // Inventory
+          { path: "products", element: <Products /> },
+          { path: "stock-ledger", element: <StockLedger /> },
+          { path: "stock-reports", element: <StockReports /> },
+
+          // Ledger & Reports
+          { path: "general-ledger", element: <GeneralLedger /> },
+          { path: "sales-ledger", element: <SalesLedger /> },
+          { path: "purchase-ledger", element: <PurchaseLedger /> },
+          { path: "accounts-receivable", element: <AccountsReceivable /> },
+          { path: "accounts-payable", element: <AccountsPayable /> },
+          { path: "trial-balance", element: <TrialBalance /> },
+
+          // Accounts
+          { path: "cash-book", element: <CashBook /> },
+          { path: "journal-vouchers", element: <JournalVouchers /> },
+
+          // Audit Logs
+          { path: "audit-logs", element: <AuditLogs /> },
+
+          // Tax & Invoices
+
+          // Analytics
+          { path: "analytics", element: <Analytics /> },
+        ],
       },
-      { path: "dashboard-home", element: <DashboardHome /> },
-
-      // Company & Users
-      { path: "manage-companies", element: <ManageCompanies /> },
-      { path: "manage-users", element: <ManageUsers /> },
-      { path: "permissions", element: <Permissions /> },
-
-      // Chart of Accounts
-      { path: "chart-of-accounts", element: <ChartOfAccounts /> },
-      {
-        path: "accounts-opening-balances",
-        element: <AccountsOpeningBalances />,
-      },
-
-      // Invoicing
-      { path: "sales-invoice", element: <SalesInvoice /> },
-      { path: "purchase-invoice", element: <PurchaseInvoice /> },
-      { path: "purchase-returns", element: <PurchaseReturns /> },
-      { path: "credit-sale-invoice", element: <CreditSaleInvoice /> },
-      { path: "sale-returns", element: <SaleReturns /> },
-      { path: "delivery-challans", element: <DeliveryChallans /> },
-
-      // Inventory
-      { path: "products", element: <Products /> },
-      { path: "stock-ledger", element: <StockLedger /> },
-      { path: "stock-reports", element: <StockReports /> },
-
-      // Ledger & Reports
-      { path: "general-ledger", element: <GeneralLedger /> },
-      { path: "sales-ledger", element: <SalesLedger /> },
-      { path: "purchase-ledger", element: <PurchaseLedger /> },
-      { path: "accounts-receivable", element: <AccountsReceivable /> },
-      { path: "accounts-payable", element: <AccountsPayable /> },
-      { path: "trial-balance", element: <TrialBalance /> },
-
-      // Accounts
-      { path: "cash-book", element: <CashBook /> },
-      { path: "journal-vouchers", element: <JournalVouchers /> },
-
-      // Tax & Invoices
-
-      // Analytics
-      { path: "analytics", element: <Analytics /> },
     ],
   },
 ];

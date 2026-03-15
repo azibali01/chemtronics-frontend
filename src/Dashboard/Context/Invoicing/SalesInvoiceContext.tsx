@@ -27,9 +27,11 @@ type Invoice = {
   saleAccount?: string;
   saleAccountTitle?: string;
   ntnNumber?: string; // <-- changed
+  strnNumber?: string;
   amount: number;
   netAmount?: number;
   items?: InvoiceItem[];
+  isChallanGenerated?: boolean;
 };
 
 type SalesInvoiceContextType = {
@@ -40,7 +42,7 @@ type SalesInvoiceContextType = {
 };
 
 const SalesInvoiceContext = createContext<SalesInvoiceContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export const SalesInvoiceProvider = ({ children }: { children: ReactNode }) => {
@@ -65,7 +67,7 @@ export const useSalesInvoice = () => {
   const context = useContext(SalesInvoiceContext);
   if (!context) {
     throw new Error(
-      "useSalesInvoice must be used within a SalesInvoiceProvider"
+      "useSalesInvoice must be used within a SalesInvoiceProvider",
     );
   }
   return context;

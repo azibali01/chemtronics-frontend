@@ -19,6 +19,7 @@ import {
   IconPencil,
   IconDownload,
   IconSearch,
+  IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState, useRef, useEffect } from "react";
 import jsPDF from "jspdf";
@@ -36,6 +37,25 @@ import { notifications } from "@mantine/notifications";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import { getReceivableAccounts } from "../../utils/receivableAccounts";
 import type { AccountNode } from "../../Context/ChartOfAccountsContext";
+
+type FieldErrors = Record<string, string>;
+
+function parseValidationMessages(messages: string[]): {
+  fieldErrors: FieldErrors;
+  globalErrors: string[];
+} {
+  const fieldErrors: FieldErrors = {};
+  const globalErrors: string[] = [];
+  for (const msg of messages) {
+    const match = msg.match(/^([\.\w\[\]]+)\s+(must|should)/i);
+    if (match) {
+      fieldErrors[match[1]] = msg;
+    } else {
+      globalErrors.push(msg);
+    }
+  }
+  return { fieldErrors, globalErrors };
+}
 
 function SaleReturnsInner() {
   const { returns, setReturns } = useSaleReturns(); // Updated to use setReturns instead of addReturn, updateReturn, deleteReturn
@@ -141,7 +161,7 @@ function SaleReturnsInner() {
         doc.text(
           `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
           480,
-          doc.internal.pageSize.height - 30
+          doc.internal.pageSize.height - 30,
         );
       },
     });
@@ -244,7 +264,7 @@ function SaleReturnsInner() {
         doc.text(
           `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
           480,
-          doc.internal.pageSize.height - 30
+          doc.internal.pageSize.height - 30,
         );
       },
     });
@@ -339,7 +359,7 @@ function SaleReturnsInner() {
 
       const response = await api.post(
         "/sale-return", // Changed path
-        payload
+        payload,
       );
 
       if (response.data) {
@@ -355,13 +375,28 @@ function SaleReturnsInner() {
         setOpened(false);
         resetForm();
       }
-    } catch (error: any) {
-      notifications.show({
-        title: "Error",
-        message:
-          error.response?.data?.message || "Failed to create sale return",
-        color: "red",
-      });
+    } catch (error: unknown) {
+      const msg = (error as { response?: { data?: { message?: unknown } } })
+        ?.response?.data?.message;
+      if (Array.isArray(msg)) {
+        const { globalErrors: ge } = parseValidationMessages(msg);
+        notifications.show({
+          title: ge.length > 0 ? "Operation Failed" : "Validation Error",
+          message: ge.length > 0 ? ge.join(", ") : msg.join("\n"),
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      } else {
+        notifications.show({
+          title: "Operation Failed",
+          message:
+            typeof msg === "string" && msg
+              ? msg
+              : "Failed to create sale return",
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      }
       console.error("Error creating sale return:", error);
     }
   };
@@ -384,13 +419,13 @@ function SaleReturnsInner() {
 
       const response = await api.put(
         `/sale-return/${returnData.id}`, // Changed path
-        payload
+        payload,
       );
 
       if (response.data) {
         // Update local state after successful backend update
         setReturns((prev) =>
-          prev.map((r) => (r.id === returnData.id ? response.data : r))
+          prev.map((r) => (r.id === returnData.id ? response.data : r)),
         );
 
         notifications.show({
@@ -402,13 +437,28 @@ function SaleReturnsInner() {
         setOpened(false);
         setEditData(null);
       }
-    } catch (error: any) {
-      notifications.show({
-        title: "Error",
-        message:
-          error.response?.data?.message || "Failed to update sale return",
-        color: "red",
-      });
+    } catch (error: unknown) {
+      const msg = (error as { response?: { data?: { message?: unknown } } })
+        ?.response?.data?.message;
+      if (Array.isArray(msg)) {
+        const { globalErrors: ge } = parseValidationMessages(msg);
+        notifications.show({
+          title: ge.length > 0 ? "Operation Failed" : "Validation Error",
+          message: ge.length > 0 ? ge.join(", ") : msg.join("\n"),
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      } else {
+        notifications.show({
+          title: "Operation Failed",
+          message:
+            typeof msg === "string" && msg
+              ? msg
+              : "Failed to update sale return",
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      }
       console.error("Error updating sale return:", error);
     }
   };
@@ -428,13 +478,28 @@ function SaleReturnsInner() {
       });
 
       setDeleteId(null);
-    } catch (error: any) {
-      notifications.show({
-        title: "Error",
-        message:
-          error.response?.data?.message || "Failed to delete sale return",
-        color: "red",
-      });
+    } catch (error: unknown) {
+      const msg = (error as { response?: { data?: { message?: unknown } } })
+        ?.response?.data?.message;
+      if (Array.isArray(msg)) {
+        const { globalErrors: ge } = parseValidationMessages(msg);
+        notifications.show({
+          title: ge.length > 0 ? "Operation Failed" : "Validation Error",
+          message: ge.length > 0 ? ge.join(", ") : msg.join("\n"),
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      } else {
+        notifications.show({
+          title: "Operation Failed",
+          message:
+            typeof msg === "string" && msg
+              ? msg
+              : "Failed to delete sale return",
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      }
       console.error("Error deleting sale return:", error);
     }
   };
@@ -510,12 +575,12 @@ function SaleReturnsInner() {
       const itemsList = invoice.items || [];
       const subtotal = itemsList.reduce(
         (s, it) => s + (it.quantity || 0) * (it.rate || 0),
-        0
+        0,
       );
       const totalDiscount = itemsList.reduce(
         (s, it) =>
           s + ((it.quantity || 0) * (it.rate || 0) * (it.discount || 0)) / 100,
-        0
+        0,
       );
       const grandTotal = subtotal - totalDiscount;
 
@@ -717,7 +782,7 @@ function SaleReturnsInner() {
                 <div>PKR ${grandTotal.toFixed(2)}</div>
               </div>
               <div style="margin-top:10px; font-size:12px;">Amount in words: ${numberToWordsLocal(
-                Math.round(grandTotal)
+                Math.round(grandTotal),
               )}</div>
               ${
                 invoice.notes
@@ -813,7 +878,7 @@ function SaleReturnsInner() {
     (acc: AccountNode) => ({
       value: acc.accountCode || acc.selectedCode,
       label: `${acc.accountCode || acc.selectedCode} - ${acc.accountName}`,
-    })
+    }),
   );
 
   const customerTitleOptions = receivablesAccounts.map((acc: AccountNode) => ({
@@ -828,8 +893,8 @@ function SaleReturnsInner() {
       new Map(
         customerAccountOptions
           .filter((a: { value: string; label: string }) => a.value && a.label)
-          .map((a: { value: string; label: string }) => [a.value, a])
-      ).values()
+          .map((a: { value: string; label: string }) => [a.value, a]),
+      ).values(),
     );
 
   const uniqueCustomerTitleOptions: { value: string; label: string }[] =
@@ -837,8 +902,8 @@ function SaleReturnsInner() {
       new Map(
         customerTitleOptions
           .filter((a: { value: string; label: string }) => a.value && a.label)
-          .map((a: { value: string; label: string }) => [a.value, a])
-      ).values()
+          .map((a: { value: string; label: string }) => [a.value, a]),
+      ).values(),
     );
 
   // Fetch and transform products
@@ -878,13 +943,16 @@ function SaleReturnsInner() {
                 `p-${Math.random().toString(36).slice(2, 8)}`,
               code: String(product.code || ""),
               productName: String(
-                product.name || product.productname || product.productName || ""
+                product.name ||
+                  product.productname ||
+                  product.productName ||
+                  "",
               ),
               unitPrice: product.unitPrice || product.unit_price || 0,
               productDescription: String(
-                product.description || product.productDescription || ""
+                product.description || product.productDescription || "",
               ),
-            })
+            }),
           );
           setProductList(transformedProducts);
         } else {
@@ -903,7 +971,7 @@ function SaleReturnsInner() {
     (sum, item) =>
       sum +
       ((item.amount ?? 0) - ((item.amount ?? 0) * (item.discount ?? 0)) / 100),
-    0
+    0,
   );
 
   return (
@@ -1095,7 +1163,7 @@ function SaleReturnsInner() {
                 setCustomer(v || "");
                 // Find account by accountCode from receivablesAccounts
                 const acc = receivablesAccounts.find(
-                  (a: AccountNode) => (a.accountCode || a.selectedCode) === v
+                  (a: AccountNode) => (a.accountCode || a.selectedCode) === v,
                 );
                 if (acc) {
                   setCustomerTitle(acc.accountName || "");
@@ -1115,15 +1183,15 @@ function SaleReturnsInner() {
                 setCustomerTitle(v || "");
                 // Find account by name from receivablesAccounts
                 const acc = receivablesAccounts.find(
-                  (a: AccountNode) => a.accountName === v
+                  (a: AccountNode) => a.accountName === v,
                 );
                 if (acc) {
                   setCustomer(
                     acc.accountCode !== undefined
                       ? String(acc.accountCode)
                       : acc.selectedCode !== undefined
-                      ? String(acc.selectedCode)
-                      : ""
+                        ? String(acc.selectedCode)
+                        : "",
                   );
                 } else {
                   setCustomer("");
@@ -1221,7 +1289,7 @@ function SaleReturnsInner() {
                   onChange={(val) => {
                     if (!val) return;
                     const selectedProduct = productList.find(
-                      (p) => p.id === val
+                      (p) => p.id === val,
                     );
                     if (!selectedProduct) return;
 

@@ -1,267 +1,367 @@
-import { Card, Group, Stack, Text, Button } from "@mantine/core";
 import {
-  IconCalendar,
-  IconPlus,
-  IconFileText,
-  IconPackage,
-  IconUsers,
+  Card,
+  Group,
+  Stack,
+  Text,
+  SimpleGrid,
+  Badge,
+  Table,
+  Loader,
+  Alert,
+  ActionIcon,
+  Tooltip,
+  Center,
+} from "@mantine/core";
+import {
   IconTrendingUp,
-  IconCurrencyDollar,
-  IconBox,
   IconTrendingDown,
   IconAlertTriangle,
+  IconArrowUpRight,
+  IconArrowDownRight,
+  IconRefresh,
+  IconCurrencyDollar,
 } from "@tabler/icons-react";
-import { useNavigate } from "react-router-dom";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as ReTooltip,
+} from "recharts";
 import { useDashboardHome } from "../Context/DashboardHomeContext";
+import { useBrand } from "../Context/BrandContext";
 
-const quickActions = [
-  {
-    title: "Create Sales Invoice",
-    description: "Generate a new sales invoice",
-    icon: IconFileText,
-    href: "/invoicing/sales",
-    color: "blue",
-  },
-  {
-    title: "Add Product",
-    description: "Add new product to inventory",
-    icon: IconPackage,
-    href: "/products",
-    color: "green",
-  },
-  {
-    title: "Add User",
-    description: "Create new user account",
-    icon: IconUsers,
-    href: "/users",
-    color: "grape",
-  },
-];
+function fmtNum(n: number) {
+  return Math.round(n).toLocaleString("en-PK");
+}
+
+function pctChange(current: number, prior: number): number | null {
+  if (prior === 0) return null;
+  return ((current - prior) / prior) * 100;
+}
 
 export default function DashboardHome() {
-  const navigate = useNavigate();
-  const { stats } = useDashboardHome();
+  const { stats, loading, error, refetch } = useDashboardHome();
+  const { brand } = useBrand();
+
+  const salesDelta = pctChange(stats.currentMonthSales, stats.lastMonthSales);
 
   return (
-    <Group align="stretch" gap={0}>
-      <Stack style={{ flex: 1, overflow: "hidden" }}>
-        {/* Header */}
-        <Group
-          justify="space-between"
-          align="center"
-          px={24}
-          py={12}
-          style={{
-            borderBottom: "1px solid #eee",
-            background: "#fff",
-          }}
-        >
-          <Text size="xl" fw={700}>
+    <Stack gap="lg" p="md">
+      {/* Header */}
+      <Group justify="space-between" align="center">
+        <Stack gap={2}>
+          <Text size="xl" fw={700} c="#0A6802">
             Dashboard
           </Text>
-          <Button
-            leftSection={<IconCalendar size={16} />}
-            size="sm"
-            color="#0A6802"
-          >
-            Today
-          </Button>
-        </Group>
-        {/* Main Content */}
-        <Stack px={24} py={24} gap={24} style={{ flex: 1, overflowY: "auto" }}>
-          <Group gap={24} mb={24} style={{ flexWrap: "wrap" }}>
-            <Card
-              withBorder
-              radius={"md"}
-              shadow="sm"
-              style={{
-                background: "#f6fff7",
-                minWidth: 320,
-                flex: "1 1 30%",
-                marginBottom: 16,
-              }}
-            >
-              <Group justify="space-between" align="flex-start">
-                <Stack gap={0}>
-                  <Text fw={600} size="lg">
-                    Total Sales
-                  </Text>
-                  <Text fw={700} size="2xl" mt={8}>
-                    ${stats.totalSales.toLocaleString()}
-                  </Text>
-                </Stack>
-                <IconCurrencyDollar size={24} color="#222" />
-              </Group>
-            </Card>
-            <Card
-              withBorder
-              radius={"md"}
-              shadow="sm"
-              style={{
-                background: "#f6fff7",
-                minWidth: 320,
-                flex: "1 1 30%",
-                marginBottom: 16,
-              }}
-            >
-              <Group justify="space-between" align="flex-start">
-                <Stack gap={0}>
-                  <Text fw={600} size="lg">
-                    Total Purchases
-                  </Text>
-                  <Text fw={700} size="2xl" mt={8}>
-                    ${stats.totalPurchases.toLocaleString()}
-                  </Text>
-                </Stack>
-                <IconBox size={24} color="#222" />
-              </Group>
-            </Card>
-            <Card
-              withBorder
-              radius={"md"}
-              shadow="sm"
-              style={{
-                background: "#f6fff7",
-                minWidth: 320,
-                flex: "1 1 30%",
-                marginBottom: 16,
-              }}
-            >
-              <Group justify="space-between" align="flex-start">
-                <Stack gap={0}>
-                  <Text fw={600} size="lg">
-                    Stock in Hand
-                  </Text>
-                  <Text fw={700} size="2xl" mt={8}>
-                    ${stats.stockInHand.toLocaleString()}
-                  </Text>
-                </Stack>
-                <IconBox size={24} color="#222" />
-              </Group>
-            </Card>
-            <Card
-              withBorder
-              radius={"md"}
-              shadow="sm"
-              style={{
-                background: "#f6fff7",
-                minWidth: 320,
-                flex: "1 1 30%",
-                marginBottom: 16,
-              }}
-            >
-              <Group justify="space-between" align="flex-start">
-                <Stack gap={0}>
-                  <Text fw={600} size="lg">
-                    Receivables
-                  </Text>
-                  <Text fw={700} size="2xl" mt={8}>
-                    ${stats.receivables.toLocaleString()}
-                  </Text>
-                </Stack>
-                <IconTrendingUp size={24} color="#222" />
-              </Group>
-            </Card>
-            <Card
-              withBorder
-              radius={"md"}
-              shadow="sm"
-              style={{
-                background: "#f6fff7",
-                minWidth: 320,
-                flex: "1 1 30%",
-                marginBottom: 16,
-              }}
-            >
-              <Group justify="space-between" align="flex-start">
-                <Stack gap={0}>
-                  <Text fw={600} size="lg">
-                    Payables
-                  </Text>
-                  <Text fw={700} size="2xl" mt={8}>
-                    ${stats.payables.toLocaleString()}
-                  </Text>
-                </Stack>
-                <IconTrendingDown size={24} color="#222" />
-              </Group>
-            </Card>
-            <Card
-              withBorder
-              shadow="sm"
-              style={{
-                background: "#f6fff7",
-                minWidth: 320,
-                flex: "1 1 30%",
-                marginBottom: 16,
-              }}
-            >
-              <Group justify="space-between" align="flex-start">
-                <Stack gap={0}>
-                  <Text fw={600} size="lg">
-                    Low Stock Items
-                  </Text>
-                  <Text fw={700} size="2xl" mt={8}>
-                    {stats.lowStockItems}
-                  </Text>
-                </Stack>
-                <IconAlertTriangle size={24} color="#222" />
-              </Group>
-            </Card>
-          </Group>
-          <Card withBorder shadow="sm" bg="#F1FCF0" radius={"md"}>
-            <Stack>
-              <Text fw={600} size="lg">
-                Quick Actions
-              </Text>
-              <Text size="sm" c="dimmed">
-                Frequently used actions for faster workflow
-              </Text>
-              <Stack gap={12} mt={8}>
-                {quickActions.map((action) => (
-                  <Group
-                    key={action.title}
-                    align="center"
-                    gap={16}
-                    style={{
-                      border: "1px solid #eee",
-                      borderRadius: 8,
-                      padding: 12,
-                      cursor: "pointer",
-                      background: "#fff",
-                      transition: "background 0.2s",
-                    }}
-                    onClick={() => {
-                      if (action.title === "Create Sales Invoice")
-                        navigate("/dashboard/sales-invoice");
-                      if (action.title === "Add User")
-                        navigate("/dashboard/manage-users");
-                    }}
-                  >
-                    <Button
-                      color={action.color}
-                      variant="light"
-                      radius="md"
-                      size="md"
-                      style={{ minWidth: 40, padding: 0 }}
-                    >
-                      <action.icon size={18} />
-                    </Button>
-                    <Stack gap={0} style={{ flex: 1 }}>
-                      <Text fw={500}>{action.title}</Text>
-                      <Text size="xs" c="dimmed">
-                        {action.description}
-                      </Text>
-                    </Stack>
-                    <Button variant="subtle" color="gray" size="sm" radius="md">
-                      <IconPlus size={16} />
-                    </Button>
-                  </Group>
-                ))}
-              </Stack>
-            </Stack>
-          </Card>
+          <Text size="sm" c="dimmed" tt="capitalize">
+            {brand} — overview for the current month
+          </Text>
         </Stack>
-      </Stack>
-    </Group>
+        <Tooltip label="Refresh stats">
+          <ActionIcon
+            variant="light"
+            color="#0A6802"
+            size="lg"
+            onClick={refetch}
+            loading={loading}
+          >
+            <IconRefresh size={18} />
+          </ActionIcon>
+        </Tooltip>
+      </Group>
+
+      {error && (
+        <Alert
+          color="red"
+          title="Error loading stats"
+          icon={<IconAlertTriangle size={16} />}
+        >
+          {error}
+        </Alert>
+      )}
+
+      {/* ── Stat Cards ─────────────────────────────────────────────────── */}
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+        {/* Sales This Month */}
+        <Card
+          withBorder
+          shadow="sm"
+          radius="md"
+          style={{ borderLeft: "4px solid #0A6802" }}
+        >
+          <Group justify="space-between" align="flex-start">
+            <Stack gap={4} style={{ flex: 1 }}>
+              <Text size="xs" fw={600} c="dimmed" tt="uppercase" lts={0.5}>
+                Sales This Month
+              </Text>
+              {loading ? (
+                <Loader size="sm" color="#0A6802" />
+              ) : (
+                <>
+                  <Text size="xl" fw={800}>
+                    Rs. {fmtNum(stats.currentMonthSales)}
+                  </Text>
+                  <Group gap={4}>
+                    {salesDelta !== null ? (
+                      <>
+                        {salesDelta >= 0 ? (
+                          <IconArrowUpRight size={14} color="green" />
+                        ) : (
+                          <IconArrowDownRight size={14} color="red" />
+                        )}
+                        <Text size="xs" c={salesDelta >= 0 ? "green" : "red"}>
+                          {Math.abs(salesDelta).toFixed(1)}% vs last month
+                        </Text>
+                      </>
+                    ) : (
+                      <Text size="xs" c="dimmed">
+                        No prior month data
+                      </Text>
+                    )}
+                  </Group>
+                </>
+              )}
+            </Stack>
+            <IconCurrencyDollar size={28} color="#0A6802" opacity={0.5} />
+          </Group>
+        </Card>
+
+        {/* Sales Last Month */}
+        <Card
+          withBorder
+          shadow="sm"
+          radius="md"
+          style={{ borderLeft: "4px solid #819E00" }}
+        >
+          <Group justify="space-between" align="flex-start">
+            <Stack gap={4}>
+              <Text size="xs" fw={600} c="dimmed" tt="uppercase" lts={0.5}>
+                Sales Last Month
+              </Text>
+              {loading ? (
+                <Loader size="sm" color="#819E00" />
+              ) : (
+                <Text size="xl" fw={800}>
+                  Rs. {fmtNum(stats.lastMonthSales)}
+                </Text>
+              )}
+            </Stack>
+            <IconCurrencyDollar size={28} color="#819E00" opacity={0.5} />
+          </Group>
+        </Card>
+
+        {/* Receivables */}
+        <Card
+          withBorder
+          shadow="sm"
+          radius="md"
+          style={{ borderLeft: "4px solid #1971c2" }}
+        >
+          <Group justify="space-between" align="flex-start">
+            <Stack gap={4}>
+              <Text size="xs" fw={600} c="dimmed" tt="uppercase" lts={0.5}>
+                Total Receivables
+              </Text>
+              {loading ? (
+                <Loader size="sm" color="blue" />
+              ) : (
+                <Text size="xl" fw={800}>
+                  Rs. {fmtNum(stats.totalReceivables)}
+                </Text>
+              )}
+              <Text size="xs" c="dimmed">
+                Owed by customers
+              </Text>
+            </Stack>
+            <IconTrendingUp size={28} color="#1971c2" opacity={0.5} />
+          </Group>
+        </Card>
+
+        {/* Payables */}
+        <Card
+          withBorder
+          shadow="sm"
+          radius="md"
+          style={{ borderLeft: "4px solid #c2255c" }}
+        >
+          <Group justify="space-between" align="flex-start">
+            <Stack gap={4}>
+              <Text size="xs" fw={600} c="dimmed" tt="uppercase" lts={0.5}>
+                Total Payables
+              </Text>
+              {loading ? (
+                <Loader size="sm" color="pink" />
+              ) : (
+                <Text size="xl" fw={800}>
+                  Rs. {fmtNum(stats.totalPayables)}
+                </Text>
+              )}
+              <Text size="xs" c="dimmed">
+                Owed to suppliers
+              </Text>
+            </Stack>
+            <IconTrendingDown size={28} color="#c2255c" opacity={0.5} />
+          </Group>
+        </Card>
+      </SimpleGrid>
+
+      {/* ── Chart + Top Products ──────────────────────────────────────── */}
+      <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+        {/* Sales Trend Line Chart */}
+        <Card withBorder shadow="sm" radius="md">
+          <Text fw={600} mb="md">
+            Sales Trend — Last 6 Months
+          </Text>
+          {loading ? (
+            <Center h={220}>
+              <Loader color="#0A6802" />
+            </Center>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart
+                data={stats.monthlySalesTrend}
+                margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(v: number) =>
+                    v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
+                  }
+                />
+                <ReTooltip
+                  formatter={(value: number) => [
+                    `Rs. ${fmtNum(value)}`,
+                    "Sales",
+                  ]}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  stroke="#0A6802"
+                  strokeWidth={2.5}
+                  dot={{ fill: "#0A6802", r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </Card>
+
+        {/* Top 5 Selling Products */}
+        <Card withBorder shadow="sm" radius="md">
+          <Text fw={600} mb="md">
+            Top 5 Selling Products
+          </Text>
+          {loading ? (
+            <Center h={220}>
+              <Loader color="#0A6802" />
+            </Center>
+          ) : (
+            <Table highlightOnHover withTableBorder fz="sm">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>#</Table.Th>
+                  <Table.Th>Product</Table.Th>
+                  <Table.Th ta="right">Qty Sold</Table.Th>
+                  <Table.Th ta="right">Revenue (Rs.)</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {stats.topProducts.length > 0 ? (
+                  stats.topProducts.map((p, i) => (
+                    <Table.Tr key={p.code ?? i}>
+                      <Table.Td>
+                        <Badge size="sm" color="#819E00" variant="light">
+                          {i + 1}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>{p.productName}</Table.Td>
+                      <Table.Td ta="right">{fmtNum(p.totalQtySold)}</Table.Td>
+                      <Table.Td ta="right" fw={600}>
+                        {fmtNum(p.totalRevenue)}
+                      </Table.Td>
+                    </Table.Tr>
+                  ))
+                ) : (
+                  <Table.Tr>
+                    <Table.Td colSpan={4} ta="center" c="dimmed">
+                      No sales data yet
+                    </Table.Td>
+                  </Table.Tr>
+                )}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Card>
+      </SimpleGrid>
+
+      {/* ── Low Stock Alerts ─────────────────────────────────────────── */}
+      <Card withBorder shadow="sm" radius="md">
+        <Group justify="space-between" mb="md">
+          <Text fw={600}>Low Stock Alerts</Text>
+          <Badge
+            color="red"
+            variant="filled"
+            leftSection={<IconAlertTriangle size={12} />}
+          >
+            {stats.lowStockProducts.length} item
+            {stats.lowStockProducts.length !== 1 ? "s" : ""}
+          </Badge>
+        </Group>
+        {loading ? (
+          <Center py="md">
+            <Loader color="red" />
+          </Center>
+        ) : (
+          <Table highlightOnHover withTableBorder fz="sm">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Code</Table.Th>
+                <Table.Th>Product</Table.Th>
+                <Table.Th ta="right">In Stock</Table.Th>
+                <Table.Th ta="right">Min Level</Table.Th>
+                <Table.Th ta="right">Shortfall</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {stats.lowStockProducts.length > 0 ? (
+                stats.lowStockProducts.map((p, i) => (
+                  <Table.Tr key={p.code ?? i}>
+                    <Table.Td>
+                      <Text c="dimmed" fz="xs">
+                        {p.code}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td fw={500}>{p.productName}</Table.Td>
+                    <Table.Td ta="right">
+                      <Badge color="red" variant="light">
+                        {p.quantity}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td ta="right">{p.minimumStockLevel}</Table.Td>
+                    <Table.Td ta="right">
+                      <Text c="red" fw={600}>
+                        {p.minimumStockLevel - p.quantity}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ))
+              ) : (
+                <Table.Tr>
+                  <Table.Td colSpan={5} ta="center" c="dimmed">
+                    All products are adequately stocked
+                  </Table.Td>
+                </Table.Tr>
+              )}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Card>
+    </Stack>
   );
 }

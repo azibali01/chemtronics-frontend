@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { useDisclosure } from "@mantine/hooks";
 import {
   AppShell,
   ScrollArea,
@@ -8,6 +9,8 @@ import {
   Text,
   Box,
   Button,
+  Tooltip,
+  ActionIcon,
 } from "@mantine/core";
 import {
   IconChevronDown,
@@ -19,12 +22,16 @@ import {
   IconBook,
   IconFileInvoice,
   IconPackage,
-  IconReportAnalytics,
   IconCash,
   IconHome,
+  IconShieldCheck,
+  IconChevronsLeft,
+  IconChevronsRight,
 } from "@tabler/icons-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import BrandToggle from "../../toggle/BrandToggle";
+import { useAuth } from "../../Auth/Context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 type MenuChild = {
   label: string;
@@ -37,6 +44,8 @@ type MenuItem = {
   icon: ReactNode;
   children?: MenuChild[];
   path?: string;
+  /** If defined, only users with one of these roles will see this item */
+  allowedRoles?: string[];
 };
 const menuItems: MenuItem[] = [
   {
@@ -53,6 +62,7 @@ const menuItems: MenuItem[] = [
   {
     label: "Company & Users",
     icon: <IconBuildingSkyscraper size={18} />,
+    allowedRoles: ["Super Admin", "Company Admin"],
     children: [
       {
         label: "Manage Companies",
@@ -98,6 +108,11 @@ const menuItems: MenuItem[] = [
         path: "/dashboard/sales-invoice",
       },
       {
+        label: "Delivery Challan",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/delivery-challans",
+      },
+      {
         label: "Purchase Invoice",
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/purchase-invoice",
@@ -116,11 +131,6 @@ const menuItems: MenuItem[] = [
         label: "Sale Returns",
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/sale-returns",
-      },
-      {
-        label: "Delivery Challan",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/delivery-challans",
       },
     ],
   },
@@ -151,44 +161,21 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
-    label: "Ledger & Reports",
-    icon: <IconReportAnalytics size={18} />,
+    label: "Audit Logs",
+    icon: <IconShieldCheck size={18} />,
+    allowedRoles: ["Super Admin"],
     children: [
       {
-        label: "General Ledger",
+        label: "Audit Logs",
         icon: <IconArrowRight size={16} />,
-        path: "/dashboard/general-ledger",
-      },
-      // {
-      //   label: "Sales Ledger",
-      //   icon: <IconArrowRight size={16} />,
-      //   path: "/dashboard/sales-ledger",
-      // },
-      // {
-      //   label: "Purchase Ledger",
-      //   icon: <IconArrowRight size={16} />,
-      //   path: "/dashboard/purchase-ledger",
-      // },
-      {
-        label: "Accounts Receivable",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/accounts-receivable",
-      },
-      {
-        label: "Accounts Payable",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/accounts-payable",
-      },
-      {
-        label: "Trial Balance",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/trial-balance",
+        path: "/dashboard/audit-logs",
       },
     ],
   },
   {
     label: "Accounts",
     icon: <IconCash size={18} />,
+    allowedRoles: ["Super Admin", "Company Admin", "Accounts User", "Staff"],
     children: [
       {
         label: "Cash Book",
@@ -200,13 +187,41 @@ const menuItems: MenuItem[] = [
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/journal-vouchers",
       },
+      {
+        label: "General Ledger",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/general-ledger",
+      },
+      {
+        label: "Trial Balance",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/trial-balance",
+      },
+      {
+        label: "Accounts Receivable",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/accounts-receivable",
+      },
+      {
+        label: "Accounts Payable",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/accounts-payable",
+      },
     ],
   },
 ];
 
 export default function DashboardLayout() {
   const [opened, setOpened] = useState<{ [key: string]: boolean }>({});
+  const [collapsed, { toggle: toggleSidebar }] = useDisclosure(false);
   const location = useLocation();
+  const { user, logout } = useAuth();
+  const userRole = user?.role ?? "Staff";
+  const navigate = useNavigate();
+
+  const visibleMenuItems = menuItems.filter(
+    (item) => !item.allowedRoles || item.allowedRoles.includes(userRole),
+  );
 
   const basePath = "/dashboard";
 
@@ -218,13 +233,14 @@ export default function DashboardLayout() {
     <AppShell
       header={{ height: 60 }}
       navbar={{
-        width: 260,
+        width: collapsed ? 80 : 300,
         breakpoint: "sm",
         collapsed: { mobile: false },
       }}
       padding="md"
       styles={{
         main: { backgroundColor: "#ffffffff" },
+        navbar: { transition: "width 0.3s ease", overflow: "hidden" },
       }}
     >
       <AppShell.Header>
@@ -288,6 +304,10 @@ export default function DashboardLayout() {
             color="#0A6802"
             style={{ transition: "all 0.3s ease" }}
             rightSection={<IconLogout size={14} color="#ffffffff" />}
+            onClick={() => {
+              logout();
+              navigate("/auth/login");
+            }}
           >
             Logout
           </Button>
@@ -295,97 +315,142 @@ export default function DashboardLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar p="xs" bg={"#F1FCF0"}>
-        <TextInput
-          placeholder="Search"
-          size="xs"
-          leftSection={<IconSearch size={14} color="#819E00" />}
-          styles={{
-            input: {
-              border: "1px solid #0A6802",
-              color: "#000000ff",
-              "::placeholder": { color: "#000000ff" },
-            },
-          }}
-        />
+        {/* Collapse toggle button */}
+        <Group justify={collapsed ? "center" : "flex-end"} mb="xs" px={4}>
+          <Tooltip
+            label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            position="right"
+            withArrow
+          >
+            <ActionIcon
+              variant="subtle"
+              color="#0A6802"
+              onClick={toggleSidebar}
+              size="md"
+            >
+              {collapsed ? (
+                <IconChevronsRight size={18} />
+              ) : (
+                <IconChevronsLeft size={18} />
+              )}
+            </ActionIcon>
+          </Tooltip>
+        </Group>
 
-        <ScrollArea offsetScrollbars style={{ marginTop: 10 }}>
-          {menuItems.map((item) => (
+        {/* Search — hidden when collapsed */}
+        {!collapsed && (
+          <TextInput
+            placeholder="Search"
+            size="xs"
+            leftSection={<IconSearch size={14} color="#819E00" />}
+            styles={{
+              input: {
+                border: "1px solid #0A6802",
+                color: "#000000ff",
+                "::placeholder": { color: "#000000ff" },
+              },
+            }}
+          />
+        )}
+
+        <ScrollArea offsetScrollbars style={{ marginTop: 10, flex: 1 }}>
+          {visibleMenuItems.map((item) => (
             <div key={item.label}>
-              <NavLink
+              <Tooltip
                 label={item.label}
-                leftSection={item.icon}
-                rightSection={
-                  item.children ? (
-                    opened[item.label] ? (
-                      <IconChevronDown size={14} />
-                    ) : (
-                      <IconChevronRight size={14} />
-                    )
-                  ) : null
-                }
-                onClick={() => item.children && toggle(item.label)}
-                active={
-                  location.pathname ===
-                  `${basePath}/${item.label.toLowerCase()}`
-                }
-                styles={{
-                  root: {
-                    borderRadius: 6,
-                    backgroundColor:
-                      location.pathname ===
-                      `${basePath}/${item.label.toLowerCase()}`
-                        ? "#0A6802"
-                        : "transparent",
-                    color:
-                      location.pathname ===
-                      `${basePath}/${item.label.toLowerCase()}`
-                        ? "#ffffff"
-                        : "#222222",
-                    "&:hover": {
-                      backgroundColor: "#819E00",
-                      color: "#ffffff",
+                position="right"
+                withArrow
+                disabled={!collapsed}
+              >
+                <NavLink
+                  label={collapsed ? undefined : item.label}
+                  leftSection={item.icon}
+                  rightSection={
+                    collapsed ? null : item.children ? (
+                      opened[item.label] ? (
+                        <IconChevronDown size={14} />
+                      ) : (
+                        <IconChevronRight size={14} />
+                      )
+                    ) : null
+                  }
+                  onClick={() => item.children && toggle(item.label)}
+                  active={
+                    location.pathname ===
+                    `${basePath}/${item.label.toLowerCase()}`
+                  }
+                  styles={{
+                    root: {
+                      borderRadius: 6,
+                      justifyContent: collapsed ? "center" : "flex-start",
+                      backgroundColor:
+                        location.pathname ===
+                        `${basePath}/${item.label.toLowerCase()}`
+                          ? "#0A6802"
+                          : "transparent",
+                      color:
+                        location.pathname ===
+                        `${basePath}/${item.label.toLowerCase()}`
+                          ? "#ffffff"
+                          : "#222222",
+                      "&:hover": {
+                        backgroundColor: "#819E00",
+                        color: "#ffffff",
+                      },
                     },
-                  },
-                  label: { fontWeight: 600 },
-                }}
-              />
-              {opened[item.label] &&
+                    section: {
+                      marginRight: collapsed ? 0 : undefined,
+                      marginLeft: collapsed ? 0 : undefined,
+                    },
+                    label: { fontWeight: 600 },
+                  }}
+                />
+              </Tooltip>
+              {!collapsed &&
+                opened[item.label] &&
                 item.children?.map((sub) => (
-                  <NavLink
+                  <Tooltip
                     key={sub.path}
                     label={sub.label}
-                    leftSection={sub.icon}
-                    component={Link}
-                    to={sub.path}
-                    active={location.pathname === sub.path}
-                    ml="lg"
-                    styles={{
-                      root: {
-                        fontSize: "0.85rem",
-                        borderRadius: 4,
-                        transition: "all 0.2s ease",
-                        backgroundColor:
-                          location.pathname ===
-                          `${basePath}${sub.path.replace("/dashboard", "")}`
-                            ? "#0A6802"
-                            : "transparent",
-                        color:
-                          location.pathname ===
-                          `${basePath}${sub.path.replace("/dashboard", "")}`
-                            ? "#ffffff"
-                            : "#222222",
-                        "&:hover": {
-                          backgroundColor: "#819E00",
-                          color: "#ffffff",
+                    position="right"
+                    withArrow
+                    disabled
+                  >
+                    <NavLink
+                      label={sub.label}
+                      leftSection={sub.icon}
+                      component={Link}
+                      to={sub.path}
+                      active={location.pathname === sub.path}
+                      ml="lg"
+                      styles={{
+                        root: {
+                          fontSize: "0.85rem",
+                          borderRadius: 4,
+                          transition: "all 0.2s ease",
+                          backgroundColor:
+                            location.pathname ===
+                            `${basePath}${sub.path.replace("/dashboard", "")}`
+                              ? "#0A6802"
+                              : "transparent",
+                          color:
+                            location.pathname ===
+                            `${basePath}${sub.path.replace("/dashboard", "")}`
+                              ? "#ffffff"
+                              : "#222222",
+                          "&:hover": {
+                            backgroundColor: "#819E00",
+                            color: "#ffffff",
+                          },
                         },
-                      },
-                    }}
-                  />
+                      }}
+                    />
+                  </Tooltip>
                 ))}
             </div>
           ))}
         </ScrollArea>
-        <BrandToggle />
+        <BrandToggle collapsed={collapsed} />
       </AppShell.Navbar>
 
       <AppShell.Main>

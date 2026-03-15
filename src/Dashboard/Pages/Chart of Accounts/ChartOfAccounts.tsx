@@ -47,7 +47,7 @@ function ChartOfAccounts() {
   const [isParty, setIsParty] = useState(false);
   const [address, setAddress] = useState("");
   const [phoneNo, setPhoneNo] = useState("");
-  const [salesTaxNo, setSalesTaxNo] = useState("");
+  const [strn, setStrn] = useState("");
   const [ntn, setNtn] = useState("");
   const [editing, setEditing] = useState<AccountNode | null>(null);
   const [search, setSearch] = useState("");
@@ -179,7 +179,7 @@ function ChartOfAccounts() {
       isParty: editing ? isParty : autoIsParty,
       address,
       phoneNo,
-      salesTaxNo,
+      strn,
       ntn,
     };
     try {
@@ -199,7 +199,7 @@ function ChartOfAccounts() {
         setIsParty(false);
         setAddress("");
         setPhoneNo("");
-        setSalesTaxNo("");
+        setStrn("");
         setNtn("");
         setSelectedAccountType1("");
         setSelectedAccountType2("");
@@ -240,7 +240,7 @@ function ChartOfAccounts() {
     setIsParty(acc.isParty);
     setAddress(acc.address || "");
     setPhoneNo(acc.phoneNo || "");
-    setSalesTaxNo(acc.salesTaxNo || "");
+    setStrn(acc.strn || "");
     setNtn(acc.ntn || "");
     setOpened(true);
   };
@@ -364,7 +364,7 @@ function ChartOfAccounts() {
             setIsParty(false);
             setAddress("");
             setPhoneNo("");
-            setSalesTaxNo("");
+            setStrn("");
             setNtn("");
             setSelectedAccountType1("");
             setSelectedAccountType2("");
@@ -788,10 +788,10 @@ function ChartOfAccounts() {
           </Group>
           <Group grow>
             <TextInput
-              label="Sales Tax#"
-              placeholder="Sales Tax#"
-              value={salesTaxNo}
-              onChange={(e) => setSalesTaxNo(e.currentTarget.value)}
+              label="STRN"
+              placeholder="STRN"
+              value={strn}
+              onChange={(e) => setStrn(e.currentTarget.value)}
               type="number"
             />
             <TextInput

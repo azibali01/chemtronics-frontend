@@ -22,6 +22,7 @@ import {
   IconMinus,
   IconDownload,
   IconPrinter,
+  IconX,
 } from "@tabler/icons-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -75,6 +76,33 @@ function getNextReturnNumber(returns: ReturnEntry[]) {
   const max = numbers.length ? Math.max(...numbers) : 0;
   const next = max + 1;
   return `PR-${next}`;
+}
+
+type FieldErrors = Record<string, string>;
+
+function parseValidationMessages(messages: string[]): {
+  fieldErrors: FieldErrors;
+  globalErrors: string[];
+} {
+  const fieldErrors: FieldErrors = {};
+  const globalErrors: string[] = [];
+  for (const msg of messages) {
+    const match = msg.match(/^([\.\w\[\]]+)\s+(must|should)/i);
+    if (match) {
+      fieldErrors[match[1]] = msg;
+    } else {
+      globalErrors.push(msg);
+    }
+  }
+  return { fieldErrors, globalErrors };
+}
+
+function extractError(error: unknown, fallback: string): string {
+  const msg = (error as { response?: { data?: { message?: unknown } } })
+    ?.response?.data?.message;
+  if (Array.isArray(msg)) return msg.join(", ");
+  if (typeof msg === "string" && msg) return msg;
+  return fallback;
 }
 
 export default function PurchaseReturnModal() {
@@ -362,7 +390,10 @@ export default function PurchaseReturnModal() {
         invoiceDate: returnData.date,
         referenceNumber: returnData.referenceNumber,
         referenceDate: returnData.referenceDate,
-        supplier: { name: returnData.supplierNumber },
+        supplier: {
+          name: returnData.supplierTitle,
+          code: returnData.supplierNumber,
+        },
         supplierTitle: returnData.supplierTitle,
         products: returnData.items.map((item) => ({
           code: item.code,
@@ -389,25 +420,27 @@ export default function PurchaseReturnModal() {
         resetForm();
       }
     } catch (error: unknown) {
-      let message = "Failed to create purchase return";
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "response" in error &&
-        typeof (error as any).response === "object" &&
-        (error as any).response !== null &&
-        "data" in (error as any).response &&
-        typeof (error as any).response.data === "object" &&
-        (error as any).response.data !== null &&
-        "message" in (error as any).response.data
-      ) {
-        message = (error as any).response.data.message;
+      const msg = (error as { response?: { data?: { message?: unknown } } })
+        ?.response?.data?.message;
+      if (Array.isArray(msg)) {
+        const { globalErrors: ge } = parseValidationMessages(msg);
+        notifications.show({
+          title: ge.length > 0 ? "Operation Failed" : "Validation Error",
+          message: ge.length > 0 ? ge.join(", ") : msg.join("\n"),
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      } else {
+        notifications.show({
+          title: "Operation Failed",
+          message:
+            typeof msg === "string" && msg
+              ? msg
+              : "Failed to create purchase return",
+          color: "red",
+          icon: <IconX size={18} />,
+        });
       }
-      notifications.show({
-        title: "Error",
-        message,
-        color: "red",
-      });
       console.error("Error creating purchase return:", error);
     }
   };
@@ -424,7 +457,10 @@ export default function PurchaseReturnModal() {
         invoiceDate: returnData.date,
         referenceNumber: returnData.referenceNumber,
         referenceDate: returnData.referenceDate,
-        supplier: { name: returnData.supplierNumber },
+        supplier: {
+          name: returnData.supplierTitle,
+          code: returnData.supplierNumber,
+        },
         supplierTitle: returnData.supplierTitle,
         products: returnData.items.map((item) => ({
           code: item.code,
@@ -455,13 +491,28 @@ export default function PurchaseReturnModal() {
         setEditOpened(false);
         setEditingReturn(null);
       }
-    } catch (error: any) {
-      notifications.show({
-        title: "Error",
-        message:
-          error.response?.data?.message || "Failed to update purchase return",
-        color: "red",
-      });
+    } catch (error: unknown) {
+      const msg = (error as { response?: { data?: { message?: unknown } } })
+        ?.response?.data?.message;
+      if (Array.isArray(msg)) {
+        const { globalErrors: ge } = parseValidationMessages(msg);
+        notifications.show({
+          title: ge.length > 0 ? "Operation Failed" : "Validation Error",
+          message: ge.length > 0 ? ge.join(", ") : msg.join("\n"),
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      } else {
+        notifications.show({
+          title: "Operation Failed",
+          message:
+            typeof msg === "string" && msg
+              ? msg
+              : "Failed to update purchase return",
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      }
       console.error("Error updating purchase return:", error);
     }
   };
@@ -482,12 +533,12 @@ export default function PurchaseReturnModal() {
 
       setDeleteModalOpen(false);
       setDeleteTarget(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       notifications.show({
-        title: "Error",
-        message:
-          error.response?.data?.message || "Failed to delete purchase return",
+        title: "Operation Failed",
+        message: extractError(error, "Failed to delete purchase return"),
         color: "red",
+        icon: <IconX size={18} />,
       });
       console.error("Error deleting purchase return:", error);
     }

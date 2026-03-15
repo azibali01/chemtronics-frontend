@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import { useAccountsOpeningBalances } from "../../Context/AccountsOpeningbalancesContext";
 import {
@@ -14,19 +14,21 @@ import {
   Pagination,
   Stack,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 
 import {
   IconArrowDownRight,
   IconArrowUpRight,
   IconBook,
   IconFilter,
-  IconDownload,
   IconSearch,
   IconCash,
+  IconPrinter,
 } from "@tabler/icons-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { RowInput } from "jspdf-autotable";
+import api, { apiBaseURL } from "../../../api_configuration/api";
 
 interface LedgerEntry {
   date: string;
@@ -37,6 +39,21 @@ interface LedgerEntry {
   debit: string;
   credit: string;
   balance: string;
+  // Raw numeric values used for stat-card totals (avoids lossy string→number round-trip)
+  debitAmount: number;
+  creditAmount: number;
+}
+
+interface GLEntry {
+  date: string;
+  voucherNumber: string;
+  accountNumber?: string;
+  accountName?: string;
+  accountType?: string;
+  description?: string;
+  debit: number;
+  credit: number;
+  runningBalance: number;
 }
 
 export default function GeneralLedger() {
@@ -49,6 +66,8 @@ export default function GeneralLedger() {
   const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  // Backend-fetched JV rows; null = not yet fetched, [] = fetched but empty
+  const [backendRows, setBackendRows] = useState<LedgerEntry[] | null>(null);
 
   // Convert Chart of Accounts to Ledger Entries
   useEffect(() => {
@@ -68,7 +87,7 @@ export default function GeneralLedger() {
 
     const flattenAccounts = (
       accountsList: AccountNode[],
-      parentType = ""
+      parentType = "",
     ): LedgerEntry[] => {
       const entries: LedgerEntry[] = [];
 
@@ -106,10 +125,16 @@ export default function GeneralLedger() {
           reference: acc.accountCode || acc.selectedCode || "N/A",
           description: `Opening Balance - ${acc.accountName}`,
           debit:
-            debitAmount > 0 ? `Rs. ${debitAmount.toLocaleString()}` : "Rs. 0",
+            debitAmount > 0
+              ? `Rs. ${debitAmount.toLocaleString("en-US")}`
+              : "Rs. 0",
           credit:
-            creditAmount > 0 ? `Rs. ${creditAmount.toLocaleString()}` : "Rs. 0",
-          balance: `Rs. ${Math.abs(balance).toLocaleString()}`,
+            creditAmount > 0
+              ? `Rs. ${creditAmount.toLocaleString("en-US")}`
+              : "Rs. 0",
+          balance: `Rs. ${Math.abs(balance).toLocaleString("en-US")}`,
+          debitAmount,
+          creditAmount,
         };
 
         entries.push(entry);
@@ -131,7 +156,10 @@ export default function GeneralLedger() {
   const [activePage, setActivePage] = useState(1);
   const pageSize = 10;
 
-  const filteredData = ledgerData.filter((entry) => {
+  // Show backend rows once fetched; before first fetch show local CoA opening-balance view..
+  // Apply all active filters to whichever source is displayed.
+  const baseData = backendRows !== null ? backendRows : ledgerData;
+  const displayData = baseData.filter((entry) => {
     const entryDate = new Date(entry.date);
 
     const matchesSearch =
@@ -140,7 +168,8 @@ export default function GeneralLedger() {
       entry.description.toLowerCase().includes(search.toLowerCase());
 
     const matchesAccount = !account || entry.account === account;
-    const matchesType = !accountType || entry.type === accountType;
+    const matchesType =
+      !accountType || entry.type.toLowerCase() === accountType.toLowerCase();
 
     const matchesFromDate = !fromDate || entryDate >= fromDate;
     const matchesToDate = !toDate || entryDate <= toDate;
@@ -154,140 +183,108 @@ export default function GeneralLedger() {
     );
   });
 
+  const fetchLedger = useCallback(async () => {
+    // Resolve account code; null account = global "all accounts" search
+    const raw = account
+      ? (ledgerData.find((e) => e.account === account)?.reference ?? account)
+      : null;
+    const accountCode = raw ? raw.split("-")[0].trim() : "";
+
+    const params = new URLSearchParams();
+    if (fromDate) params.set("startDate", fromDate.toISOString().split("T")[0]);
+    if (toDate) params.set("endDate", toDate.toISOString().split("T")[0]);
+
+    const endpoint = accountCode
+      ? `/reports/general-ledger/${accountCode}?${params.toString()}`
+      : `/reports/general-ledger/all?${params.toString()}`;
+
+    setLoading(true);
+    setActivePage(1);
+    try {
+      console.log(
+        "Fetching for account:",
+        accountCode || "ALL",
+        "| params:",
+        params.toString(),
+      );
+      const { data } = await api.get<GLEntry[]>(endpoint);
+      console.log("API Response:", data);
+
+      const accountEntryType = account
+        ? (ledgerData.find((e) => e.account === account)?.type ?? "other")
+        : "other";
+
+      const mapped: LedgerEntry[] = data.map((e) => ({
+        date: new Date(e.date).toLocaleDateString("en-PK"),
+        account: account
+          ? `${account}`
+          : e.accountNumber
+            ? `${e.accountNumber}${e.accountName ? ` - ${e.accountName}` : " - Not Found"}`
+            : "",
+        type: e.accountType ? e.accountType.toLowerCase() : accountEntryType,
+        reference: e.voucherNumber,
+        description: e.description ?? "",
+        debit: e.debit > 0 ? `Rs. ${e.debit.toLocaleString("en-US")}` : "Rs. 0",
+        credit:
+          e.credit > 0 ? `Rs. ${e.credit.toLocaleString("en-US")}` : "Rs. 0",
+        balance: `Rs. ${Math.abs(e.runningBalance).toLocaleString("en-US")}`,
+        debitAmount: Number(e.debit) || 0,
+        creditAmount: Number(e.credit) || 0,
+      }));
+
+      setBackendRows(mapped);
+    } catch {
+      notifications.show({
+        title: "Error",
+        message: "Failed to fetch ledger entries from the server.",
+        color: "red",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [account, fromDate, toDate, ledgerData]);
+
+  // Auto-fetch on mount and whenever account or date filters change
+  useEffect(() => {
+    fetchLedger();
+  }, [fetchLedger]);
+
   const startIndex = (activePage - 1) * pageSize;
-  const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
+  const paginatedData = displayData.slice(startIndex, startIndex + pageSize);
 
-  const exportPDF = () => {
-    // Use only the correct PDF export logic (centered logo, header/footer assets)
-    const logoUrl = "/Logo.png";
-    const headerUrl = "/Header.jpg";
-    const footerUrl = "/Footer.jpg";
-    const logoImg = new window.Image();
-    const headerImg = new window.Image();
-    const footerImg = new window.Image();
-    let loaded = 0;
-    function tryDraw() {
-      loaded++;
-      if (loaded === 3) {
-        drawPDF();
-      }
-    }
-    logoImg.src = logoUrl;
-    headerImg.src = headerUrl;
-    footerImg.src = footerUrl;
-    logoImg.onload = tryDraw;
-    headerImg.onload = tryDraw;
-    footerImg.onload = tryDraw;
-    logoImg.onerror = tryDraw;
-    headerImg.onerror = tryDraw;
-    footerImg.onerror = tryDraw;
+  // Use raw numeric fields — no string parsing needed
+  const totalDebits = displayData.reduce((sum, e) => sum + e.debitAmount, 0);
+  const totalCredits = displayData.reduce((sum, e) => sum + e.creditAmount, 0);
+  const netBalance = totalDebits - totalCredits;
 
-    function drawPDF() {
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      // Header design asset
-      doc.addImage(headerImg, "JPEG", 0, 0, pageWidth, 25);
-      // Centered logo below header
-      const logoWidth = 40;
-      const logoHeight = 20;
-      const logoX = (pageWidth - logoWidth) / 2;
-      doc.addImage(logoImg, "PNG", logoX, 27, logoWidth, logoHeight);
+  const printLedgerPdf = () => {
+    // Derive the account code (stored as `reference` in ledgerData)
+    const selectedCode = account
+      ? ledgerData.find((e) => e.account === account)?.reference
+      : undefined;
 
-      // Header text below logo
-      doc.setFontSize(16);
-      doc.text("General Ledger Report", pageWidth / 2, 52, { align: "center" });
-      doc.setFontSize(10);
-      doc.text(`Date: ${new Date().toLocaleDateString()}`, pageWidth / 2, 59, {
-        align: "center",
+    if (!selectedCode) {
+      notifications.show({
+        title: "Select an Account",
+        message:
+          "Please select an account from the filter to generate the ledger PDF.",
+        color: "yellow",
       });
-
-      // Calculate totals
-      const totalDebits = filteredData.reduce(
-        (sum, entry) =>
-          sum + (parseFloat(entry.debit.replace(/[^\d.-]/g, "")) || 0),
-        0
-      );
-      const totalCredits = filteredData.reduce(
-        (sum, entry) =>
-          sum + (parseFloat(entry.credit.replace(/[^\d.-]/g, "")) || 0),
-        0
-      );
-      const netBalance = totalDebits - totalCredits;
-
-      // Table with color theme
-      autoTable(doc, {
-        head: [
-          [
-            "Date",
-            "Account",
-            "Type",
-            "Reference",
-            "Description",
-            "Debit",
-            "Credit",
-            "Balance",
-          ],
-        ],
-        body: [
-          ...filteredData.map<RowInput>((entry) => [
-            entry.date,
-            entry.account,
-            entry.type,
-            entry.reference,
-            entry.description,
-            entry.debit,
-            entry.credit,
-            entry.balance,
-          ]),
-          [
-            {
-              content: "Totals",
-              colSpan: 5,
-              styles: { halign: "right", fontStyle: "bold" },
-            },
-            totalDebits.toLocaleString(),
-            totalCredits.toLocaleString(),
-            netBalance.toLocaleString(),
-          ],
-        ],
-        startY: 65,
-        theme: "grid",
-        headStyles: {
-          fillColor: [10, 104, 2], // #0A6802
-          textColor: 255,
-          fontStyle: "bold",
-        },
-        bodyStyles: {
-          fillColor: [241, 252, 240], // #F1FCF0
-          textColor: 0,
-        },
-        footStyles: {
-          fillColor: [10, 104, 2],
-          textColor: 255,
-          fontStyle: "bold",
-        },
-        didDrawPage: function (data) {
-          // Footer design asset
-          const pageSize = doc.internal.pageSize;
-          doc.addImage(
-            footerImg,
-            "JPEG",
-            0,
-            pageSize.getHeight() - 25,
-            pageSize.getWidth(),
-            25
-          );
-          doc.setFontSize(9);
-          doc.text(
-            `Page ${data.pageNumber}`,
-            pageSize.getWidth() - 40,
-            pageSize.getHeight() - 10
-          );
-        },
-      });
-
-      doc.save("general_ledger.pdf");
+      return;
     }
+
+    const params = new URLSearchParams();
+    if (fromDate) params.set("startDate", fromDate.toISOString().split("T")[0]);
+    if (toDate) params.set("endDate", toDate.toISOString().split("T")[0]);
+
+    // Attach token + brand so the backend can authorise a plain browser navigation
+    const token = localStorage.getItem("access_token") ?? "";
+    const brand = localStorage.getItem("brand") ?? "chemtronics";
+    params.set("token", token);
+    params.set("brand", brand);
+
+    const url = `${apiBaseURL}/reports/general-ledger/${selectedCode}/pdf?${params.toString()}`;
+    window.open(url, "_blank");
   };
   return (
     <div>
@@ -300,13 +297,16 @@ export default function GeneralLedger() {
             Complete record of all financial transactions
           </Text>
         </Stack>
-        <Button
-          color="#0A6802"
-          leftSection={<IconDownload size={16} />}
-          onClick={exportPDF}
-        >
-          Export Ledger
-        </Button>
+        <Group gap="xs">
+          <Button
+            variant="outline"
+            color="#000080"
+            leftSection={<IconPrinter size={16} />}
+            onClick={printLedgerPdf}
+          >
+            Print Ledger PDF
+          </Button>
+        </Group>
       </Group>
 
       <Grid mb="lg">
@@ -317,14 +317,11 @@ export default function GeneralLedger() {
               <div>
                 <Text size="sm">Total Debits</Text>
                 <Text fw={700} size="lg">
-                  {filteredData
-                    .reduce(
-                      (sum, entry) =>
-                        sum +
-                        (parseFloat(entry.debit.replace(/[^\d.-]/g, "")) || 0),
-                      0
-                    )
-                    .toLocaleString()}
+                  Rs.{" "}
+                  {totalDebits.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
                 </Text>
               </div>
             </Group>
@@ -337,14 +334,11 @@ export default function GeneralLedger() {
               <div>
                 <Text size="sm">Total Credits</Text>
                 <Text fw={700} size="lg">
-                  {filteredData
-                    .reduce(
-                      (sum, entry) =>
-                        sum +
-                        (parseFloat(entry.credit.replace(/[^\d.-]/g, "")) || 0),
-                      0
-                    )
-                    .toLocaleString()}
+                  Rs.{" "}
+                  {totalCredits.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
                 </Text>
               </div>
             </Group>
@@ -353,26 +347,27 @@ export default function GeneralLedger() {
         <Grid.Col span={3}>
           <Card shadow="sm" p="lg" radius="md" withBorder bg="#F1FCF0">
             <Group>
-              <IconCash size={30} color="blue" />
+              <IconCash size={30} color={netBalance >= 0 ? "blue" : "red"} />
               <div>
-                <Text size="sm">Net Balance</Text>
-                <Text fw={700} size="lg" c="#0A6802">
-                  {(() => {
-                    const totalDebits = filteredData.reduce(
-                      (sum, entry) =>
-                        sum +
-                        (parseFloat(entry.debit.replace(/[^\d.-]/g, "")) || 0),
-                      0
-                    );
-                    const totalCredits = filteredData.reduce(
-                      (sum, entry) =>
-                        sum +
-                        (parseFloat(entry.credit.replace(/[^\d.-]/g, "")) || 0),
-                      0
-                    );
-                    return (totalDebits - totalCredits).toLocaleString();
-                  })()}
+                <Text size="sm">
+                  {netBalance >= 0 ? "Debit Balance" : "Credit Balance"}
                 </Text>
+                <Text
+                  fw={700}
+                  size="lg"
+                  c={netBalance >= 0 ? "#0A6802" : "red"}
+                >
+                  Rs.{" "}
+                  {Math.abs(netBalance).toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </Text>
+                {!account && (
+                  <Text size="xs" c="dimmed" mt={4}>
+                    Select a specific account to see its current balance.
+                  </Text>
+                )}
               </div>
             </Group>
           </Card>
@@ -384,7 +379,7 @@ export default function GeneralLedger() {
               <div>
                 <Text size="sm">Total Entries</Text>
                 <Text fw={700} size="lg">
-                  {filteredData.length}
+                  {displayData.length}
                 </Text>
               </div>
             </Group>
@@ -420,7 +415,7 @@ export default function GeneralLedger() {
             value={fromDate ? fromDate.toISOString().split("T")[0] : ""}
             onChange={(e) =>
               setFromDate(
-                e.currentTarget.value ? new Date(e.currentTarget.value) : null
+                e.currentTarget.value ? new Date(e.currentTarget.value) : null,
               )
             }
           />
@@ -430,11 +425,16 @@ export default function GeneralLedger() {
             value={toDate ? toDate.toISOString().split("T")[0] : ""}
             onChange={(e) =>
               setToDate(
-                e.currentTarget.value ? new Date(e.currentTarget.value) : null
+                e.currentTarget.value ? new Date(e.currentTarget.value) : null,
               )
             }
           />
-          <Button color="#0A6802" leftSection={<IconFilter size={16} />}>
+          <Button
+            color="#0A6802"
+            leftSection={<IconFilter size={16} />}
+            onClick={fetchLedger}
+            loading={loading}
+          >
             Apply Filter
           </Button>
         </Group>
@@ -468,19 +468,21 @@ export default function GeneralLedger() {
                   <Table.Td>{entry.date}</Table.Td>
                   <Table.Td>{entry.account}</Table.Td>
                   <Table.Td>
-                    <Badge
-                      color={
-                        entry.type === "asset"
-                          ? "blue"
-                          : entry.type === "revenue"
-                          ? "green"
-                          : entry.type === "expense"
-                          ? "orange"
-                          : "red"
-                      }
-                    >
-                      {entry.type}
-                    </Badge>
+                    {(() => {
+                      const t = (entry.type || "").toLowerCase();
+                      const colorMap: Record<string, string> = {
+                        asset: "blue",
+                        revenue: "green",
+                        expense: "orange",
+                        liability: "red",
+                        equity: "violet",
+                      };
+                      return (
+                        <Badge color={colorMap[t] ?? "gray"}>
+                          {entry.type || "OTHER"}
+                        </Badge>
+                      );
+                    })()}
                   </Table.Td>
                   <Table.Td>{entry.reference}</Table.Td>
                   <Table.Td>{entry.description}</Table.Td>
@@ -502,7 +504,7 @@ export default function GeneralLedger() {
         <Group justify="center" mt="md">
           <Pagination
             color="#0A6802"
-            total={Math.ceil(filteredData.length / pageSize)}
+            total={Math.ceil(displayData.length / pageSize)}
             value={activePage}
             onChange={setActivePage}
           />

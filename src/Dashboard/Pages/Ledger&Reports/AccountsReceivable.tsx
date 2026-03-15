@@ -1,7 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
-import { getReceivableAccounts } from "../../../utils/receivableAccounts";
+import { useState, useEffect, useMemo } from "react";
 import api from "../../../api_configuration/api";
 import {
   Card,
@@ -25,114 +23,40 @@ import {
   IconClock,
 } from "@tabler/icons-react";
 
-interface Customer {
-  id: string;
-  name: string;
-}
+type ARCustomer = {
+  accountNumber: string;
+  accountName: string;
+  outstanding: number;
+  current: number;
+  days31to60: number;
+  days61to90: number;
+  days90plus: number;
+};
 
-interface Product {
-  qty: number | string;
-  rate: number | string;
-  // Add other fields as needed
-}
-
-interface Invoice {
-  id: string;
+type SaleInvoice = {
   _id?: string;
-  customerId: string;
   accountTitle: string;
-  date: string;
-  invoiceNo: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  netAmount?: number;
+  products?: { qty?: number | string; rate?: number | string }[];
+};
+
+type InvoiceRow = {
+  id: string;
   invoiceNumber: string;
-  invoiceDate: string;
+  date: string;
   amount: number;
-  netAmount: number;
-  received: number;
-  balance: number;
-  status: "paid" | "partial" | "pending" | "overdue";
-  products?: Product[];
-}
+  status: "current" | "31-60" | "61-90" | "90+";
+};
 
 export default function AccountsReceivable() {
-  // Use ChartOfAccountsContext to get receivable accounts as customers
-  const { accounts } = useChartOfAccounts();
-
-  const [salesInvoices, setSalesInvoices] = useState<Invoice[]>([]);
-
-  // Fetch sales invoices on component mount
-  useEffect(() => {
-    const fetchInvoices = async () => {
-      try {
-        const response = await api.get("/sale-invoice");
-
-        setSalesInvoices(response.data || []);
-      } catch (error) {
-        console.error("Error fetching sales invoices:", error);
-        setSalesInvoices([]);
-      }
-    };
-    fetchInvoices();
-  }, []);
-
-  // Use getReceivableAccounts to get all accounts under 1410 (including 14101, etc.)
-  const receivableAccounts = getReceivableAccounts(accounts ?? []);
-  const customers: Customer[] = receivableAccounts.map((acc) => ({
-    id: acc._id,
-    name: acc.accountName,
-  }));
-
-  // Map sales invoices to Invoice format
-  const invoices: Invoice[] = salesInvoices.map((inv: Invoice) => {
-    // Find customer by accountTitle
-    const customer = customers.find((c) => c.name === inv.accountTitle);
-
-    // Calculate total amount from products
-    const calculatedAmount = (inv.products || []).reduce(
-      (total: number, product: Product) => {
-        const qty = parseFloat(product.qty as string) || 0;
-        const rate = parseFloat(product.rate as string) || 0;
-        return total + qty * rate;
-      },
-      0
-    );
-
-    // Calculate aging based on invoice date
-    const invoiceDate = new Date(inv.invoiceDate);
-    const today = new Date();
-    const daysDiff = Math.floor(
-      (today.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    let status: "paid" | "partial" | "pending" | "overdue";
-    if (daysDiff <= 30) {
-      status = "pending"; // Current (0-30 days)
-    } else if (daysDiff <= 60) {
-      status = "partial"; // 31-60 days
-    } else if (daysDiff <= 90) {
-      status = "overdue"; // 61-90 days
-    } else {
-      status = "paid"; // 90+ days (using 'paid' as placeholder for 90+)
-    }
-
-    return {
-      id: inv.id || inv._id || "",
-      customerId: customer?.id || "",
-      accountTitle: inv.accountTitle || "",
-      date: inv.invoiceDate || "",
-      invoiceNo: inv.invoiceNumber || "",
-      invoiceNumber: inv.invoiceNumber || "",
-      invoiceDate: inv.invoiceDate || "",
-      amount: calculatedAmount,
-      netAmount: calculatedAmount,
-      received: 0, // Will need to calculate from payments later
-      balance: calculatedAmount,
-      status: status,
-    };
-  });
+  const [arData, setArData] = useState<ARCustomer[]>([]);
+  const [saleInvoices, setSaleInvoices] = useState<SaleInvoice[]>([]);
 
   const [page, setPage] = useState(1);
   const [invoicePage, setInvoicePage] = useState(1);
-  const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
+  const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null); // accountName
   const [search, setSearch] = useState("");
   const [agingFilter, setAgingFilter] = useState<string | null>(null);
   const [fromDate, setFromDate] = useState<string>("");
@@ -143,81 +67,107 @@ export default function AccountsReceivable() {
   const pageSize = 5;
   const invoicePageSize = 5;
 
+  // ── Fetch AR summary from backend + sale invoices for drill-down ──────────
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const [arRes, invRes] = await Promise.all([
+          api.get("/reports/accounts-receivable"),
+          api.get("/sale-invoice"),
+        ]);
+        setArData(Array.isArray(arRes.data) ? arRes.data : []);
+        setSaleInvoices(Array.isArray(invRes.data) ? invRes.data : []);
+      } catch (e) {
+        console.error("Failed to fetch AR data:", e);
+      }
+    };
+    fetchAll();
+  }, []);
+
   const applyFilters = () => {
     setAppliedFromDate(fromDate);
     setAppliedToDate(toDate);
-    setPage(1); // Reset to first page when applying filters
+    setPage(1);
   };
 
-  const filteredInvoices = invoices.filter((inv: Invoice) => {
-    const invDate = new Date(inv.date);
+  // ── Client-side filter: search + aging bucket ─────────────────────────────
+  const filteredCustomers = useMemo(() => {
+    return arData.filter((c) => {
+      const matchesSearch = c.accountName
+        .toLowerCase()
+        .includes(search.toLowerCase());
+      let matchesAging = true;
+      if (agingFilter === "current") matchesAging = c.current > 0;
+      else if (agingFilter === "31-60") matchesAging = c.days31to60 > 0;
+      else if (agingFilter === "61-90") matchesAging = c.days61to90 > 0;
+      else if (agingFilter === "90+") matchesAging = c.days90plus > 0;
+      return matchesSearch && matchesAging;
+    });
+  }, [arData, search, agingFilter]);
+
+  const paginatedCustomers = filteredCustomers.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
+
+  // ── Totals for summary cards ──────────────────────────────────────────────
+  const totalOutstanding = filteredCustomers.reduce(
+    (s, c) => s + c.outstanding,
+    0,
+  );
+  const totalCurrent = filteredCustomers.reduce((s, c) => s + c.current, 0);
+  const total30 = filteredCustomers.reduce((s, c) => s + c.days31to60, 0);
+  const total60 = filteredCustomers.reduce((s, c) => s + c.days61to90, 0);
+  const total90 = filteredCustomers.reduce((s, c) => s + c.days90plus, 0);
+
+  // ── Expanded invoice drill-down (uses raw sale-invoice API) ──────────────
+  const expandedInvoices = useMemo<InvoiceRow[]>(() => {
+    if (!expandedCustomer) return [];
     const from = appliedFromDate ? new Date(appliedFromDate) : null;
     const to = appliedToDate ? new Date(appliedToDate) : null;
 
-    const matchesDate = (!from || invDate >= from) && (!to || invDate <= to);
+    return saleInvoices
+      .filter((inv) => {
+        if (inv.accountTitle !== expandedCustomer) return false;
+        if (!inv.invoiceDate) return true;
+        const d = new Date(inv.invoiceDate);
+        return (!from || d >= from) && (!to || d <= to);
+      })
+      .map((inv) => {
+        const amount =
+          Number(inv.netAmount) ||
+          (inv.products ?? []).reduce(
+            (s, p) => s + (Number(p.qty) || 0) * (Number(p.rate) || 0),
+            0,
+          );
+        const days = inv.invoiceDate
+          ? Math.floor(
+              (Date.now() - new Date(inv.invoiceDate).getTime()) /
+                (1000 * 60 * 60 * 24),
+            )
+          : 0;
+        const status: InvoiceRow["status"] =
+          days <= 30
+            ? "current"
+            : days <= 60
+              ? "31-60"
+              : days <= 90
+                ? "61-90"
+                : "90+";
+        return {
+          id: inv._id ?? "",
+          invoiceNumber: inv.invoiceNumber ?? "",
+          date: inv.invoiceDate?.split("T")[0] ?? "",
+          amount,
+          status,
+        };
+      });
+  }, [expandedCustomer, saleInvoices, appliedFromDate, appliedToDate]);
 
-    return matchesDate;
-  });
-
-  const customerData = customers.map((cust: Customer) => {
-    const custInvoices = filteredInvoices.filter(
-      (inv: Invoice) => inv.customerId === cust.id
-    );
-
-    const outstanding = custInvoices.reduce(
-      (s: number, i: Invoice) => s + i.balance,
-      0
-    );
-    const current = custInvoices
-      .filter((i: Invoice) => i.status === "pending")
-      .reduce((s: number, i: Invoice) => s + i.balance, 0);
-    const d30 = custInvoices
-      .filter((i: Invoice) => i.status === "partial")
-      .reduce((s: number, i: Invoice) => s + i.balance, 0);
-    const d60 = custInvoices
-      .filter((i: Invoice) => i.status === "overdue")
-      .reduce((s: number, i: Invoice) => s + i.balance, 0);
-    const d90 = custInvoices
-      .filter((i: Invoice) => i.status === "paid")
-      .reduce((s: number, i: Invoice) => s + i.balance, 0);
-
-    return { ...cust, outstanding, current, d30, d60, d90 };
-  });
-
-  const filteredCustomers = customerData.filter(
-    (
-      c: Customer & {
-        outstanding: number;
-        current: number;
-        d30: number;
-        d60: number;
-        d90: number;
-      }
-    ) => {
-      const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase());
-      let matchesAging = true;
-
-      if (agingFilter === "current") matchesAging = c.current > 0;
-      else if (agingFilter === "31-60") matchesAging = c.d30 > 0;
-      else if (agingFilter === "61-90") matchesAging = c.d60 > 0;
-      else if (agingFilter === "90+") matchesAging = c.d90 > 0;
-
-      return matchesSearch && matchesAging;
-    }
+  const expandedInvoicesPaginated = expandedInvoices.slice(
+    (invoicePage - 1) * invoicePageSize,
+    invoicePage * invoicePageSize,
   );
-
-  const start = (page - 1) * pageSize;
-  const paginatedCustomers = filteredCustomers.slice(start, start + pageSize);
-
-  // --------- Totals ---------
-  const totalOutstanding = filteredCustomers.reduce(
-    (s, c) => s + c.outstanding,
-    0
-  );
-  const totalCurrent = filteredCustomers.reduce((s, c) => s + c.current, 0);
-  const total30 = filteredCustomers.reduce((s, c) => s + c.d30, 0);
-  const total60 = filteredCustomers.reduce((s, c) => s + c.d60, 0);
-  const total90 = filteredCustomers.reduce((s, c) => s + c.d90, 0);
 
   const exportPDF = () => {
     const logoUrl = "/Logo.png";
@@ -269,12 +219,12 @@ export default function AccountsReceivable() {
         head: [["Customer", "Outstanding", "Current", "31-60", "61-90", "90+"]],
         body: [
           ...filteredCustomers.map((c) => [
-            c.name,
+            c.accountName,
             `Rs. ${c.outstanding.toLocaleString()}`,
             `Rs. ${c.current.toLocaleString()}`,
-            `Rs. ${c.d30.toLocaleString()}`,
-            `Rs. ${c.d60.toLocaleString()}`,
-            `Rs. ${c.d90.toLocaleString()}`,
+            `Rs. ${c.days31to60.toLocaleString()}`,
+            `Rs. ${c.days61to90.toLocaleString()}`,
+            `Rs. ${c.days90plus.toLocaleString()}`,
           ]),
           [
             {
@@ -314,13 +264,13 @@ export default function AccountsReceivable() {
             0,
             pageSize.getHeight() - 25,
             pageSize.getWidth(),
-            25
+            25,
           );
           doc.setFontSize(9);
           doc.text(
             `Page ${data.pageNumber}`,
             pageSize.getWidth() - 40,
-            pageSize.getHeight() - 10
+            pageSize.getHeight() - 10,
           );
         },
       });
@@ -329,9 +279,19 @@ export default function AccountsReceivable() {
     }
   };
 
-  const exportInvoicesPDF = (custId: string) => {
-    const cust = customers.find((c) => c.id === custId);
-    const invs = filteredInvoices.filter((i) => i.customerId === custId);
+  const exportInvoicesPDF = (custName: string) => {
+    const invs = saleInvoices
+      .filter((inv) => inv.accountTitle === custName)
+      .map((inv) => ({
+        invoiceNumber: inv.invoiceNumber ?? "",
+        date: inv.invoiceDate?.split("T")[0] ?? "",
+        amount:
+          Number(inv.netAmount) ||
+          (inv.products ?? []).reduce(
+            (s, p) => s + (Number(p.qty) || 0) * (Number(p.rate) || 0),
+            0,
+          ),
+      }));
 
     const logoUrl = "/Logo.png";
     const headerUrl = "/Header.jpg";
@@ -343,9 +303,7 @@ export default function AccountsReceivable() {
 
     function tryDraw() {
       loaded++;
-      if (loaded === 3) {
-        drawInvoicePDF();
-      }
+      if (loaded === 3) drawInvoicePDF();
     }
 
     logoImg.src = logoUrl;
@@ -362,17 +320,12 @@ export default function AccountsReceivable() {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
 
-      // Header design asset
       doc.addImage(headerImg, "JPEG", 0, 0, pageWidth, 25);
-      // Centered logo below header
-      const logoWidth = 40;
-      const logoHeight = 20;
-      const logoX = (pageWidth - logoWidth) / 2;
-      doc.addImage(logoImg, "PNG", logoX, 27, logoWidth, logoHeight);
+      const logoX = (pageWidth - 40) / 2;
+      doc.addImage(logoImg, "PNG", logoX, 27, 40, 20);
 
-      // Header text below logo
       doc.setFontSize(16);
-      doc.text(`Customer Invoices - ${cust?.name}`, pageWidth / 2, 52, {
+      doc.text(`Customer Invoices - ${custName}`, pageWidth / 2, 52, {
         align: "center",
       });
       doc.setFontSize(10);
@@ -381,62 +334,53 @@ export default function AccountsReceivable() {
       });
 
       autoTable(doc, {
-        head: [
-          ["Date", "Invoice No.", "Amount", "Received", "Balance", "Status"],
-        ],
+        head: [["Date", "Invoice No.", "Amount"]],
         body: invs.map((i) => [
           i.date,
-          i.invoiceNo,
-          `Rs. ${(i.netAmount || i.amount).toLocaleString()}`,
-          `Rs. ${i.received.toLocaleString()}`,
-          `Rs. ${i.balance.toLocaleString()}`,
-          i.status,
+          i.invoiceNumber,
+          `Rs. ${i.amount.toLocaleString()}`,
         ]) as RowInput[],
         startY: 65,
         theme: "grid",
         headStyles: {
-          fillColor: [10, 104, 2], // #0A6802
+          fillColor: [10, 104, 2],
           textColor: 255,
           fontStyle: "bold",
         },
-        bodyStyles: {
-          fillColor: [241, 252, 240], // #F1FCF0
-          textColor: 0,
-        },
+        bodyStyles: { fillColor: [241, 252, 240], textColor: 0 },
         didDrawPage: function (data) {
-          // Footer design asset
-          const pageSize = doc.internal.pageSize;
+          const ps = doc.internal.pageSize;
           doc.addImage(
             footerImg,
             "JPEG",
             0,
-            pageSize.getHeight() - 25,
-            pageSize.getWidth(),
-            25
+            ps.getHeight() - 25,
+            ps.getWidth(),
+            25,
           );
           doc.setFontSize(9);
           doc.text(
             `Page ${data.pageNumber}`,
-            pageSize.getWidth() - 40,
-            pageSize.getHeight() - 10
+            ps.getWidth() - 40,
+            ps.getHeight() - 10,
           );
         },
       });
 
-      doc.save(`invoices_${cust?.name}.pdf`);
+      doc.save(`invoices_${custName}.pdf`);
     }
   };
 
-  const renderStatus = (status: Invoice["status"]) => {
+  const renderStatus = (status: InvoiceRow["status"]) => {
     switch (status) {
-      case "paid":
-        return <Badge color="#0A6802">Paid</Badge>;
-      case "partial":
-        return <Badge color="yellow">Partial</Badge>;
-      case "pending":
-        return <Badge color="blue">Pending</Badge>;
-      case "overdue":
-        return <Badge color="red">Overdue</Badge>;
+      case "current":
+        return <Badge color="blue">Current</Badge>;
+      case "31-60":
+        return <Badge color="yellow">31-60 Days</Badge>;
+      case "61-90":
+        return <Badge color="orange">61-90 Days</Badge>;
+      case "90+":
+        return <Badge color="red">90+ Days</Badge>;
     }
   };
 
@@ -575,13 +519,21 @@ export default function AccountsReceivable() {
           </Table.Thead>
           <Table.Tbody>
             {paginatedCustomers.map((c) => (
-              <Table.Tr key={c.id}>
-                <Table.Td>{c.name}</Table.Td>
-                <Table.Td>Rs. {c.outstanding.toLocaleString()}</Table.Td>
-                <Table.Td>Rs. {c.current.toLocaleString()}</Table.Td>
-                <Table.Td>Rs. {c.d30.toLocaleString()}</Table.Td>
-                <Table.Td>Rs. {c.d60.toLocaleString()}</Table.Td>
-                <Table.Td>Rs. {c.d90.toLocaleString()}</Table.Td>
+              <Table.Tr key={c.accountNumber}>
+                <Table.Td>{c.accountName}</Table.Td>
+                <Table.Td>
+                  Rs. {Math.abs(c.outstanding).toLocaleString()}
+                </Table.Td>
+                <Table.Td>Rs. {Math.abs(c.current).toLocaleString()}</Table.Td>
+                <Table.Td>
+                  Rs. {Math.abs(c.days31to60).toLocaleString()}
+                </Table.Td>
+                <Table.Td>
+                  Rs. {Math.abs(c.days61to90).toLocaleString()}
+                </Table.Td>
+                <Table.Td>
+                  Rs. {Math.abs(c.days90plus).toLocaleString()}
+                </Table.Td>
                 <Table.Td>
                   <Group gap="xs">
                     <Button
@@ -589,18 +541,20 @@ export default function AccountsReceivable() {
                       color="#0A6802"
                       onClick={() =>
                         setExpandedCustomer(
-                          expandedCustomer === c.id ? null : c.id
+                          expandedCustomer === c.accountName
+                            ? null
+                            : c.accountName,
                         )
                       }
                     >
-                      {expandedCustomer === c.id
+                      {expandedCustomer === c.accountName
                         ? "Hide Details"
                         : "View Details"}
                     </Button>
                     <Button
                       size="xs"
                       color="blue"
-                      onClick={() => exportInvoicesPDF(c.id)}
+                      onClick={() => exportInvoicesPDF(c.accountName)}
                     >
                       Export Invoices
                     </Button>
@@ -625,8 +579,7 @@ export default function AccountsReceivable() {
       {expandedCustomer && (
         <Card shadow="sm" p="md" mt="lg" withBorder bg="#F1FCF0">
           <Text fw={600} mb="sm">
-            Invoice Details -{" "}
-            {customers.find((c) => c.id === expandedCustomer)?.name}
+            Invoice Details — {expandedCustomer}
           </Text>
           <Table highlightOnHover withTableBorder striped>
             <Table.Thead>
@@ -634,44 +587,33 @@ export default function AccountsReceivable() {
                 <Table.Th>Date</Table.Th>
                 <Table.Th>Invoice No.</Table.Th>
                 <Table.Th>Amount</Table.Th>
-                <Table.Th>Received</Table.Th>
-                <Table.Th>Balance</Table.Th>
                 <Table.Th>Status</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {filteredInvoices
-                .filter((i) => i.customerId === expandedCustomer)
-                .slice(
-                  (invoicePage - 1) * invoicePageSize,
-                  invoicePage * invoicePageSize
-                )
-                .map((i) => (
-                  <Table.Tr key={i.id}>
-                    <Table.Td>{i.date}</Table.Td>
-                    <Table.Td>{i.invoiceNo}</Table.Td>
-                    <Table.Td>
-                      Rs. {(i.netAmount || i.amount).toLocaleString()}
-                    </Table.Td>
-                    <Table.Td c="#0A6802">
-                      Rs. {i.received.toLocaleString()}
-                    </Table.Td>
-                    <Table.Td c={i.balance > 0 ? "red" : "#0A6802"}>
-                      Rs. {i.balance.toLocaleString()}
-                    </Table.Td>
-                    <Table.Td>{renderStatus(i.status)}</Table.Td>
-                  </Table.Tr>
-                ))}
+              {expandedInvoicesPaginated.map((i) => (
+                <Table.Tr key={i.id}>
+                  <Table.Td>{i.date}</Table.Td>
+                  <Table.Td>{i.invoiceNumber}</Table.Td>
+                  <Table.Td c="red">Rs. {i.amount.toLocaleString()}</Table.Td>
+                  <Table.Td>{renderStatus(i.status)}</Table.Td>
+                </Table.Tr>
+              ))}
+              {expandedInvoicesPaginated.length === 0 && (
+                <Table.Tr>
+                  <Table.Td colSpan={4}>
+                    <Text c="dimmed" ta="center">
+                      No invoices found.
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              )}
             </Table.Tbody>
           </Table>
 
           <Group justify="center" mt="md">
             <Pagination
-              total={Math.ceil(
-                filteredInvoices.filter(
-                  (i) => i.customerId === expandedCustomer
-                ).length / invoicePageSize
-              )}
+              total={Math.ceil(expandedInvoices.length / invoicePageSize)}
               value={invoicePage}
               onChange={setInvoicePage}
               size="sm"

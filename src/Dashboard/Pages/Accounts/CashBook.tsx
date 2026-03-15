@@ -41,19 +41,14 @@ type Entry = {
 
 type EntryWithBalance = Entry & { balance: number };
 
-interface JournalVoucherEntry {
-  accountCode: string;
-  accountName: string;
-  debit: number;
-  credit: number;
-}
-
 interface JournalVoucher {
   _id: string;
   voucherNumber: string;
   date: string;
+  accountNumber: string;
   description?: string;
-  entries: JournalVoucherEntry[];
+  debit?: number;
+  credit?: number;
 }
 
 export default function CashBook() {
@@ -138,31 +133,24 @@ export default function CashBook() {
   // Build entries from journal vouchers
   const entries: Entry[] = useMemo(() => {
     if (!cashAccount) return [];
+    const cashCode = cashAccount.accountCode || "";
 
-    const cashEntries: Entry[] = [];
-    const cashCode = cashAccount.accountCode;
-
-    journalVouchers.forEach((voucher) => {
-      voucher.entries?.forEach((entry) => {
-        if (entry.accountCode === cashCode) {
-          const isReceipt = entry.debit > 0;
-          const amount = isReceipt ? entry.debit : entry.credit;
-
-          cashEntries.push({
-            date:
-              voucher.date?.split("T")[0] ||
-              new Date().toISOString().split("T")[0],
-            particulars:
-              voucher.description || entry.accountName || "Cash transaction",
-            voucher: voucher.voucherNumber || "N/A",
-            type: isReceipt ? "Receipt" : "Payment",
-            amount: isReceipt ? amount : -amount,
-          });
-        }
+    return journalVouchers
+      .filter((jv) => jv.accountNumber?.startsWith(cashCode))
+      .map((jv) => {
+        const debit = jv.debit ?? 0;
+        const credit = jv.credit ?? 0;
+        const isReceipt = debit > 0;
+        const amount = isReceipt ? debit : credit;
+        return {
+          date:
+            jv.date?.split("T")[0] || new Date().toISOString().split("T")[0],
+          particulars: jv.description || "Cash transaction",
+          voucher: jv.voucherNumber || "N/A",
+          type: isReceipt ? "Receipt" : "Payment",
+          amount: isReceipt ? amount : -amount,
+        };
       });
-    });
-
-    return cashEntries;
   }, [journalVouchers, cashAccount]);
 
   const [query, setQuery] = useState<string>("");
@@ -218,14 +206,18 @@ export default function CashBook() {
   }, [entries, query, typeFilter, dateRange]);
 
   const withBalance: EntryWithBalance[] = useMemo(() => {
-    // Start with opening balance
+    // Sort OLDEST first so running balance accumulates chronologically
+    const chronological = [...filteredSorted].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
     const openingBalance = cashAccount?.openingBalance?.debit || 0;
     let bal = openingBalance;
-
-    return filteredSorted.map((e) => {
+    const result = chronological.map((e) => {
       bal += e.amount;
       return { ...e, balance: bal };
     });
+    // Show newest first in the table
+    return result.reverse();
   }, [filteredSorted, cashAccount]);
 
   const pageCount = Math.max(1, Math.ceil(withBalance.length / pageSize));
@@ -250,36 +242,36 @@ export default function CashBook() {
     try {
       const isReceipt = values.type === "Cash Receipt";
 
-      // Find the contra account details
-      const flatAccounts = flattenAccounts(chartAccounts);
-      const contraAccount = flatAccounts.find(
-        (acc) => acc.accountCode === values.contraAccount,
-      );
+      // Generate next CB voucher number
+      const cbNums = journalVouchers
+        .filter((jv) => jv.voucherNumber?.startsWith("CB-"))
+        .map((jv) => {
+          const m = jv.voucherNumber?.match(/(\d+)$/);
+          return m ? parseInt(m[1]) : 0;
+        });
+      const nextNum = cbNums.length > 0 ? Math.max(...cbNums) + 1 : 1;
+      const voucherNumber = `CB-${nextNum.toString().padStart(4, "0")}`;
 
-      // Create journal voucher
-      const newVoucher = {
-        date: values.date,
-        description: values.particulars,
-        entries: [
-          {
-            accountCode: cashAccount?.accountCode || "",
-            accountName: cashAccount?.accountName || "Cash",
-            debit: isReceipt ? values.amount : 0,
-            credit: isReceipt ? 0 : values.amount,
-          },
-          {
-            accountCode: contraAccount?.accountCode || values.contraAccount,
-            accountName: contraAccount?.accountName || "Contra Account",
-            debit: isReceipt ? 0 : values.amount,
-            credit: isReceipt ? values.amount : 0,
-          },
-        ],
-      };
+      const payload = [
+        {
+          date: values.date,
+          voucherNumber,
+          accountNumber: cashAccount?.accountCode || "1101",
+          description: values.particulars,
+          debit: isReceipt ? values.amount : 0,
+          credit: isReceipt ? 0 : values.amount,
+        },
+        {
+          date: values.date,
+          voucherNumber,
+          accountNumber: values.contraAccount,
+          description: values.particulars,
+          debit: isReceipt ? 0 : values.amount,
+          credit: isReceipt ? values.amount : 0,
+        },
+      ];
 
-      console.log("Creating journal voucher:", newVoucher);
-
-      // Post to API
-      await api.post("/journal-vouchers", newVoucher);
+      await api.post("/journal-vouchers", payload);
 
       // Refresh data
       const response = await api.get("/journal-vouchers");
@@ -293,72 +285,131 @@ export default function CashBook() {
   };
 
   const exportToPDF = () => {
-    const doc = new jsPDF();
+    const logoUrl = "/Logo.png";
+    const headerUrl = "/Header.jpg";
+    const footerUrl = "/Footer.jpg";
+    const logoImg = new window.Image();
+    const headerImg = new window.Image();
+    const footerImg = new window.Image();
+    let loaded = 0;
 
-    doc.setFontSize(18);
-    doc.text("Cash Book Report", 14, 20);
-
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 30);
-
-    const filterLineParts: string[] = [];
-    if (query.trim()) filterLineParts.push(`Search="${query.trim()}"`);
-    if (typeFilter !== "All") filterLineParts.push(`Type=${typeFilter}`);
-    if (dateRange[0] || dateRange[1]) {
-      filterLineParts.push(
-        `Range=${dateRange[0] ?? "—"} to ${dateRange[1] ?? "—"}`,
-      );
+    function tryDraw() {
+      loaded++;
+      if (loaded === 3) drawPDF();
     }
-    if (filterLineParts.length) {
+
+    logoImg.src = logoUrl;
+    headerImg.src = headerUrl;
+    footerImg.src = footerUrl;
+    logoImg.onload = tryDraw;
+    headerImg.onload = tryDraw;
+    footerImg.onload = tryDraw;
+    logoImg.onerror = tryDraw;
+    headerImg.onerror = tryDraw;
+    footerImg.onerror = tryDraw;
+
+    function drawPDF() {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      doc.addImage(headerImg, "JPEG", 0, 0, pageWidth, 25);
+      const logoX = (pageWidth - 40) / 2;
+      doc.addImage(logoImg, "PNG", logoX, 27, 40, 20);
+
+      doc.setFontSize(16);
+      doc.text("Cash Book Report", pageWidth / 2, 52, { align: "center" });
       doc.setFontSize(10);
-      doc.setTextColor(120);
-      doc.text(filterLineParts.join("  |  "), 14, 36);
+      doc.setTextColor(100);
+      doc.text(
+        `Generated: ${new Date().toLocaleDateString()}`,
+        pageWidth / 2,
+        59,
+        { align: "center" },
+      );
+
+      const filterLineParts: string[] = [];
+      if (query.trim()) filterLineParts.push(`Search="${query.trim()}"`);
+      if (typeFilter !== "All") filterLineParts.push(`Type=${typeFilter}`);
+      if (dateRange[0] || dateRange[1])
+        filterLineParts.push(
+          `Range=${dateRange[0] ?? "—"} to ${dateRange[1] ?? "—"}`,
+        );
+
+      if (filterLineParts.length) {
+        doc.setFontSize(9);
+        doc.setTextColor(120);
+        doc.text(filterLineParts.join("  |  "), pageWidth / 2, 65, {
+          align: "center",
+        });
+      }
+
+      autoTable(doc, {
+        startY: filterLineParts.length ? 70 : 65,
+        head: [
+          ["Date", "Particulars", "Voucher No.", "Type", "Amount", "Balance"],
+        ],
+        body: withBalance.map((e) => [
+          e.date,
+          e.particulars,
+          e.voucher,
+          e.type,
+          e.amount > 0
+            ? `Rs. ${e.amount.toLocaleString()}`
+            : `- Rs. ${Math.abs(e.amount).toLocaleString()}`,
+          `Rs. ${e.balance.toLocaleString()}`,
+        ]),
+        styles: { fontSize: 9 },
+        headStyles: {
+          fillColor: [10, 104, 2],
+          textColor: 255,
+          fontStyle: "bold",
+        },
+        bodyStyles: { fillColor: [241, 252, 240], textColor: 0 },
+        didDrawPage: function (data) {
+          const ps = doc.internal.pageSize;
+          doc.addImage(
+            footerImg,
+            "JPEG",
+            0,
+            ps.getHeight() - 25,
+            ps.getWidth(),
+            25,
+          );
+          doc.setFontSize(9);
+          doc.text(
+            `Page ${data.pageNumber}`,
+            ps.getWidth() - 40,
+            ps.getHeight() - 10,
+          );
+        },
+      });
+
+      const lastY =
+        (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
+          ?.finalY ?? 70;
+
+      doc.setFontSize(11);
+      doc.setTextColor(0);
+      doc.setFont("helvetica", "bold");
+      doc.text(
+        `Total Receipts: Rs. ${totalReceipts.toLocaleString()}`,
+        14,
+        lastY + 10,
+      );
+      doc.text(
+        `Total Payments: Rs. ${totalPayments.toLocaleString()}`,
+        14,
+        lastY + 17,
+      );
+      doc.setTextColor(34, 139, 34);
+      doc.text(
+        `Closing Balance: Rs. ${closingBalance.toLocaleString()}`,
+        14,
+        lastY + 24,
+      );
+
+      doc.save("cashbook.pdf");
     }
-
-    autoTable(doc, {
-      startY: filterLineParts.length ? 42 : 40,
-      head: [
-        ["Date", "Particulars", "Voucher No.", "Type", "Amount", "Balance"],
-      ],
-      body: withBalance.map((e) => [
-        e.date,
-        e.particulars,
-        e.voucher,
-        e.type,
-        e.amount > 0 ? `+Rs. ${e.amount}` : `-Rs. ${Math.abs(e.amount)}`,
-        `Rs. ${e.balance}`,
-      ]),
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: [10, 104, 2] },
-    });
-
-    const lastY =
-      (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
-        ?.finalY ?? 50;
-
-    doc.setFontSize(12);
-    doc.setTextColor(0);
-    doc.setFont("helvetica", "bold");
-    doc.text(
-      `Total Receipts: Rs. ${totalReceipts.toLocaleString()}`,
-      14,
-      lastY + 10,
-    );
-    doc.text(
-      `Total Payments: Rs. ${totalPayments.toLocaleString()}`,
-      14,
-      lastY + 17,
-    );
-
-    doc.setTextColor(34, 139, 34);
-    doc.text(
-      `Closing Balance: Rs. ${closingBalance.toLocaleString()}`,
-      14,
-      lastY + 24,
-    );
-
-    doc.save("cashbook.pdf");
   };
 
   const allClosingBalance = useMemo(() => {
@@ -543,10 +594,12 @@ export default function CashBook() {
                   {e.type}
                 </Badge>
               </Table.Td>
-              <Table.Td>
-                {e.amount > 0 ? `+${e.amount}` : `-${Math.abs(e.amount)}`}
+              <Table.Td c={e.amount > 0 ? "#0A6802" : "red"}>
+                {e.amount > 0
+                  ? `Rs. ${e.amount.toLocaleString()}`
+                  : `- Rs. ${Math.abs(e.amount).toLocaleString()}`}
               </Table.Td>
-              <Table.Td>{e.balance}</Table.Td>
+              <Table.Td>Rs. {e.balance.toLocaleString()}</Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

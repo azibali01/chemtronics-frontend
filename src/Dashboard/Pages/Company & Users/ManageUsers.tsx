@@ -23,9 +23,12 @@ import {
 } from "@tabler/icons-react";
 import { useUserContext } from "../../Context/Company & Users/UserContext";
 import api from "../../../api_configuration/api";
+import { useAuthorization } from "../../../hooks/useAuthorization";
 
 export default function ManageUsers() {
   const { users, addUser, updateUser, deleteUser } = useUserContext();
+  const canManageUsers = useAuthorization(["Super Admin", "Company Admin"]);
+  const canDeleteUsers = useAuthorization(["Super Admin"]);
 
   const handleDeleteUser = async (index: number, id?: string) => {
     try {
@@ -56,27 +59,25 @@ export default function ManageUsers() {
     Staff: "gray",
   };
 
-
   const payload = {
     fullName: fullName,
     password: password,
     role: role,
   };
-  
+
   const handleCreateUser = async () => {
-    try{ if (!fullName || !role || !password) return;
+    try {
+      if (!fullName || !role || !password) return;
 
-    const newUser = await api.post("/auth/create-user", payload);
+      const newUser = await api.post("/auth/create-user", payload);
 
-    addUser(newUser.data);
-    resetForm();
-    setOpen(false);
-  } 
-  
-  catch (error) {
-    console.error("Error creating user:", error);
-  }
-};
+      addUser(newUser.data);
+      resetForm();
+      setOpen(false);
+    } catch (error) {
+      console.error("Error creating user:", error);
+    }
+  };
 
   const handleEditUser = (index: number) => {
     const user = users[index];
@@ -109,11 +110,12 @@ export default function ManageUsers() {
     setRole(null);
   };
   console.log(users);
-  
+
   const filteredUsers = users.filter((user) => {
     console.log(user);
-    const matchesSearch =
-      user.fullName.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = user.fullName
+      .toLowerCase()
+      .includes(search.toLowerCase());
 
     const matchesRole = roleFilter ? user.role === roleFilter : true;
 
@@ -126,13 +128,15 @@ export default function ManageUsers() {
         <Text fw={600} fz="xl">
           User Management
         </Text>
-        <Button
-          leftSection={<IconPlus size={16} />}
-          color="#0A6802"
-          onClick={() => setOpen(true)}
-        >
-          Add User
-        </Button>
+        {canManageUsers && (
+          <Button
+            leftSection={<IconPlus size={16} />}
+            color="#0A6802"
+            onClick={() => setOpen(true)}
+          >
+            Add User
+          </Button>
+        )}
       </Group>
 
       <Paper
@@ -184,7 +188,9 @@ export default function ManageUsers() {
                       </Avatar>
                       <div>
                         <div style={{ fontWeight: 600 }}>{user.fullName}</div>
-                        <div style={{ fontSize: 12, color: '#6b7280' }}>{user.role}</div>
+                        <div style={{ fontSize: 12, color: "#6b7280" }}>
+                          {user.role}
+                        </div>
                       </div>
                     </Flex>
                   </Table.Td>
@@ -193,23 +199,29 @@ export default function ManageUsers() {
                       {user.role}
                     </Badge>
                   </Table.Td>
-                
+
                   <Table.Td>
                     <Group gap="xs">
-                      <ActionIcon
-                        variant="light"
-                        color="#0A6802"
-                        onClick={() => handleEditUser(index)}
-                      >
-                        <IconEdit size={16} />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="light"
-                        color="red"
-                        onClick={() => handleDeleteUser(index, users[index]._id)}
-                      >
-                        <IconTrash size={16} />
-                      </ActionIcon>
+                      {canManageUsers && (
+                        <ActionIcon
+                          variant="light"
+                          color="#0A6802"
+                          onClick={() => handleEditUser(index)}
+                        >
+                          <IconEdit size={16} />
+                        </ActionIcon>
+                      )}
+                      {canDeleteUsers && (
+                        <ActionIcon
+                          variant="light"
+                          color="red"
+                          onClick={() =>
+                            handleDeleteUser(index, users[index]._id)
+                          }
+                        >
+                          <IconTrash size={16} />
+                        </ActionIcon>
+                      )}
                     </Group>
                   </Table.Td>
                 </Table.Tr>
@@ -256,7 +268,7 @@ export default function ManageUsers() {
           onChange={setRole}
           mb="md"
         />
-       
+
         <Group justify="flex-end" mt="lg">
           <Button color="green" onClick={handleCreateUser}>
             Create User
@@ -280,7 +292,7 @@ export default function ManageUsers() {
           onChange={(e) => setFullName(e.currentTarget.value)}
           mb="md"
         />
-      
+
         <Select
           label="Role"
           data={["Super Admin", "Company Admin", "Accounts User", "Staff"]}
@@ -288,8 +300,7 @@ export default function ManageUsers() {
           onChange={setRole}
           mb="md"
         />
-      
-     
+
         <Group justify="flex-end" mt="lg">
           <Button color="blue" onClick={handleUpdateUser}>
             Update User

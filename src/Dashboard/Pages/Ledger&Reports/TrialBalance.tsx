@@ -14,187 +14,122 @@ import { Download, Filter } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { RowInput } from "jspdf-autotable";
-import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import api from "../../../api_configuration/api";
 
-interface Account {
-  code: string;
-  name: string;
-  type: "Asset" | "Liability" | "Equity" | "Revenue" | "Expense";
-  debit: number;
-  credit: number;
-  date: string;
-}
-
-interface JournalVoucherEntry {
-  accountCode: string;
+type TbRow = {
+  accountNumber: string;
   accountName: string;
-  debit: number;
-  credit: number;
-}
+  accountType: string;
+  parentAccount: string;
+  totalDebit: number;
+  totalCredit: number;
+  netBalance: number;
+};
 
-interface JournalVoucher {
-  _id: string;
-  voucherNumber: string;
-  date: string;
-  entries: JournalVoucherEntry[];
+/**
+ * Resolve a canonical category label from a row.
+ * Handles correctly-labelled parentAccount values ("Asset" etc.) and
+ * numeric root-code values ("1000", "2000" etc.) by falling back to
+ * the first digit of accountNumber.
+ */
+function resolveCategory(r: TbRow): string {
+  const known: Record<string, string> = {
+    Asset: "Asset",
+    Liability: "Liability",
+    Equity: "Equity",
+    Revenue: "Revenue",
+    Expense: "Expense",
+  };
+  if (r.parentAccount && known[r.parentAccount]) return known[r.parentAccount];
+  const firstDigit = String(r.accountNumber ?? "")
+    .trim()
+    .charAt(0);
+  switch (firstDigit) {
+    case "1":
+      return "Asset";
+    case "2":
+      return "Liability";
+    case "3":
+      return "Equity";
+    case "4":
+      return "Revenue";
+    case "5":
+      return "Expense";
+    default:
+      return r.parentAccount || "Other";
+  }
 }
 
 export default function TrialBalance() {
-  const { accounts: chartAccounts } = useChartOfAccounts();
-  const [journalVouchers, setJournalVouchers] = useState<JournalVoucher[]>([]);
+  const [rawData, setRawData] = useState<TbRow[]>([]);
   const [activePage, setActivePage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(5);
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [accountType, setAccountType] = useState<string | null>(null);
+  const [accountTypeFilter, setAccountTypeFilter] = useState<string | null>(
+    null,
+  );
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    const fetchJournalVouchers = async () => {
-      try {
-        const response = await api.get("/journal-vouchers");
-        console.log("Journal Vouchers API response:", response.data);
-        setJournalVouchers(response.data || []);
-      } catch (error) {
-        console.error("Failed to fetch journal vouchers:", error);
-        setJournalVouchers([]);
-      }
-    };
-
-    fetchJournalVouchers();
+  const fetchTrialBalance = useCallback(async (start: string, end: string) => {
+    try {
+      const params: Record<string, string> = {};
+      if (start) params.startDate = start;
+      if (end) params.endDate = end;
+      const { data } = await api.get("/reports/trial-balance", { params });
+      setRawData(Array.isArray(data) ? data : []);
+      setActivePage(1);
+    } catch (e) {
+      console.error("Failed to fetch trial balance:", e);
+      setRawData([]);
+    }
   }, []);
 
-  const getAccountType = (
-    code: string
-  ): "Asset" | "Liability" | "Equity" | "Revenue" | "Expense" => {
-    const firstDigit = code.charAt(0);
-    switch (firstDigit) {
-      case "1":
-        return "Asset";
-      case "2":
-        return "Liability";
-      case "3":
-        return "Equity";
-      case "4":
-        return "Revenue";
-      case "5":
-        return "Expense";
-      default:
-        return "Asset";
-    }
-  };
-
-  interface ChartAccount {
-    accountCode: string;
-    accountName: string;
-    accountType: string;
-    openingBalance?: { debit: number; credit: number };
-    createdAt?: string;
-    children?: ChartAccount[];
-  }
-
-  const flattenAccounts = useCallback(
-    (accounts: ChartAccount[]): ChartAccount[] => {
-      let result: ChartAccount[] = [];
-      accounts.forEach((account) => {
-        result.push(account);
-        if (account.children && account.children.length > 0) {
-          result = result.concat(flattenAccounts(account.children));
-        }
-      });
-      return result;
-    },
-    []
-  );
-
-  const trialBalanceData: Account[] = useMemo(() => {
-    const flatAccounts = flattenAccounts(chartAccounts);
-
-    return flatAccounts
-      .filter((account) => account.accountType === "Detail")
-      .map((account) => {
-        const openingDebit = account.openingBalance?.debit || 0;
-        const openingCredit = account.openingBalance?.credit || 0;
-
-        let totalDebit = openingDebit;
-        let totalCredit = openingCredit;
-        let lastTransactionDate = account.createdAt || new Date().toISOString();
-
-        journalVouchers.forEach((voucher) => {
-          voucher.entries?.forEach((entry) => {
-            if (entry.accountCode === account.accountCode) {
-              totalDebit += entry.debit || 0;
-              totalCredit += entry.credit || 0;
-              if (voucher.date) {
-                lastTransactionDate = voucher.date;
-              }
-            }
-          });
-        });
-
-        return {
-          code: account.accountCode || "N/A",
-          name: account.accountName || "Unknown",
-          type: getAccountType(account.accountCode || "1"),
-          debit: totalDebit,
-          credit: totalCredit,
-          date: lastTransactionDate.split("T")[0],
-        };
-      })
-      .filter((account) => account.debit > 0 || account.credit > 0);
-  }, [chartAccounts, journalVouchers, flattenAccounts]);
-
-  const [filteredData, setFilteredData] = useState<Account[]>(trialBalanceData);
-
+  // Auto-fetch on mount
   useEffect(() => {
-    setFilteredData(trialBalanceData);
-  }, [trialBalanceData]);
+    fetchTrialBalance("", "");
+  }, [fetchTrialBalance]);
+
+  // Client-side: filter by parentAccount type and search term
+  const filteredData = useMemo(() => {
+    return rawData.filter((r) => {
+      const matchType = accountTypeFilter
+        ? resolveCategory(r) === accountTypeFilter
+        : true;
+      const matchSearch = search
+        ? r.accountNumber.toLowerCase().includes(search.toLowerCase()) ||
+          r.accountName.toLowerCase().includes(search.toLowerCase())
+        : true;
+      return matchType && matchSearch;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawData, accountTypeFilter, search]);
 
   const applyFilter = () => {
-    let result = trialBalanceData;
-
-    if (fromDate) {
-      result = result.filter((a) => new Date(a.date) >= new Date(fromDate));
-    }
-    if (toDate) {
-      result = result.filter((a) => new Date(a.date) <= new Date(toDate));
-    }
-    if (accountType) {
-      result = result.filter((a) => a.type === accountType);
-    }
-    if (search) {
-      result = result.filter(
-        (a) =>
-          a.name.toLowerCase().includes(search.toLowerCase()) ||
-          a.code.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-
-    setFilteredData(result);
-    setActivePage(1);
+    fetchTrialBalance(fromDate, toDate);
   };
 
-  const totalDebit = filteredData.reduce((s, a) => s + a.debit, 0);
-  const totalCredit = filteredData.reduce((s, a) => s + a.credit, 0);
-  const balanced = totalDebit === totalCredit;
+  // Cards use rawData so the type-filter dropdown doesn't zero out other cards
+  const totalDebit = rawData.reduce((s, r) => s + Number(r.totalDebit), 0);
+  const totalCredit = rawData.reduce((s, r) => s + Number(r.totalCredit), 0);
+  const balanced = Math.abs(totalDebit - totalCredit) < 0.01;
 
-  const assets = filteredData
-    .filter((a) => a.type === "Asset")
-    .reduce((s, a) => s + a.debit - a.credit, 0);
-  const liabilities = filteredData
-    .filter((a) => a.type === "Liability")
-    .reduce((s, a) => s + a.credit - a.debit, 0);
-  const equity = filteredData
-    .filter((a) => a.type === "Equity")
-    .reduce((s, a) => s + a.credit - a.debit, 0);
-  const revenue = filteredData
-    .filter((a) => a.type === "Revenue")
-    .reduce((s, a) => s + a.credit - a.debit, 0);
-  const expenses = filteredData
-    .filter((a) => a.type === "Expense")
-    .reduce((s, a) => s + a.debit - a.credit, 0);
+  const assets = rawData
+    .filter((r) => resolveCategory(r) === "Asset")
+    .reduce((s, r) => s + Number(r.totalDebit) - Number(r.totalCredit), 0);
+  const liabilities = rawData
+    .filter((r) => resolveCategory(r) === "Liability")
+    .reduce((s, r) => s + Number(r.totalCredit) - Number(r.totalDebit), 0);
+  const equity = rawData
+    .filter((r) => resolveCategory(r) === "Equity")
+    .reduce((s, r) => s + Number(r.totalCredit) - Number(r.totalDebit), 0);
+  const revenue = rawData
+    .filter((r) => resolveCategory(r) === "Revenue")
+    .reduce((s, r) => s + Number(r.totalCredit) - Number(r.totalDebit), 0);
+  const expenses = rawData
+    .filter((r) => resolveCategory(r) === "Expense")
+    .reduce((s, r) => s + Number(r.totalDebit) - Number(r.totalCredit), 0);
 
   const start = (activePage - 1) * rowsPerPage;
   const end = start + rowsPerPage;
@@ -247,15 +182,17 @@ export default function TrialBalance() {
       });
 
       autoTable(doc, {
-        head: [["Code", "Account Name", "Type", "Debit", "Credit", "Date"]],
+        head: [
+          ["Code", "Account Name", "Type", "Debit", "Credit", "Net Balance"],
+        ],
         body: [
-          ...filteredData.map((a) => [
-            a.code,
-            a.name,
-            a.type,
-            `Rs. ${a.debit.toLocaleString()}`,
-            `Rs. ${a.credit.toLocaleString()}`,
-            a.date,
+          ...filteredData.map((r) => [
+            r.accountNumber,
+            r.accountName,
+            r.parentAccount,
+            `Rs. ${r.totalDebit.toLocaleString()}`,
+            `Rs. ${r.totalCredit.toLocaleString()}`,
+            `Rs. ${Math.abs(r.netBalance).toLocaleString()}${r.netBalance < 0 ? " (Cr)" : r.netBalance > 0 ? " (Dr)" : ""}`,
           ]),
           [
             {
@@ -293,13 +230,13 @@ export default function TrialBalance() {
             0,
             pageSize.getHeight() - 25,
             pageSize.getWidth(),
-            25
+            25,
           );
           doc.setFontSize(9);
           doc.text(
             `Page ${data.pageNumber}`,
             pageSize.getWidth() - 40,
-            pageSize.getHeight() - 10
+            pageSize.getHeight() - 10,
           );
         },
       });
@@ -380,8 +317,8 @@ export default function TrialBalance() {
             label="Account Type"
             placeholder="Select type"
             data={["Asset", "Liability", "Equity", "Revenue", "Expense"]}
-            value={accountType}
-            onChange={setAccountType}
+            value={accountTypeFilter}
+            onChange={setAccountTypeFilter}
             clearable
           />
           <Button
@@ -407,18 +344,25 @@ export default function TrialBalance() {
               <Table.Th>Type</Table.Th>
               <Table.Th>Debit</Table.Th>
               <Table.Th>Credit</Table.Th>
-              <Table.Th>Date</Table.Th>
+              <Table.Th>Net Balance</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {paginatedAccounts.map((a, i) => (
+            {paginatedAccounts.map((r, i) => (
               <Table.Tr key={i}>
-                <Table.Td>{a.code}</Table.Td>
-                <Table.Td>{a.name}</Table.Td>
-                <Table.Td>{a.type}</Table.Td>
-                <Table.Td c="#0A6802">Rs. {a.debit.toLocaleString()}</Table.Td>
-                <Table.Td c="red">Rs. {a.credit.toLocaleString()}</Table.Td>
-                <Table.Td>{a.date}</Table.Td>
+                <Table.Td>{r.accountNumber}</Table.Td>
+                <Table.Td>{r.accountName}</Table.Td>
+                <Table.Td>{resolveCategory(r)}</Table.Td>
+                <Table.Td c="#0A6802">
+                  Rs. {r.totalDebit.toLocaleString()}
+                </Table.Td>
+                <Table.Td c="red">
+                  Rs. {r.totalCredit.toLocaleString()}
+                </Table.Td>
+                <Table.Td c={r.netBalance < 0 ? "red" : undefined}>
+                  Rs. {Math.abs(r.netBalance).toLocaleString()}
+                  {r.netBalance < 0 ? " (Cr)" : r.netBalance > 0 ? " (Dr)" : ""}
+                </Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>

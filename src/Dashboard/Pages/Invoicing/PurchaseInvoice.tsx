@@ -9,7 +9,7 @@ import {
   Table,
   Text,
 } from "@mantine/core";
-import { IconPencil, IconPrinter, IconTrash } from "@tabler/icons-react";
+import { IconPencil, IconPrinter, IconTrash, IconX } from "@tabler/icons-react";
 import api from "../../../api_configuration/api";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import type { AccountNode } from "../../Context/ChartOfAccountsContext";
@@ -72,6 +72,33 @@ const hsOptions = Object.entries(hsCodeTypeMap).map(([code, type]) => ({
 }));
 const numberToWordsLocal = (n: number) =>
   n ? String(n).toUpperCase() : "ZERO";
+
+type FieldErrors = Record<string, string>;
+
+function parseValidationMessages(messages: string[]): {
+  fieldErrors: FieldErrors;
+  globalErrors: string[];
+} {
+  const fieldErrors: FieldErrors = {};
+  const globalErrors: string[] = [];
+  for (const msg of messages) {
+    const match = msg.match(/^([\.\w\[\]]+)\s+(must|should)/i);
+    if (match) {
+      fieldErrors[match[1]] = msg;
+    } else {
+      globalErrors.push(msg);
+    }
+  }
+  return { fieldErrors, globalErrors };
+}
+
+function extractError(error: unknown, fallback: string): string {
+  const msg = (error as { response?: { data?: { message?: unknown } } })
+    ?.response?.data?.message;
+  if (Array.isArray(msg)) return msg.join(", ");
+  if (typeof msg === "string" && msg) return msg;
+  return fallback;
+}
 
 export default function PurchaseInvoice(): JSX.Element {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -225,9 +252,10 @@ export default function PurchaseInvoice(): JSX.Element {
     } catch (err) {
       console.error(err);
       notifications.show({
-        title: "Error",
-        message: "Delete failed",
+        title: "Operation Failed",
+        message: extractError(err, "Failed to delete invoice"),
         color: "red",
+        icon: <IconX size={18} />,
       });
     }
   };
@@ -725,11 +753,25 @@ export default function PurchaseInvoice(): JSX.Element {
       }
     } catch (e) {
       console.error(e);
-      notifications.show({
-        title: "Error",
-        message: "Save failed",
-        color: "red",
-      });
+      const msg = (e as { response?: { data?: { message?: unknown } } })
+        ?.response?.data?.message;
+      if (Array.isArray(msg)) {
+        const { globalErrors: ge } = parseValidationMessages(msg);
+        notifications.show({
+          title: ge.length > 0 ? "Operation Failed" : "Validation Error",
+          message: ge.length > 0 ? ge.join(", ") : msg.join("\n"),
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      } else {
+        notifications.show({
+          title: "Operation Failed",
+          message:
+            typeof msg === "string" && msg ? msg : "Failed to save invoice",
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      }
     }
   };
 

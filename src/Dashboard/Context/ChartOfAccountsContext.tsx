@@ -80,7 +80,7 @@ export interface AccountNode {
   isParty: boolean;
   address?: string;
   phoneNo?: string;
-  salesTaxNo?: string;
+  strn?: string;
   ntn?: string;
   icon?: ReactNode;
   children?: AccountNode[];
@@ -105,7 +105,7 @@ export const useChartOfAccounts = () => {
   const context = useContext(ChartOfAccountsContext);
   if (!context)
     throw new Error(
-      "useChartOfAccounts must be used within ChartOfAccountsProvider"
+      "useChartOfAccounts must be used within ChartOfAccountsProvider",
     );
   return context;
 };
@@ -131,8 +131,8 @@ export const ChartOfAccountsProvider: React.FC<{ children: ReactNode }> = ({
         const data = Array.isArray(res.data)
           ? res.data
           : Array.isArray(res.data?.data)
-          ? res.data.data
-          : [];
+            ? res.data.data
+            : [];
 
         setAccounts(data);
       } catch (err) {

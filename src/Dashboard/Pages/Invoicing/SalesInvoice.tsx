@@ -21,6 +21,8 @@ import {
   IconPencil,
   IconSearch,
   IconDownload,
+  IconX,
+  IconTruckDelivery,
 } from "@tabler/icons-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -54,10 +56,12 @@ export interface Invoice {
   saleAccount?: string;
   saleAccountTitle?: string;
   ntnNumber?: string;
+  strnNumber?: string;
   amount: number;
   netAmount?: number;
   province?: "Punjab" | "Sindh";
   items?: InvoiceItem[];
+  isChallanGenerated?: boolean;
 }
 
 import type { AccountNode as ChartAccountNode } from "../../Context/ChartOfAccountsContext";
@@ -166,6 +170,38 @@ function PrintableInvoice({ invoice }: { invoice: Invoice | null }) {
 
 import { getNextInvoiceNumber, mapRawToInvoice } from "../../../utils/invoice";
 
+type FieldErrors = Record<string, string>;
+
+/**
+ * Splits NestJS class-validator messages into field-level errors
+ * (e.g. "invoiceDate must be a valid date") and global errors
+ * (e.g. "Insufficient stock").
+ */
+function parseValidationMessages(messages: string[]): {
+  fieldErrors: FieldErrors;
+  globalErrors: string[];
+} {
+  const fieldErrors: FieldErrors = {};
+  const globalErrors: string[] = [];
+  for (const msg of messages) {
+    const match = msg.match(/^([\.\w\[\]]+)\s+(must|should)/i);
+    if (match) {
+      fieldErrors[match[1]] = msg;
+    } else {
+      globalErrors.push(msg);
+    }
+  }
+  return { fieldErrors, globalErrors };
+}
+
+function extractError(error: unknown, fallback: string): string {
+  const msg = (error as { response?: { data?: { message?: unknown } } })
+    ?.response?.data?.message;
+  if (Array.isArray(msg)) return msg.join(", ");
+  if (typeof msg === "string" && msg) return msg;
+  return fallback;
+}
+
 export default function SalesInvoicePage() {
   const { brand } = useBrand();
   // Always fetch latest Chart of Accounts on mount
@@ -210,8 +246,13 @@ export default function SalesInvoicePage() {
 
   // Debug: log only Revenue accounts when accounts change
 
+  // Field-level validation errors from backend (class-validator)
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
   const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
+  const [convertConfirmInvoice, setConvertConfirmInvoice] =
+    useState<Invoice | null>(null);
   const [search, setSearch] = useState("");
   const [createModal, setCreateModal] = useState(false);
   const [newInvoiceNumber, setNewInvoiceNumber] = useState(
@@ -230,6 +271,7 @@ export default function SalesInvoicePage() {
   const [newSaleAccount, setNewSaleAccount] = useState("");
   const [newSaleAccountTitle, setNewSaleAccountTitle] = useState("");
   const [newNtnNumber, setNewNtnNumber] = useState("");
+  const [newStrnNumber, setNewStrnNumber] = useState("");
   const [includeGST, setIncludeGST] = useState(true);
   const [province, setProvince] = useState<"Punjab" | "Sindh">("Punjab");
 
@@ -383,10 +425,29 @@ export default function SalesInvoicePage() {
         saleAccount: newSaleAccount,
         saleAccountTitle: newSaleAccountTitle,
         ntnNumber: newNtnNumber,
+        strnNumber: newStrnNumber,
         amount: netTotal,
         netAmount: netTotal,
         province,
-        products: items,
+        products: items.map((item) => ({
+          code: item.code,
+          productName: item.product,
+          hsCode: item.hsCode,
+          description: item.description,
+          quantity: item.qty,
+          rate: item.rate,
+          gstPercent:
+            brand !== "hydroworx" && includeGST
+              ? getTaxRate(item.hsCode, province)
+              : 0,
+          exGstRate: item.rate,
+          exGstAmount: item.qty * item.rate,
+          netAmount:
+            item.qty * item.rate +
+            (brand !== "hydroworx" && includeGST
+              ? (item.qty * item.rate * getTaxRate(item.hsCode, province)) / 100
+              : 0),
+        })),
       };
 
       const response = await api.post("/sale-invoice", payload);
@@ -412,23 +473,32 @@ export default function SalesInvoicePage() {
         resetForm();
       }
     } catch (error: unknown) {
-      let message = "Failed to create sales invoice";
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "response" in error &&
-        typeof (error as { response?: { data?: { message?: string } } })
-          .response?.data?.message === "string"
-      ) {
-        message =
-          (error as { response?: { data?: { message?: string } } }).response
-            ?.data?.message ?? message;
+      const msg = (error as { response?: { data?: { message?: unknown } } })
+        ?.response?.data?.message;
+      if (Array.isArray(msg)) {
+        const { fieldErrors: fe, globalErrors: ge } =
+          parseValidationMessages(msg);
+        setFieldErrors(fe);
+        notifications.show({
+          title: ge.length > 0 ? "Operation Failed" : "Validation Error",
+          message:
+            ge.length > 0
+              ? ge.join(", ")
+              : "Please correct the highlighted fields.",
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      } else {
+        notifications.show({
+          title: "Operation Failed",
+          message:
+            typeof msg === "string" && msg
+              ? msg
+              : "Failed to create sales invoice",
+          color: "red",
+          icon: <IconX size={18} />,
+        });
       }
-      notifications.show({
-        title: "Error",
-        message,
-        color: "red",
-      });
       console.error("Error creating sales invoice:", error);
     }
   };
@@ -436,8 +506,34 @@ export default function SalesInvoicePage() {
   // Update an existing sales invoice
   const updateSalesInvoice = async (invoiceData: Invoice) => {
     try {
+      // Map frontend InvoiceItem fields → backend DTO product fields
+      const products = (invoiceData.items || []).map((item) => {
+        const gstPct =
+          brand !== "hydroworx" && includeGST
+            ? getTaxRate(item.hsCode, province)
+            : 0;
+        const exGstAmount = item.qty * item.rate;
+        const gstAmount = (exGstAmount * gstPct) / 100;
+        const netAmount = exGstAmount + gstAmount;
+        return {
+          code: item.code,
+          productName: item.product,
+          hsCode: item.hsCode,
+          description: item.description,
+          quantity: item.qty,
+          rate: item.rate,
+          gstPercent: gstPct,
+          exGstRate: item.rate,
+          exGstAmount,
+          netAmount,
+        };
+      });
+
       const payload = {
         ...invoiceData,
+        // Backend DTO uses 'account', Invoice type uses 'accountNumber'
+        account: invoiceData.accountNumber || "",
+        products,
         amount: editTotal,
         netAmount: editNetAmount,
         province,
@@ -520,19 +616,32 @@ export default function SalesInvoicePage() {
         setEditInvoice(null);
       }
     } catch (error: unknown) {
-      let message = "Failed to update sales invoice";
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "response" in error &&
-        typeof (error as { response?: { data?: { message?: string } } })
-          .response?.data?.message === "string"
-      ) {
-        message =
-          (error as { response?: { data?: { message?: string } } }).response
-            ?.data?.message ?? message;
+      const msg = (error as { response?: { data?: { message?: unknown } } })
+        ?.response?.data?.message;
+      if (Array.isArray(msg)) {
+        const { fieldErrors: fe, globalErrors: ge } =
+          parseValidationMessages(msg);
+        setFieldErrors(fe);
+        notifications.show({
+          title: ge.length > 0 ? "Operation Failed" : "Validation Error",
+          message:
+            ge.length > 0
+              ? ge.join(", ")
+              : "Please correct the highlighted fields.",
+          color: "red",
+          icon: <IconX size={18} />,
+        });
+      } else {
+        notifications.show({
+          title: "Operation Failed",
+          message:
+            typeof msg === "string" && msg
+              ? msg
+              : "Failed to update sales invoice",
+          color: "red",
+          icon: <IconX size={18} />,
+        });
       }
-      notifications.show({ title: "Error", message, color: "red" });
       console.error("Error updating sales invoice:", error);
     }
   };
@@ -553,28 +662,49 @@ export default function SalesInvoicePage() {
 
       setDeleteInvoice(null);
     } catch (error: unknown) {
-      let message = "Failed to delete sales invoice";
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "response" in error &&
-        typeof (error as { response?: { data?: { message?: string } } })
-          .response?.data?.message === "string"
-      ) {
-        message =
-          (error as { response?: { data?: { message?: string } } }).response
-            ?.data?.message ?? message;
-      }
       notifications.show({
-        title: "Error",
-        message,
+        title: "Operation Failed",
+        message: extractError(error, "Failed to delete sales invoice"),
         color: "red",
+        icon: <IconX size={18} />,
       });
       console.error("Error deleting sales invoice:", error);
     }
   };
 
+  const handleConvertToChallan = async (invoice: Invoice) => {
+    try {
+      await api.post(`/delivery-chalan/convert/${invoice.id}`);
+      setInvoices((prev) =>
+        prev.map((inv) =>
+          inv.id === invoice.id ? { ...inv, isChallanGenerated: true } : inv,
+        ),
+      );
+      notifications.show({
+        title: "Delivery Challan Generated!",
+        message: (
+          <span>
+            Challan created from invoice {invoice.invoiceNumber}.{" "}
+            <a href="/dashboard/delivery-challans" style={{ color: "#0A6802" }}>
+              View Delivery Challans →
+            </a>
+          </span>
+        ),
+        color: "green",
+      });
+      setConvertConfirmInvoice(null);
+    } catch (error: unknown) {
+      notifications.show({
+        title: "Failed",
+        message: extractError(error, "Failed to generate delivery challan"),
+        color: "red",
+        icon: <IconX size={18} />,
+      });
+    }
+  };
+
   const resetForm = () => {
+    setFieldErrors({});
     // Keep newInvoiceNumber as-is (generator should remain based on fetched invoices)
     setNewInvoiceDate(() => {
       const today = new Date();
@@ -589,6 +719,7 @@ export default function SalesInvoicePage() {
     setNewSaleAccount("");
     setNewSaleAccountTitle("");
     setNewNtnNumber("");
+    setNewStrnNumber("");
     setIncludeGST(true);
     setProvince("Punjab");
     setItems([
@@ -608,7 +739,7 @@ export default function SalesInvoicePage() {
   };
 
   // Filter invoices by search and date range
-  const filteredInvoices = invoices.filter((inv) => {
+  const filteredInvoices = (invoices as Invoice[]).filter((inv) => {
     const q = search.trim().toLowerCase();
     const invNumber = (inv.invoiceNumber || inv.id || "")
       .toString()
@@ -657,7 +788,8 @@ export default function SalesInvoicePage() {
           "Account Title",
           "Sale Account",
           "Sale Account Title",
-          "NTN No",
+          "NTN",
+          "STRN",
           "Amount",
         ],
       ],
@@ -673,6 +805,7 @@ export default function SalesInvoicePage() {
         i.saleAccount || "",
         i.saleAccountTitle || "",
         i.ntnNumber || "",
+        i.strnNumber || "",
         `PKR ${i.amount.toFixed(2)}`,
       ]),
       styles: { fontSize: 10 },
@@ -707,6 +840,7 @@ export default function SalesInvoicePage() {
     doc.text(`Title: ${invoice.accountTitle || ""}`, leftX, 80);
     doc.text(`Address: ${""}`, leftX, 95);
     doc.text(`NTN: ${invoice.ntnNumber || ""}`, leftX, 110);
+    doc.text(`STRN: ${invoice.strnNumber || ""}`, leftX, 125);
 
     doc.setFontSize(10);
     doc.text(`InvoiceNo: ${invoice.invoiceNumber}`, rightX, 80);
@@ -1038,6 +1172,7 @@ export default function SalesInvoicePage() {
             <div class="box" style="flex:1; margin-right:8px;">
               <div><strong>Title:</strong> ${invoice.accountTitle || ""}</div>
               <div><strong>NTN:</strong> ${invoice.ntnNumber || ""}</div>
+              <div><strong>STRN:</strong> ${invoice.strnNumber || ""}</div>
             </div>
             <div style="width:320px;">
               <div class="box">
@@ -1424,7 +1559,9 @@ export default function SalesInvoicePage() {
                         variant="light"
                         onClick={() =>
                           setEditInvoice(
-                            mapRawToInvoice(i as Record<string, unknown>),
+                            mapRawToInvoice(
+                              i as unknown as Record<string, unknown>,
+                            ),
                           )
                         }
                       >
@@ -1444,6 +1581,18 @@ export default function SalesInvoicePage() {
                         title="Download PDF"
                       >
                         <IconDownload size={16} />
+                      </ActionIcon>
+                      <ActionIcon
+                        color={i.isChallanGenerated ? "gray" : "blue"}
+                        variant="light"
+                        title={
+                          i.isChallanGenerated
+                            ? "Challan already generated"
+                            : "Convert to Delivery Challan"
+                        }
+                        onClick={() => setConvertConfirmInvoice(i)}
+                      >
+                        <IconTruckDelivery size={16} />
                       </ActionIcon>
                     </Group>
                   </Table.Td>
@@ -1483,6 +1632,7 @@ export default function SalesInvoicePage() {
             <TextInput
               label="Invoice Number"
               value={newInvoiceNumber}
+              readOnly
               mb="sm"
             />
             <TextInput
@@ -1491,6 +1641,7 @@ export default function SalesInvoicePage() {
               placeholder="mm/dd/yyyy"
               value={newInvoiceDate}
               onChange={(e) => setNewInvoiceDate(e.currentTarget.value)}
+              error={fieldErrors.invoiceDate}
             />
             <TextInput
               label="Delivery Number"
@@ -1536,11 +1687,16 @@ export default function SalesInvoicePage() {
                 );
                 if (acc) {
                   setNewAccountTitle(acc.accountName || "");
+                  setNewNtnNumber(acc.ntn || "");
+                  setNewStrnNumber(acc.strn || "");
                 } else {
                   setNewAccountTitle("");
+                  setNewNtnNumber("");
+                  setNewStrnNumber("");
                 }
               }}
               clearable
+              error={fieldErrors.accountNumber}
             />
             <Select
               label="Account Title"
@@ -1561,12 +1717,17 @@ export default function SalesInvoicePage() {
                         ? String(acc.code)
                         : "",
                   );
+                  setNewNtnNumber(acc.ntn || "");
+                  setNewStrnNumber(acc.strn || "");
                 } else {
                   setNewAccountNumber("");
+                  setNewNtnNumber("");
+                  setNewStrnNumber("");
                 }
               }}
               mb="sm"
               clearable
+              error={fieldErrors.accountTitle}
             />
             <Select
               label="Sale Account"
@@ -1587,9 +1748,10 @@ export default function SalesInvoicePage() {
               clearable
               searchable
               error={
-                salesAccountOptions.length === 0
+                fieldErrors.saleAccount ??
+                (salesAccountOptions.length === 0
                   ? "No sales accounts available. Create them in Chart of Accounts first."
-                  : undefined
+                  : undefined)
               }
             />
             <TextInput
@@ -1602,6 +1764,11 @@ export default function SalesInvoicePage() {
               label="NTN Number"
               value={newNtnNumber}
               onChange={(e) => setNewNtnNumber(e.currentTarget.value)}
+            />
+            <TextInput
+              label="STRN"
+              value={newStrnNumber}
+              onChange={(e) => setNewStrnNumber(e.currentTarget.value)}
             />
           </Group>
 
@@ -1729,6 +1896,7 @@ export default function SalesInvoicePage() {
                           newItems[index].qty = Number(val) || 0;
                           setItems(newItems);
                         }}
+                        error={fieldErrors[`items.${index}.qty`]}
                       />
                     </Table.Td>
                     <Table.Td>
@@ -1740,6 +1908,7 @@ export default function SalesInvoicePage() {
                           newItems[index].rate = Number(val) || 0;
                           setItems(newItems);
                         }}
+                        error={fieldErrors[`items.${index}.rate`]}
                       />
                     </Table.Td>
                     {brand !== "hydroworx" && (
@@ -1952,6 +2121,7 @@ export default function SalesInvoicePage() {
                       accountNumber: v || "",
                       accountTitle: acc?.accountName || "",
                       ntnNumber: acc?.ntn || "",
+                      strnNumber: acc?.strn || "",
                     });
                   }}
                   clearable
@@ -1968,6 +2138,7 @@ export default function SalesInvoicePage() {
                       accountTitle: v || "",
                       accountNumber: acc?.selectedCode || "",
                       ntnNumber: acc?.ntn || "",
+                      strnNumber: acc?.strn || "",
                     });
                   }}
                   mb="sm"
@@ -1995,6 +2166,8 @@ export default function SalesInvoicePage() {
                 <TextInput
                   label="Sale Account Title"
                   value={editInvoice.saleAccountTitle || ""}
+                  readOnly
+                  description="Auto-filled based on selected sale account"
                 />
                 <TextInput
                   label="NTN Number"
@@ -2003,6 +2176,16 @@ export default function SalesInvoicePage() {
                     setEditInvoice({
                       ...editInvoice,
                       ntnNumber: e.currentTarget.value,
+                    })
+                  }
+                />
+                <TextInput
+                  label="STRN"
+                  value={editInvoice.strnNumber || ""}
+                  onChange={(e) =>
+                    setEditInvoice({
+                      ...editInvoice,
+                      strnNumber: e.currentTarget.value,
                     })
                   }
                 />
@@ -2263,6 +2446,45 @@ export default function SalesInvoicePage() {
               }}
             >
               Delete
+            </Button>
+          </Group>
+        </Modal>
+
+        {/* Convert to Delivery Challan Modal */}
+        <Modal
+          opened={!!convertConfirmInvoice}
+          onClose={() => setConvertConfirmInvoice(null)}
+          title="Convert to Delivery Challan"
+        >
+          {convertConfirmInvoice?.isChallanGenerated ? (
+            <Text c="orange">
+              ⚠️ A challan has already been generated for invoice{" "}
+              <b>{convertConfirmInvoice.invoiceNumber}</b>. Generating another
+              will create a duplicate.
+            </Text>
+          ) : (
+            <Text>
+              Convert invoice <b>{convertConfirmInvoice?.invoiceNumber}</b> to a
+              Delivery Challan?
+            </Text>
+          )}
+          <Group justify="flex-end" mt="md">
+            <Button
+              variant="default"
+              onClick={() => setConvertConfirmInvoice(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              color="#0A6802"
+              onClick={() =>
+                convertConfirmInvoice &&
+                handleConvertToChallan(convertConfirmInvoice)
+              }
+            >
+              {convertConfirmInvoice?.isChallanGenerated
+                ? "Generate Anyway"
+                : "Confirm"}
             </Button>
           </Group>
         </Modal>

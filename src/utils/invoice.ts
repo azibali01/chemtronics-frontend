@@ -26,10 +26,12 @@ export interface Invoice {
   saleAccount?: string;
   saleAccountTitle?: string;
   ntnNumber?: string;
+  strnNumber?: string;
   amount: number;
   netAmount?: number;
   province?: "Punjab" | "Sindh";
   items?: InvoiceItem[];
+  isChallanGenerated?: boolean;
 }
 
 export function getNextInvoiceNumber(invoices: Invoice[] | unknown): string {
@@ -56,37 +58,62 @@ export function mapRawToInvoice(invRaw: Record<string, unknown>): Invoice {
     Array.isArray(inv.products)
       ? (inv.products as unknown[])
       : Array.isArray(inv.items)
-      ? (inv.items as unknown[])
-      : []
+        ? (inv.items as unknown[])
+        : []
   ).map((it) => {
     const item = (it as Record<string, unknown>) || {};
+    // Resolve qty — backend stores as 'quantity', frontend uses 'qty'
+    const qty =
+      typeof item.qty === "number"
+        ? item.qty
+        : typeof item.quantity === "number"
+          ? item.quantity
+          : Number(item.qty ?? item.quantity ?? 0);
+
+    // Resolve product name — backend stores as 'productName', frontend uses 'product'
+    const product = String(item.product ?? item.productName ?? "");
+
+    // Resolve ex-GST fields — backend may use camelCase or PascalCase
+    const exGSTRate =
+      typeof item.exGSTRate === "number"
+        ? item.exGSTRate
+        : typeof item.exGstRate === "number"
+          ? item.exGstRate
+          : 0;
+    const exGSTAmount =
+      typeof item.exGSTAmount === "number"
+        ? item.exGSTAmount
+        : typeof item.exGstAmount === "number"
+          ? item.exGstAmount
+          : 0;
+
     return {
       id:
         item.id !== undefined
           ? String(item.id)
           : item._id !== undefined
-          ? String(item._id)
-          : String(Math.random()),
+            ? String(item._id)
+            : String(Math.random()),
       code: String(item.code ?? ""),
-      product: String(item.product ?? ""),
+      product,
       hsCode: String(item.hsCode ?? ""),
       description: String(item.description ?? ""),
-      qty: typeof item.qty === "number" ? item.qty : 0,
+      qty,
       rate: typeof item.rate === "number" ? item.rate : 0,
-      exGSTRate: typeof item.exGSTRate === "number" ? item.exGSTRate : 0,
-      exGSTAmount: typeof item.exGSTAmount === "number" ? item.exGSTAmount : 0,
+      exGSTRate,
+      exGSTAmount,
     };
   });
 
   const id = inv._id
     ? String(inv._id)
     : inv.id !== undefined
-    ? String(inv.id)
-    : String(
-        (inv.number as unknown) ??
-          (inv.invoiceNumber as unknown) ??
-          Math.random()
-      );
+      ? String(inv.id)
+      : String(
+          (inv.number as unknown) ??
+            (inv.invoiceNumber as unknown) ??
+            Math.random(),
+        );
 
   const invoiceNumber =
     (inv.invoiceNumber as string) ??
@@ -94,8 +121,8 @@ export function mapRawToInvoice(invRaw: Record<string, unknown>): Invoice {
   const invoiceDate = inv.invoiceDate
     ? String(inv.invoiceDate).slice(0, 10)
     : inv.date
-    ? String(inv.date).slice(0, 10)
-    : "";
+      ? String(inv.date).slice(0, 10)
+      : "";
 
   const saleAccountTitleMap: Record<string, string> = {
     "4114": "Sale Of Chemicals and Equipments",
@@ -130,7 +157,7 @@ export function mapRawToInvoice(invRaw: Record<string, unknown>): Invoice {
   // compute subtotal from mapped items so we can fallback if backend omits amounts
   const subtotal = (mappedItems || []).reduce(
     (s, it) => s + (it.qty || 0) * (it.rate || 0),
-    0
+    0,
   );
 
   const invoiceObj: Invoice = {
@@ -149,15 +176,17 @@ export function mapRawToInvoice(invRaw: Record<string, unknown>): Invoice {
     saleAccountTitle:
       saleAccountTitle ?? (inv.saleAccountTitle as string) ?? undefined,
     ntnNumber: (inv.ntnNumber as string) ?? undefined,
+    strnNumber: (inv.strnNumber as string) ?? undefined,
     amount:
       typeof inv.amount === "number"
         ? inv.amount
         : typeof inv.netAmount === "number"
-        ? inv.netAmount
-        : subtotal,
+          ? inv.netAmount
+          : subtotal,
     netAmount: typeof inv.netAmount === "number" ? inv.netAmount : subtotal,
     province: (inv.province as "Punjab" | "Sindh") ?? undefined,
     items: mappedItems,
+    isChallanGenerated: (inv.isChallanGenerated as boolean) ?? false,
   };
 
   return invoiceObj;

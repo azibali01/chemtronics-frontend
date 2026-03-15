@@ -13,6 +13,7 @@ export type Product = {
   category: string;
   productDescription: string;
   quantity: number | "";
+  openingQuantity: number;
   minimumStockLevel: number | "";
   unitPrice: number | "";
   costPrice: number | "";
@@ -65,7 +66,7 @@ interface ProductsContextType {
 }
 
 const ProductsContext = createContext<ProductsContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export const ProductsProvider = ({ children }: { children: ReactNode }) => {

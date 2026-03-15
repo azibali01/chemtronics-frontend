@@ -191,11 +191,16 @@ function JournalVoucherList() {
       result = result.filter((v) => new Date(v.date) <= new Date(toDate));
     }
     if (search) {
+      const s = search.toLowerCase();
       result = result.filter(
         (v) =>
-          v.voucherNumber.toLowerCase().includes(search.toLowerCase()) ||
-          (v.description &&
-            v.description.toLowerCase().includes(search.toLowerCase())),
+          v.voucherNumber.toLowerCase().includes(s) ||
+          (v.description && v.description.toLowerCase().includes(s)) ||
+          (v.entries || []).some(
+            (e) =>
+              e.accountCode.toLowerCase().includes(s) ||
+              e.accountName.toLowerCase().includes(s),
+          ),
       );
     }
     return result;

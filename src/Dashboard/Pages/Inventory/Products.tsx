@@ -128,11 +128,11 @@ function ProductsInner() {
               `p-${Math.random().toString(36).slice(2, 8)}`,
             code: String(product.code || ""),
             productName: String(
-              product.name || product.productname || product.productName || ""
+              product.name || product.productname || product.productName || "",
             ),
             category: String(product.category || ""),
             productDescription: String(
-              product.description || product.productDescription || ""
+              product.description || product.productDescription || "",
             ),
             quantity: product.stock || product.quantity || 0,
             minimumStockLevel:
@@ -142,17 +142,20 @@ function ProductsInner() {
               0,
             unitPrice: product.unitPrice || product.unit_price || 0,
             costPrice: product.costPrice || product.cost_price || 0,
+            openingQuantity: Number(
+              product.openingQuantity ?? product.quantity ?? 0,
+            ),
             status:
               product.status === "active" || product.status === "inactive"
                 ? product.status
                 : "active",
-          })
+          }),
         );
 
         setProducts(transformedProducts);
 
         const uniqueCategories = Array.from(
-          new Set(transformedProducts.map((p) => p.category).filter(Boolean))
+          new Set(transformedProducts.map((p) => p.category).filter(Boolean)),
         );
         if (uniqueCategories.length > 0) {
           setCategories((prev) => {
@@ -184,11 +187,11 @@ function ProductsInner() {
   const totalProducts = products.length;
   const activeCount = products.filter((r) => r.status === "active").length;
   const lowStockCount = products.filter(
-    (r) => r.quantity <= r.minimumStockLevel
+    (r) => r.quantity <= r.minimumStockLevel,
   ).length;
   const stockValue = products.reduce(
     (sum, r) => sum + Number(r.quantity) * Number(r.unitPrice),
-    0
+    0,
   );
 
   const filtered = useMemo(() => {
@@ -218,13 +221,8 @@ function ProductsInner() {
   const totalPages = Math.ceil(filtered.length / pageSize);
   const pageData = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const handleDelete = async (id: string) => {
-    try {
-      console.log("Deleting product with id:", id);
-      await api.delete(`products/delete-product-by-id/${id}`);
-    } catch (error) {
-      console.error("Error deleting product:", error);
-    }
+  const handleDelete = (id: string) => {
+    setDelId(id);
   };
 
   const openCreate = () => {
@@ -300,12 +298,16 @@ function ProductsInner() {
 
     try {
       if (editing) {
+        const response = await api.put(
+          `/products/update-product-by-id/${editing.id}`,
+          payload,
+        );
         const updatedProduct: Product = {
           id: editing.id,
-          ...payload,
+          ...(response.data ?? payload),
         };
         setProducts((prev) =>
-          prev.map((r) => (r.id === editing.id ? updatedProduct : r))
+          prev.map((r) => (r.id === editing.id ? updatedProduct : r)),
         );
         notifications.show({
           title: "Success",
@@ -318,7 +320,9 @@ function ProductsInner() {
         if (response.data) {
           const newProduct: Product = {
             id:
-              response.data.id || `p-${Math.random().toString(36).slice(2, 8)}`,
+              response.data._id ||
+              response.data.id ||
+              `p-${Math.random().toString(36).slice(2, 8)}`,
             ...response.data,
           };
           setProducts((prev) => [newProduct, ...prev]);
@@ -347,14 +351,30 @@ function ProductsInner() {
       prev.map((r) =>
         r.id === id
           ? { ...r, status: r.status === "active" ? "inactive" : "active" }
-          : r
-      )
+          : r,
+      ),
     );
   };
 
   const confirmDelete = async () => {
-    if (delId) setProducts((prev) => prev.filter((r) => r.id !== delId));
-    setDelId(null);
+    if (!delId) return;
+    try {
+      await api.delete(`/products/delete-product-by-id/${delId}`);
+      setProducts((prev) => prev.filter((r) => r.id !== delId));
+      notifications.show({
+        title: "Deleted",
+        message: "Product deleted successfully",
+        color: "green",
+      });
+    } catch (error: any) {
+      notifications.show({
+        title: "Error",
+        message: error.response?.data?.message || "Failed to delete product",
+        color: "red",
+      });
+    } finally {
+      setDelId(null);
+    }
   };
 
   const resetForm = () => {
@@ -562,7 +582,8 @@ Status: ${p.status}`;
                 <Table.Th>Product Code</Table.Th>
                 <Table.Th>Product Name</Table.Th>
                 <Table.Th>Category</Table.Th>
-                <Table.Th>Stock</Table.Th>
+                <Table.Th>Opening Stock</Table.Th>
+                <Table.Th>Current Stock</Table.Th>
                 <Table.Th>Unit Price</Table.Th>
                 <Table.Th>Status</Table.Th>
                 <Table.Th>Stock Status</Table.Th>
@@ -598,6 +619,9 @@ Status: ${p.status}`;
                       </Badge>
                     </Table.Td>
                     <Table.Td>
+                      <Text c="dimmed">{p.openingQuantity ?? 0}</Text>
+                    </Table.Td>
+                    <Table.Td>
                       <Text>{p.quantity}</Text>
                       <Text size="xs" c="dimmed">
                         Min: {p.minimumStockLevel}
@@ -625,8 +649,8 @@ Status: ${p.status}`;
                               ss.color === "green"
                                 ? "#22c55e"
                                 : ss.color === "yellow"
-                                ? "#f59e0b"
-                                : "#ef4444",
+                                  ? "#f59e0b"
+                                  : "#ef4444",
                             display: "inline-block",
                           }}
                         />
@@ -768,17 +792,43 @@ Status: ${p.status}`;
           />
         </SimpleGrid>
         <SimpleGrid cols={2} mb="md">
-          <NumberInput
-            label="Stock Quantity"
-            value={quantity}
-            onChange={(v) => setQuantity(v === "" ? "" : Number(v))}
-          />
-          <NumberInput
-            label="Min Stock Level"
-            value={minimumStockLevel}
-            onChange={(v) => setMinimumStockLevel(v === "" ? "" : Number(v))}
-          />
+          {editing ? (
+            <NumberInput
+              label="Opening Stock (Fixed)"
+              value={editing.openingQuantity ?? 0}
+              disabled
+            />
+          ) : (
+            <NumberInput
+              label="Initial Stock Quantity"
+              value={quantity}
+              onChange={(v) => setQuantity(v === "" ? "" : Number(v))}
+            />
+          )}
+          {editing ? (
+            <NumberInput
+              label="Current Stock"
+              value={quantity}
+              onChange={(v) => setQuantity(v === "" ? "" : Number(v))}
+            />
+          ) : (
+            <NumberInput
+              label="Min Stock Level"
+              value={minimumStockLevel}
+              onChange={(v) => setMinimumStockLevel(v === "" ? "" : Number(v))}
+            />
+          )}
         </SimpleGrid>
+        {editing && (
+          <SimpleGrid cols={2} mb="md">
+            <NumberInput
+              label="Min Stock Level"
+              value={minimumStockLevel}
+              onChange={(v) => setMinimumStockLevel(v === "" ? "" : Number(v))}
+            />
+            <div />
+          </SimpleGrid>
+        )}
         <Group justify="flex-end">
           <Button variant="default" onClick={() => setOpened(false)}>
             Cancel

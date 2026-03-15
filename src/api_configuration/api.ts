@@ -5,10 +5,10 @@ const productionApiBaseURL = "https://chemtronics-backend-xufv.onrender.com";
 
 const configuredApiBaseURL = import.meta.env.VITE_API_BASE_URL?.trim().replace(
   /\/+$/,
-  ""
+  "",
 );
 
-const apiBaseURL =
+export const apiBaseURL =
   configuredApiBaseURL ||
   (import.meta.env.DEV ? "http://localhost:3000" : productionApiBaseURL);
 
@@ -18,9 +18,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const brand =
-    (localStorage.getItem("brand") as "chemtronics" | "hydroworx") ||
-    "chemtronics";
+  const brand = (localStorage.getItem("brand") || "chemtronics").toLowerCase();
   config.headers["x-brand"] = brand;
 
   // Add JWT token if available
@@ -31,5 +29,11 @@ api.interceptors.request.use((config) => {
 
   return config;
 });
+
+// Ensure errors are always forwarded to catch blocks
+api.interceptors.response.use(
+  (response) => response,
+  (error) => Promise.reject(error),
+);
 
 export default api;
