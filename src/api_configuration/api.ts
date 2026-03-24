@@ -8,10 +8,10 @@ const configuredApiBaseURL = import.meta.env.VITE_API_BASE_URL?.trim().replace(
   "",
 );
 
-// In production, always use the backend URL if VITE_API_BASE_URL is not explicitly set
-export const apiBaseURL = import.meta.env.DEV
-  ? configuredApiBaseURL || ""
-  : configuredApiBaseURL || productionApiBaseURL;
+// Check if it's localhost (true dev) vs deployed (production)
+const isLocalhost = typeof window !== "undefined" && window.location.hostname === "localhost";
+
+export const apiBaseURL = configuredApiBaseURL || (isLocalhost ? "" : productionApiBaseURL);
 
 const api = axios.create({
   baseURL: apiBaseURL,
