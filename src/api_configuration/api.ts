@@ -9,8 +9,7 @@ const configuredApiBaseURL = import.meta.env.VITE_API_BASE_URL?.trim().replace(
 );
 
 export const apiBaseURL =
-  configuredApiBaseURL ||
-  (import.meta.env.DEV ? "" : productionApiBaseURL);
+  configuredApiBaseURL || (import.meta.env.DEV ? "" : productionApiBaseURL);
 
 const api = axios.create({
   baseURL: apiBaseURL,

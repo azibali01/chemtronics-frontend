@@ -13,5 +13,5 @@ createRoot(document.getElementById("root")!).render(
         </BrandProvider>
       </AuthProvider>
     </ThemeProvider>
-  </StrictMode>
+  </StrictMode>,
 );
