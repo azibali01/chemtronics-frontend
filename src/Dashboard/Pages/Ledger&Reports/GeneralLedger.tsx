@@ -26,7 +26,7 @@ import {
   IconPrinter,
 } from "@tabler/icons-react";
 
-import type { RowInput } from "jspdf-autotable";
+
 import api, { apiBaseURL } from "../../../api_configuration/api";
 
 interface LedgerEntry {

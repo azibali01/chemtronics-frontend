@@ -250,7 +250,8 @@ function ProductsInner() {
       ...p,
       productDescription: p.productDescription ?? "",
       status: p.status === "active" ? "active" : "inactive",
-    });
+      openingQuantity: p.openingQuantity ?? 0,
+    } as any);
     setProductName(p.productName);
     setCode(p.code);
     setCategory(p.category);
