@@ -10,7 +10,7 @@ const configuredApiBaseURL = import.meta.env.VITE_API_BASE_URL?.trim().replace(
 
 export const apiBaseURL =
   configuredApiBaseURL ||
-  (import.meta.env.DEV ? "http://localhost:3000" : productionApiBaseURL);
+  (import.meta.env.DEV ? "" : productionApiBaseURL);
 
 const api = axios.create({
   baseURL: apiBaseURL,
