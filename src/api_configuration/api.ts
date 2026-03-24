@@ -8,8 +8,11 @@ const configuredApiBaseURL = import.meta.env.VITE_API_BASE_URL?.trim().replace(
   "",
 );
 
+// In production, always use the backend URL if VITE_API_BASE_URL is not explicitly set
 export const apiBaseURL =
-  configuredApiBaseURL || (import.meta.env.DEV ? "" : productionApiBaseURL);
+  import.meta.env.DEV
+    ? configuredApiBaseURL || ""
+    : configuredApiBaseURL || productionApiBaseURL;
 
 const api = axios.create({
   baseURL: apiBaseURL,
