@@ -26,7 +26,6 @@ import {
   IconPrinter,
 } from "@tabler/icons-react";
 
-
 import api, { apiBaseURL } from "../../../api_configuration/api";
 
 interface LedgerEntry {
