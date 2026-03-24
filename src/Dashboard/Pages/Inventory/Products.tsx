@@ -243,6 +243,7 @@ function ProductsInner() {
     costPrice: number;
     quantity: number;
     minimumStockLevel: number;
+    openingQuantity?: number;
     status: string;
   }) => {
     setEditing({

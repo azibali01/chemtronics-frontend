@@ -25,8 +25,7 @@ import {
   IconCash,
   IconPrinter,
 } from "@tabler/icons-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+
 import type { RowInput } from "jspdf-autotable";
 import api, { apiBaseURL } from "../../../api_configuration/api";
 

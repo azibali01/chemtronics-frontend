@@ -10,7 +10,6 @@ import {
   TextInput,
   Select,
   Badge,
-  Stack,
 } from "@mantine/core";
 import { Download, Filter } from "lucide-react";
 import jsPDF from "jspdf";
