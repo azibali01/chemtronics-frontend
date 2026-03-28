@@ -31,7 +31,9 @@ import {
   IconClock,
   IconPackageExport,
   IconSearch,
+  IconFileInvoice,
 } from "@tabler/icons-react";
+// ...existing imports...
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
@@ -69,6 +71,9 @@ function getNextChallanNumber(challans: DeliveryChallan[]): string {
 }
 
 function DeliveryChallansInner() {
+    // State for convert modal (moved from top level)
+    const [convertChallan, setConvertChallan] = useState<DeliveryChallan | null>(null);
+    const [convertLoading, setConvertLoading] = useState(false);
   const {
     challans,
     isLoading,
@@ -256,11 +261,7 @@ function DeliveryChallansInner() {
   const paginatedData = filteredData.slice(start, start + pageSize);
 
   // Stats
-  const activeCount = challans.filter((d) => d.status !== "Delivered").length;
-  const deliveredCount = challans.filter(
-    (d) => d.status === "Delivered",
-  ).length;
-  const pendingCount = challans.filter((d) => d.status === "Pending").length;
+  // Status counts removed from UI
 
   // CRUD
   const openCreate = () => {
@@ -364,16 +365,7 @@ function DeliveryChallansInner() {
     });
   };
 
-  function StatusBadge({ status }: { status: DeliveryChallan["status"] }) {
-    switch (status) {
-      case "Delivered":
-        return <Badge color="green">Delivered</Badge>;
-      case "In Transit":
-        return <Badge color="yellow">In Transit</Badge>;
-      case "Pending":
-        return <Badge color="gray">Pending</Badge>;
-    }
-  }
+  // StatusBadge removed from UI
 
   const exportPDF = (row: DeliveryChallan) => {
     const doc = new jsPDF("p", "pt", "a4");
@@ -698,43 +690,7 @@ function DeliveryChallansInner() {
               </Button>
             </Group>
 
-            <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="lg" mb="lg">
-              <Card shadow="sm" radius="md" withBorder bg={"#F1FCF0"}>
-                <Group justify="space-between">
-                  <Text>Active Challans</Text>
-                  <ThemeIcon color="teal" variant="light">
-                    <IconPackageExport size={20} />
-                  </ThemeIcon>
-                </Group>
-                <Title order={3} mt={8}>
-                  {activeCount}
-                </Title>
-              </Card>
-
-              <Card shadow="sm" radius="md" withBorder bg={"#F1FCF0"}>
-                <Group justify="space-between">
-                  <Text>Delivered</Text>
-                  <ThemeIcon color="#0A6802" variant="light">
-                    <IconCheck size={20} />
-                  </ThemeIcon>
-                </Group>
-                <Title order={3} mt={8}>
-                  {deliveredCount}
-                </Title>
-              </Card>
-
-              <Card shadow="sm" radius="md" withBorder bg={"#F1FCF0"}>
-                <Group justify="space-between">
-                  <Text>Pending</Text>
-                  <ThemeIcon color="gray" variant="light">
-                    <IconClock size={20} />
-                  </ThemeIcon>
-                </Group>
-                <Title order={3} mt={8}>
-                  {pendingCount}
-                </Title>
-              </Card>
-            </SimpleGrid>
+            {/* Status summary cards removed from UI */}
 
             <Card withBorder radius="md" shadow="sm" p="md" bg={"#F1FCF0"}>
               <Group mb="sm">
@@ -823,7 +779,7 @@ function DeliveryChallansInner() {
                       <Table.Th>Party Address</Table.Th>
                       <Table.Th>Particulars</Table.Th>
                       <Table.Th>Qty</Table.Th>
-                      <Table.Th>Status</Table.Th>
+                      {/* Status column removed from UI */}
                       <Table.Th>Actions</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
@@ -854,9 +810,7 @@ function DeliveryChallansInner() {
                             </Text>
                           )}
                         </Table.Td>
-                        <Table.Td>
-                          <StatusBadge status={row.status} />
-                        </Table.Td>
+                        {/* Status cell removed from UI */}
                         <Table.Td>
                           <Group gap="xs">
                             <ActionIcon
@@ -880,8 +834,56 @@ function DeliveryChallansInner() {
                             >
                               <IconDownload size={16} />
                             </ActionIcon>
+                            <ActionIcon
+                              variant="light"
+                              color="blue"
+                              title="Convert to Sales Invoice"
+                              onClick={() => setConvertChallan(row)}
+                            >
+                              <IconFileInvoice size={16} />
+                            </ActionIcon>
                           </Group>
                         </Table.Td>
+                            {/* Convert to Sales Invoice Modal */}
+                            <Modal
+                              opened={!!convertChallan}
+                              onClose={() => setConvertChallan(null)}
+                              title="Convert to Sales Invoice"
+                            >
+                              <Text mb="md">
+                                Are you sure you want to convert delivery challan <b>{convertChallan?.id}</b> to a Sales Invoice?
+                              </Text>
+                              <Group justify="flex-end">
+                                <Button variant="default" onClick={() => setConvertChallan(null)} disabled={convertLoading}>
+                                  Cancel
+                                </Button>
+                                <Button
+                                  color="#0A6802"
+                                  loading={convertLoading}
+                                  onClick={async () => {
+                                    if (!convertChallan) return;
+                                    setConvertLoading(true);
+                                    try {
+                                      // TODO: Implement backend API endpoint
+                                      await api.post(`/sale-invoice/convert/${convertChallan.id}`);
+                                      setConvertChallan(null);
+                                      // Optionally refresh data here
+                                      // await searchChallans();
+                                      // Show notification
+                                      // notifications.show({ title: "Success", message: "Converted to Sales Invoice", color: "green" });
+                                      window.location.reload(); // Temporary: reload to reflect changes
+                                    } catch (e) {
+                                      // notifications.show({ title: "Error", message: "Failed to convert", color: "red" });
+                                      alert("Failed to convert delivery challan to sales invoice.");
+                                    } finally {
+                                      setConvertLoading(false);
+                                    }
+                                  }}
+                                >
+                                  Convert
+                                </Button>
+                              </Group>
+                            </Modal>
                       </Table.Tr>
                     ))}
                     {paginatedData.length === 0 && (

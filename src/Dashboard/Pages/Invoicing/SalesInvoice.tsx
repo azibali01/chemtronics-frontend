@@ -251,8 +251,7 @@ export default function SalesInvoicePage() {
 
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
   const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
-  const [convertConfirmInvoice, setConvertConfirmInvoice] =
-    useState<Invoice | null>(null);
+  // Removed: Convert to Delivery Challan state
   const [search, setSearch] = useState("");
   const [createModal, setCreateModal] = useState(false);
   const [newInvoiceNumber, setNewInvoiceNumber] = useState(
@@ -672,36 +671,7 @@ export default function SalesInvoicePage() {
     }
   };
 
-  const handleConvertToChallan = async (invoice: Invoice) => {
-    try {
-      await api.post(`/delivery-chalan/convert/${invoice.id}`);
-      setInvoices((prev) =>
-        prev.map((inv) =>
-          inv.id === invoice.id ? { ...inv, isChallanGenerated: true } : inv,
-        ),
-      );
-      notifications.show({
-        title: "Delivery Challan Generated!",
-        message: (
-          <span>
-            Challan created from invoice {invoice.invoiceNumber}.{" "}
-            <a href="/dashboard/delivery-challans" style={{ color: "#0A6802" }}>
-              View Delivery Challans →
-            </a>
-          </span>
-        ),
-        color: "green",
-      });
-      setConvertConfirmInvoice(null);
-    } catch (error: unknown) {
-      notifications.show({
-        title: "Failed",
-        message: extractError(error, "Failed to generate delivery challan"),
-        color: "red",
-        icon: <IconX size={18} />,
-      });
-    }
-  };
+  // Removed: Convert to Delivery Challan handler
 
   const resetForm = () => {
     setFieldErrors({});
@@ -1582,18 +1552,7 @@ export default function SalesInvoicePage() {
                       >
                         <IconDownload size={16} />
                       </ActionIcon>
-                      <ActionIcon
-                        color={i.isChallanGenerated ? "gray" : "blue"}
-                        variant="light"
-                        title={
-                          i.isChallanGenerated
-                            ? "Challan already generated"
-                            : "Convert to Delivery Challan"
-                        }
-                        onClick={() => setConvertConfirmInvoice(i)}
-                      >
-                        <IconTruckDelivery size={16} />
-                      </ActionIcon>
+                      {/* Removed: Convert to Delivery Challan button */}
                     </Group>
                   </Table.Td>
                 </Table.Tr>
@@ -1772,15 +1731,7 @@ export default function SalesInvoicePage() {
             />
           </Group>
 
-          {brand !== "hydroworx" && (
-            <Switch
-              color="#0A6802"
-              label="Include GST (18%)"
-              checked={includeGST}
-              onChange={(e) => setIncludeGST(e.currentTarget.checked)}
-              mb="md"
-            />
-          )}
+          {/* GST Switch removed as per request */}
 
           <Select
             label="Province"
@@ -2450,44 +2401,7 @@ export default function SalesInvoicePage() {
           </Group>
         </Modal>
 
-        {/* Convert to Delivery Challan Modal */}
-        <Modal
-          opened={!!convertConfirmInvoice}
-          onClose={() => setConvertConfirmInvoice(null)}
-          title="Convert to Delivery Challan"
-        >
-          {convertConfirmInvoice?.isChallanGenerated ? (
-            <Text c="orange">
-              ⚠️ A challan has already been generated for invoice{" "}
-              <b>{convertConfirmInvoice.invoiceNumber}</b>. Generating another
-              will create a duplicate.
-            </Text>
-          ) : (
-            <Text>
-              Convert invoice <b>{convertConfirmInvoice?.invoiceNumber}</b> to a
-              Delivery Challan?
-            </Text>
-          )}
-          <Group justify="flex-end" mt="md">
-            <Button
-              variant="default"
-              onClick={() => setConvertConfirmInvoice(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              color="#0A6802"
-              onClick={() =>
-                convertConfirmInvoice &&
-                handleConvertToChallan(convertConfirmInvoice)
-              }
-            >
-              {convertConfirmInvoice?.isChallanGenerated
-                ? "Generate Anyway"
-                : "Confirm"}
-            </Button>
-          </Group>
-        </Modal>
+        {/* Removed: Convert to Delivery Challan Modal */}
 
         {/* Invoice Print Template (for direct printing, hidden) */}
         <div style={{ display: "none" }}>

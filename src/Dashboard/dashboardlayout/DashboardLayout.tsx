@@ -103,14 +103,14 @@ const menuItems: MenuItem[] = [
     icon: <IconFileInvoice size={18} />,
     children: [
       {
-        label: "Sales Invoice",
-        icon: <IconArrowRight size={16} />,
-        path: "/dashboard/sales-invoice",
-      },
-      {
         label: "Delivery Challan",
         icon: <IconArrowRight size={16} />,
         path: "/dashboard/delivery-challans",
+      },
+      {
+        label: "Sales Invoice",
+        icon: <IconArrowRight size={16} />,
+        path: "/dashboard/sales-invoice",
       },
       {
         label: "Purchase Invoice",
