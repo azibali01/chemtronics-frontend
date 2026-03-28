@@ -22,7 +22,6 @@ import {
   IconSearch,
   IconDownload,
   IconX,
-  IconTruckDelivery,
 } from "@tabler/icons-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
