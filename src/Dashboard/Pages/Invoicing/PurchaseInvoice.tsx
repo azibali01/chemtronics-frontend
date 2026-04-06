@@ -15,6 +15,7 @@ import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import type { AccountNode } from "../../Context/ChartOfAccountsContext";
 import { notifications } from "@mantine/notifications";
 import type { JSX } from "react/jsx-runtime";
+import { getHeaderImage, getFooterImage } from "../../../utils/assetPaths";
 
 type Province = "Punjab" | "Sindh";
 
@@ -128,6 +129,7 @@ export default function PurchaseInvoice(): JSX.Element {
   const [items, setItems] = useState<Item[]>([]);
   const [notes, setNotes] = useState("");
   const [province, setProvince] = useState<Province>("Punjab");
+  const brand = "chemtronix";
 
   // derive Purchase Party accounts for supplier select
   const purchasePartyOptions = (() => {
