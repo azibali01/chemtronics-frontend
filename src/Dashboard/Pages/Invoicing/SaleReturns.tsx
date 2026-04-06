@@ -688,6 +688,7 @@ function SaleReturnsInner() {
         .join("");
 
       const rowsHtml = itemsRows + paddingRows;
+      const brand = "chemtronix";
 
       const html = `<!doctype html>
         <html>

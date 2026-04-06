@@ -36,6 +36,7 @@ function CreditSaleInvoiceInner() {
   const { sales, addSale, updateSale, deleteSale } = useCreditSales();
   const { accounts } = useChartOfAccounts();
 
+  const brand = "chemtronix";
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
