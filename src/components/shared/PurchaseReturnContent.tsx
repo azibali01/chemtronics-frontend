@@ -1,5 +1,5 @@
 import React from "react";
-import { Table, Group, Text, Stack } from "@mantine/core";
+import { Table, Group, Stack } from "@mantine/core";
 
 export interface PurchaseReturnPrintData {
   id: string;

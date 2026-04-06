@@ -30,6 +30,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import api from "../../../api_configuration/api";
+import { getHeaderImage, getFooterImage } from "../../../utils/assetPaths";
 
 type Entry = {
   date: string;
@@ -52,6 +53,7 @@ interface JournalVoucher {
 }
 
 export default function CashBook() {
+  const brand = "chemtronix";
   const { accounts: chartAccounts } = useChartOfAccounts();
   const [journalVouchers, setJournalVouchers] = useState<JournalVoucher[]>([]);
   const [opened, { open, close }] = useDisclosure(false);

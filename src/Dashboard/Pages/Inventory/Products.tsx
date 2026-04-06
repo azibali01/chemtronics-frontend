@@ -76,7 +76,6 @@ function ProductsInner() {
     categories,
     setCategories,
     query,
-    setQuery,
     cat,
     setCat,
     statusFilter,

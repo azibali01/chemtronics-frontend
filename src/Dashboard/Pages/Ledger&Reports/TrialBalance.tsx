@@ -15,6 +15,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { RowInput } from "jspdf-autotable";
 import api from "../../../api_configuration/api";
+import { getHeaderImage, getFooterImage } from "../../../utils/assetPaths";
 
 type TbRow = {
   accountNumber: string;
@@ -61,6 +62,7 @@ function resolveCategory(r: TbRow): string {
 }
 
 export default function TrialBalance() {
+  const brand = "chemtronix";
   const [rawData, setRawData] = useState<TbRow[]>([]);
   const [activePage, setActivePage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(5);
