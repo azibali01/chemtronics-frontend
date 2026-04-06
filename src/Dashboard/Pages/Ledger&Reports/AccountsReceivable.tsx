@@ -17,6 +17,8 @@ import {
 import jsPDF from "jspdf";
 import autoTable, { type RowInput } from "jspdf-autotable";
 import { Download, Filter } from "lucide-react";
+import { useBrand } from "../../Context/BrandContext";
+import { getHeaderImage, getFooterImage } from "../../../utils/assetPaths";
 import {
   IconAlertCircle,
   IconArrowUpRight,
@@ -170,9 +172,10 @@ export default function AccountsReceivable() {
   );
 
   const exportPDF = () => {
+    const { brand } = useBrand();
     const logoUrl = "/Logo.png";
-    const headerUrl = "/Header.jpg";
-    const footerUrl = "/Footer.jpg";
+    const headerUrl = getHeaderImage(brand);
+    const footerUrl = getFooterImage(brand);
     const logoImg = new window.Image();
     const headerImg = new window.Image();
     const footerImg = new window.Image();
@@ -294,8 +297,9 @@ export default function AccountsReceivable() {
       }));
 
     const logoUrl = "/Logo.png";
-    const headerUrl = "/Header.jpg";
-    const footerUrl = "/Footer.jpg";
+    const { brand } = useBrand();
+    const headerUrl = getHeaderImage(brand);
+    const footerUrl = getFooterImage(brand);
     const logoImg = new window.Image();
     const headerImg = new window.Image();
     const footerImg = new window.Image();

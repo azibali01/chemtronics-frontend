@@ -34,7 +34,7 @@ import {
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { notifications } from "@mantine/notifications";
 import {
   ProductsProvider,
@@ -42,6 +42,7 @@ import {
 } from "../../Context/Inventory/ProductsContext";
 import { useProducts } from "../../Context/Inventory/ProductsContext";
 import api from "../../../api_configuration/api";
+import { useDebounce } from "../../../hooks/useDebounce";
 const money = (n: number) =>
   `${n.toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -112,7 +113,14 @@ function ProductsInner() {
     setNewCategory,
     loading,
     setLoading,
+    search,
   } = useProducts();
+
+  // Local state for uncontrolled search input
+  const [searchInput, setSearchInput] = useState("");
+
+  // Debounce the search input
+  const debouncedSearchTerm = useDebounce(searchInput, 300);
 
   const fetchProducts = async () => {
     try {
@@ -424,6 +432,16 @@ Status: ${p.status}`;
     }
   }, [lowStockCount]);
 
+  // Handle debounced search
+  useEffect(() => {
+    if (debouncedSearchTerm.trim()) {
+      search(debouncedSearchTerm);
+    } else {
+      // Reset to show all products when search is cleared
+      fetchProducts();
+    }
+  }, [debouncedSearchTerm]);
+
   return (
     <div>
       <Group justify="space-between" mb="md">
@@ -503,34 +521,40 @@ Status: ${p.status}`;
             <Text fw={600}>Products List</Text>
             <Text c={"dimmed"} size="sm">
               Manage your product inventory and stock levels
-              {query &&
-                ` • Found ${filtered.length} product(s) matching "${query}"`}
+              {searchInput &&
+                ` • Found ${filtered.length} product(s) matching "${searchInput}"`}
             </Text>
           </div>
         </Group>
         <Group mb="md" grow>
           <TextInput
             placeholder="Search by product name, code, category, or description..."
-            value={query}
+            value={searchInput}
             leftSection={<IconSearch size={16} />}
             rightSection={
-              <ActionIcon
-                size="sm"
-                variant="subtle"
-                onClick={() => {
-                  setQuery("");
-                  setPage(1);
-                }}
-                style={{
-                  opacity: query ? 1 : 0,
-                  pointerEvents: query ? "auto" : "none",
-                }}
-              >
-                <IconX size={16} />
-              </ActionIcon>
+              loading ? (
+                <Text size="xs" c="dimmed">
+                  Searching...
+                </Text>
+              ) : (
+                <ActionIcon
+                  size="sm"
+                  variant="subtle"
+                  onClick={() => {
+                    setSearchInput("");
+                    setPage(1);
+                  }}
+                  style={{
+                    opacity: searchInput ? 1 : 0,
+                    pointerEvents: searchInput ? "auto" : "none",
+                  }}
+                >
+                  <IconX size={16} />
+                </ActionIcon>
+              )
             }
             onChange={(e) => {
-              setQuery(e.currentTarget.value);
+              setSearchInput(e.currentTarget.value);
               setPage(1); // Reset to first page when searching
             }}
           />
@@ -593,140 +617,152 @@ Status: ${p.status}`;
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {pageData.map((p) => {
-                // Ensure quantity and minimumStockLevel are numbers for stockStatus
-                const ss = stockStatus({
-                  quantity: typeof p.quantity === "number" ? p.quantity : 0,
-                  minimumStockLevel:
-                    typeof p.minimumStockLevel === "number"
-                      ? p.minimumStockLevel
-                      : 0,
-                });
-                return (
-                  <Table.Tr key={p.id}>
-                    <Table.Td>
-                      <Text fw={600} c="#819E00">
-                        {p.code}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text fw={500}>{p.productName}</Text>
-                      <Text size="xs" c="dimmed">
-                        {p.productDescription}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Badge variant="light" color="grape">
-                        {p.category}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text c="dimmed">{p.openingQuantity ?? 0}</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text>{p.quantity}</Text>
-                      <Text size="xs" c="dimmed">
-                        Min: {p.minimumStockLevel}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td>
-                      {money(p.unitPrice === "" ? 0 : p.unitPrice)}
-                    </Table.Td>
-                    <Table.Td>
-                      <Badge
-                        color={p.status === "active" ? "#0A6802" : "gray"}
-                        variant="filled"
-                      >
-                        {p.status}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap={6}>
-                        <span
-                          style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: 999,
-                            background:
-                              ss.color === "green"
-                                ? "#22c55e"
-                                : ss.color === "yellow"
-                                  ? "#f59e0b"
-                                  : "#ef4444",
-                            display: "inline-block",
-                          }}
-                        />
-                        <Text size="sm">{ss.label}</Text>
-                      </Group>
-                    </Table.Td>
-                    <Table.Td>
-                      <Menu withinPortal shadow="sm" position="bottom-end">
-                        <Menu.Target>
-                          <ActionIcon variant="light" color="#0A6802">
-                            <IconDots size={16} />
-                          </ActionIcon>
-                        </Menu.Target>
-                        <Menu.Dropdown>
-                          <Menu.Item
-                            leftSection={<IconEdit size={16} />}
-                            onClick={() =>
-                              openEdit({
-                                ...p,
-                                unitPrice:
-                                  typeof p.unitPrice === "number"
-                                    ? p.unitPrice
-                                    : 0,
-                                costPrice:
-                                  typeof p.costPrice === "number"
-                                    ? p.costPrice
-                                    : 0,
-                                quantity:
-                                  typeof p.quantity === "number"
-                                    ? p.quantity
-                                    : 0,
-                                minimumStockLevel:
-                                  typeof p.minimumStockLevel === "number"
-                                    ? p.minimumStockLevel
-                                    : 0,
-                              })
-                            }
-                          >
-                            Edit
-                          </Menu.Item>
-                          <Menu.Item
-                            leftSection={
-                              p.status === "active" ? (
-                                <IconSquareX size={16} />
-                              ) : (
-                                <IconSquareCheck size={16} />
-                              )
-                            }
-                            onClick={() => toggleStatus(p.id)}
-                          >
-                            {p.status === "active"
-                              ? "Mark Inactive"
-                              : "Mark Active"}
-                          </Menu.Item>
-                          <Menu.Item
-                            leftSection={<IconDownload size={16} />}
-                            onClick={() => exportPDF(p)}
-                          >
-                            Download PDF
-                          </Menu.Item>
-                          <Menu.Divider />
-                          <Menu.Item
-                            color="red"
-                            leftSection={<IconTrash size={16} />}
-                            onClick={() => handleDelete(p.id)}
-                          >
-                            Delete
-                          </Menu.Item>
-                        </Menu.Dropdown>
-                      </Menu>
-                    </Table.Td>
-                  </Table.Tr>
-                );
-              })}
+              {pageData.length === 0 ? (
+                <Table.Tr>
+                  <Table.Td colSpan={9}>
+                    <Text c="dimmed" ta="center" py="xl">
+                      {searchInput && products.length === 0
+                        ? "No products found matching your search. Try a different term."
+                        : "No products available. Click 'Add Product' to create one."}
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              ) : (
+                pageData.map((p) => {
+                  // Ensure quantity and minimumStockLevel are numbers for stockStatus
+                  const ss = stockStatus({
+                    quantity: typeof p.quantity === "number" ? p.quantity : 0,
+                    minimumStockLevel:
+                      typeof p.minimumStockLevel === "number"
+                        ? p.minimumStockLevel
+                        : 0,
+                  });
+                  return (
+                    <Table.Tr key={p.id}>
+                      <Table.Td>
+                        <Text fw={600} c="#819E00">
+                          {p.code}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text fw={500}>{p.productName}</Text>
+                        <Text size="xs" c="dimmed">
+                          {p.productDescription}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge variant="light" color="grape">
+                          {p.category}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text c="dimmed">{p.openingQuantity ?? 0}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text>{p.quantity}</Text>
+                        <Text size="xs" c="dimmed">
+                          Min: {p.minimumStockLevel}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        {money(p.unitPrice === "" ? 0 : p.unitPrice)}
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge
+                          color={p.status === "active" ? "#0A6802" : "gray"}
+                          variant="filled"
+                        >
+                          {p.status}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Group gap={6}>
+                          <span
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: 999,
+                              background:
+                                ss.color === "green"
+                                  ? "#22c55e"
+                                  : ss.color === "yellow"
+                                    ? "#f59e0b"
+                                    : "#ef4444",
+                              display: "inline-block",
+                            }}
+                          />
+                          <Text size="sm">{ss.label}</Text>
+                        </Group>
+                      </Table.Td>
+                      <Table.Td>
+                        <Menu withinPortal shadow="sm" position="bottom-end">
+                          <Menu.Target>
+                            <ActionIcon variant="light" color="#0A6802">
+                              <IconDots size={16} />
+                            </ActionIcon>
+                          </Menu.Target>
+                          <Menu.Dropdown>
+                            <Menu.Item
+                              leftSection={<IconEdit size={16} />}
+                              onClick={() =>
+                                openEdit({
+                                  ...p,
+                                  unitPrice:
+                                    typeof p.unitPrice === "number"
+                                      ? p.unitPrice
+                                      : 0,
+                                  costPrice:
+                                    typeof p.costPrice === "number"
+                                      ? p.costPrice
+                                      : 0,
+                                  quantity:
+                                    typeof p.quantity === "number"
+                                      ? p.quantity
+                                      : 0,
+                                  minimumStockLevel:
+                                    typeof p.minimumStockLevel === "number"
+                                      ? p.minimumStockLevel
+                                      : 0,
+                                })
+                              }
+                            >
+                              Edit
+                            </Menu.Item>
+                            <Menu.Item
+                              leftSection={
+                                p.status === "active" ? (
+                                  <IconSquareX size={16} />
+                                ) : (
+                                  <IconSquareCheck size={16} />
+                                )
+                              }
+                              onClick={() => toggleStatus(p.id)}
+                            >
+                              {p.status === "active"
+                                ? "Mark Inactive"
+                                : "Mark Active"}
+                            </Menu.Item>
+                            <Menu.Item
+                              leftSection={<IconDownload size={16} />}
+                              onClick={() => exportPDF(p)}
+                            >
+                              Download PDF
+                            </Menu.Item>
+                            <Menu.Divider />
+                            <Menu.Item
+                              color="red"
+                              leftSection={<IconTrash size={16} />}
+                              onClick={() => handleDelete(p.id)}
+                            >
+                              Delete
+                            </Menu.Item>
+                          </Menu.Dropdown>
+                        </Menu>
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })
+              )}
             </Table.Tbody>
           </Table>
         )}

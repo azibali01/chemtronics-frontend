@@ -22,12 +22,10 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState, useRef, useEffect } from "react";
+import { getHeaderImage, getFooterImage } from "../../../utils/assetPaths";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import {
-  SaleReturnsProvider,
-  useSaleReturns,
-} from "../../Context/Invoicing/SaleReturnsContext";
+import { useSaleReturns } from "../../Context/Invoicing/SaleReturnsContext";
 import {
   type SaleReturn,
   type SaleReturnItem,
@@ -719,7 +717,7 @@ function SaleReturnsInner() {
         </head>
         <body>
           <div class="header" style="padding:0;">
-            <img src="/Header.jpg" alt="Header" style="display:block; width:calc(100% + 48px); height:auto; object-fit: cover;" />
+            <img src="${getHeaderImage(brand)}" alt="Header" style="display:block; width:calc(100% + 48px); height:auto; object-fit: cover;" />
           </div>
           
           <div style="text-align:center; margin:12px 0; font-size:20px; font-weight:700; color:#d32f2f;">
@@ -793,7 +791,7 @@ function SaleReturnsInner() {
           </div>
 
           <div style="margin-top:18px; page-break-inside:avoid;" class="footer">
-            <img src="/Footer.jpg" alt="Footer" style="width:100%; height:auto; max-height:120px; object-fit:contain;" />
+            <img src="${getFooterImage(brand)}" alt="Footer" style="width:100%; height:auto; max-height:120px; object-fit:contain;" />
           </div>
 
         </body>
@@ -1470,13 +1468,7 @@ function SaleReturnsInner() {
   );
 }
 
-export default function SaleReturnsPage() {
-  return (
-    <SaleReturnsProvider>
-      <SaleReturnsInner />
-    </SaleReturnsProvider>
-  );
-}
+export default SaleReturnsInner;
 
 function getNextInvoiceNumber(returns: SaleReturn[]) {
   const numbers = returns

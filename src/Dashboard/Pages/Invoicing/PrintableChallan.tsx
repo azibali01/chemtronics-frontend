@@ -43,6 +43,8 @@ export function PrintableChallan({
         boxSizing: "border-box",
         position: "relative",
         overflow: "hidden",
+        pageBreakInside: "avoid",
+        breakInside: "avoid",
       }}
     >
       {/* Header */}
@@ -298,6 +300,7 @@ export function PrintableChallan({
           fontSize: 11,
           marginBottom: 24,
           tableLayout: "fixed",
+          pageBreakInside: "avoid",
         }}
       >
         <thead>
@@ -334,7 +337,7 @@ export function PrintableChallan({
         </thead>
         <tbody>
           {items.map((item, idx) => (
-            <tr key={idx}>
+            <tr key={idx} style={{ pageBreakInside: "avoid" }}>
               <td
                 style={{
                   border: "1px solid #222",
@@ -405,13 +408,14 @@ export function PrintableChallan({
       </table>
 
       {/* Footer Signatures */}
-      <div style={{ marginTop: 24 }}>
+      <div style={{ marginTop: 24, pageBreakInside: "avoid" }}>
         <table
           style={{
             width: "100%",
             fontSize: 12,
             marginBottom: 16,
             tableLayout: "fixed",
+            pageBreakInside: "avoid",
           }}
         >
           <tbody>

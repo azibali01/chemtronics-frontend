@@ -559,7 +559,7 @@ export default function PurchaseInvoice(): JSX.Element {
 
     const html =
       `<!doctype html><html><head><meta charset="utf-8"/><title>Invoice</title><style>body{font-family:Arial,sans-serif;color:#222;margin:24px}table{width:100%;border-collapse:collapse;border:2px solid #000}th,td{border:1px solid #000;padding:8px;font-size:12px;vertical-align:top}thead th:nth-child(2),tbody td:nth-child(2){width:40%}tbody tr{height:48px}.right{text-align:right}.muted{color:#666;font-size:12px}</style></head><body>` +
-      `<div style="padding:0;margin-bottom:12px"><img src="/Header.jpg" style="display:block;width:100%;height:auto;max-height:120px;object-fit:contain"/></div>` +
+      `<div style="padding:0;margin-bottom:12px"><img src="${getHeaderImage(brand)}" style="display:block;width:100%;height:auto;max-height:120px;object-fit:contain"/></div>` +
       `<div style="display:flex;justify-content:space-between;margin-bottom:12px"><div style="border:1px solid #222;padding:8px;flex:1;margin-right:8px"><div><strong>Title:</strong> ${
         invoice.supplierTitle || ""
       }</div><div><strong>NTN:</strong> ${
@@ -591,7 +591,7 @@ export default function PurchaseInvoice(): JSX.Element {
       )}</div></div><div style="margin-top:10px;font-size:12px">Amount in words: ${numberToWordsLocal(
         Math.round(grandTotal - (invoice.discount ?? 0)),
       )}</div></div></div>` +
-      `<div style="margin-top:18px;page-break-inside:avoid"><img src="/Footer.jpg" style="width:100%;max-height:120px;object-fit:contain"/></div>` +
+      `<div style="margin-top:18px;page-break-inside:avoid"><img src="${getFooterImage(brand)}" style="width:100%;max-height:120px;object-fit:contain"/></div>` +
       `</body></html>`;
 
     return html;

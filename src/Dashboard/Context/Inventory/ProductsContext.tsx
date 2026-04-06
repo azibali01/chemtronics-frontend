@@ -4,6 +4,8 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
+import api from "../../../api_configuration/api";
+import { notifications } from "@mantine/notifications";
 
 // Product type
 export type Product = {
@@ -63,6 +65,7 @@ interface ProductsContextType {
   setNewCategory: (c: string) => void;
   loading: boolean;
   setLoading: (l: boolean) => void;
+  search: (searchTerm: string) => Promise<void>;
 }
 
 const ProductsContext = createContext<ProductsContextType | undefined>(
@@ -98,6 +101,32 @@ export const ProductsProvider = ({ children }: { children: ReactNode }) => {
   const [status, setStatus] = useState<"active" | "inactive">("active");
   const [newCategory, setNewCategory] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Search method using new API endpoint
+  const search = async (searchTerm: string): Promise<void> => {
+    try {
+      setLoading(true);
+      if (!searchTerm.trim()) {
+        return;
+      }
+      const response = await api.get("/products/search", {
+        params: { q: searchTerm },
+      });
+      setProducts(response.data);
+      setPage(1);
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      const errorMsg =
+        err.response?.data?.message || "Failed to search products";
+      notifications.show({
+        title: "Search Error",
+        message: errorMsg,
+        color: "red",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ProductsContext.Provider
@@ -144,6 +173,7 @@ export const ProductsProvider = ({ children }: { children: ReactNode }) => {
         setNewCategory,
         loading,
         setLoading,
+        search,
       }}
     >
       {children}

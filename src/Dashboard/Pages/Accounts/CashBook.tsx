@@ -286,8 +286,8 @@ export default function CashBook() {
 
   const exportToPDF = () => {
     const logoUrl = "/Logo.png";
-    const headerUrl = "/Header.jpg";
-    const footerUrl = "/Footer.jpg";
+    const headerUrl = getHeaderImage(brand);
+    const footerUrl = getFooterImage(brand);
     const logoImg = new window.Image();
     const headerImg = new window.Image();
     const footerImg = new window.Image();

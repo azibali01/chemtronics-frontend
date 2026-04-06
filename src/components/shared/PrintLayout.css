@@ -1,0 +1,214 @@
+/**
+ * Print Layout Styles
+ * 
+ * Handles responsive display for screen vs print modes
+ * Ensures proper page breaks, margins, and visibility
+ */
+
+.print-layout-wrapper {
+  /* Hidden on screen, visible only during print */
+  display: none;
+}
+
+/* PAGE BREAK: Reset when printing */
+@media print {
+  * {
+    /* Prevent elements from spanning multiple pages unnecessarily */
+    page-break-inside: avoid;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+
+  /* Hide all non-print elements */
+  .sidebar,
+  .navbar,
+  .mantine-Button-root,
+  .mantine-Group-root,
+  .mantine-Card-root,
+  .mantine-Modal-root,
+  [role="navigation"],
+  [aria-label*="navigation"],
+  .navigation,
+  nav,
+  header,
+  footer:not(.print-footer),
+  .print-hidden,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Show print layout */
+  .print-layout-wrapper {
+    display: block;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+  }
+
+  .print-layout-container {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+
+  /* HEADER STYLING */
+  .print-header {
+    width: 100%;
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+    page-break-after: avoid;
+  }
+
+  .print-header-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 120px;
+    object-fit: contain;
+    margin: 0;
+    padding: 0;
+    page-break-inside: avoid;
+  }
+
+  /* DOCUMENT TITLE */
+  .print-document-title {
+    text-align: center;
+    margin: 12px 0;
+    page-break-inside: avoid;
+    page-break-after: avoid;
+  }
+
+  .print-document-title h1,
+  .print-document-title h2 {
+    margin: 0;
+    padding: 0;
+    font-size: 18px;
+    color: #333;
+  }
+
+  /* CONTENT AREA */
+  .print-content {
+    width: 100%;
+    margin: 12px 0;
+    page-break-inside: avoid;
+  }
+
+  /* TABLE STYLING FOR PRINT */
+  .print-content table,
+  .mantine-Table-root {
+    width: 100% !important;
+    border-collapse: collapse;
+    margin: 12px 0;
+    page-break-inside: avoid;
+  }
+
+  .print-content table thead,
+  .mantine-Table-root thead {
+    display: table-header-group;
+    page-break-inside: avoid;
+    page-break-after: avoid;
+  }
+
+  .print-content table tbody tr,
+  .mantine-Table-root tbody tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  .print-content table th,
+  .print-content table td,
+  .mantine-Table-root th,
+  .mantine-Table-root td {
+    border: 1px solid #000;
+    padding: 8px;
+    font-size: 12px;
+  }
+
+  .print-content table th {
+    background-color: #0a6802 !important;
+    color: white !important;
+    font-weight: bold;
+    page-break-inside: avoid;
+  }
+
+  /* FOOTER STYLING */
+  .print-footer {
+    width: 100%;
+    margin-top: 24px;
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+    page-break-before: avoid;
+  }
+
+  .print-footer-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+    margin: 0;
+    padding: 0;
+    page-break-inside: avoid;
+  }
+
+  /* TEXT AND TYPOGRAPHY */
+  .print-content p,
+  .print-content div {
+    orphans: 2;
+    widows: 2;
+  }
+
+  /* SPACING AND MARGINS */
+  .print-content {
+    line-height: 1.5;
+    color: #222;
+    font-family: Arial, sans-serif;
+  }
+
+  /* Page size and margins */
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  /* REMOVE SHADOWS AND DECORATIONS FOR PRINT */
+  .mantine-Card-root {
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+  }
+
+  /* LINKS - Don't show URLs in print */
+  a[href]::after {
+    content: "";
+  }
+
+  /* Print-specific visibility utilities */
+  .print-only {
+    display: block !important;
+  }
+
+  .screen-only {
+    display: none !important;
+  }
+}
+
+/* SCREEN STYLES (Normal view) */
+@media screen {
+  .print-layout-wrapper {
+    display: none;
+  }
+
+  .print-only {
+    display: none !important;
+  }
+
+  .screen-only {
+    display: block !important;
+  }
+}

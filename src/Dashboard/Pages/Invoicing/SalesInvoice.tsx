@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useBrand } from "../../Context/BrandContext";
+import { getHeaderImage, getFooterImage } from "../../../utils/assetPaths";
 import {
   Card,
   Text,
@@ -29,6 +30,7 @@ import { useSalesInvoice } from "../../Context/Invoicing/SalesInvoiceContext";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
 import api from "../../../api_configuration/api";
 import { notifications } from "@mantine/notifications";
+import { useDebounce } from "../../../hooks/useDebounce";
 
 export interface InvoiceItem {
   id: string;
@@ -120,6 +122,7 @@ function addHeaderFooter(doc: jsPDF, title: string) {
 }
 
 function PrintableInvoice({ invoice }: { invoice: Invoice | null }) {
+  const { brand } = useBrand();
   if (!invoice) return <div>No invoice to print</div>;
   return (
     <div
@@ -133,7 +136,7 @@ function PrintableInvoice({ invoice }: { invoice: Invoice | null }) {
       {/* Header banner */}
       <div style={{ marginBottom: 12, padding: 0 }}>
         <img
-          src="/Header.jpg"
+          src={getHeaderImage(brand)}
           alt="Header"
           style={{
             display: "block",
@@ -154,7 +157,7 @@ function PrintableInvoice({ invoice }: { invoice: Invoice | null }) {
       {/* Footer banner */}
       <div style={{ marginTop: 18 }}>
         <img
-          src="/Footer.jpg"
+          src={getFooterImage(brand)}
           alt="Footer"
           style={{ width: "100%", height: "auto" }}
         />
@@ -207,7 +210,7 @@ export default function SalesInvoicePage() {
   // get both accounts and setter from context
   const { accounts, setAccounts } = useChartOfAccounts();
   // get invoices state from SalesInvoice context
-  const { invoices, setInvoices } = useSalesInvoice();
+  const { invoices, setInvoices, search, isLoading } = useSalesInvoice();
   // local loading flag for invoices fetch
   const [invoicesLoading, setInvoicesLoading] = useState(false);
   useEffect(() => {
@@ -251,7 +254,8 @@ export default function SalesInvoicePage() {
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
   const [deleteInvoice, setDeleteInvoice] = useState<Invoice | null>(null);
   // Removed: Convert to Delivery Challan state
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const debouncedSearchTerm = useDebounce(searchInput, 300);
   const [createModal, setCreateModal] = useState(false);
   const [newInvoiceNumber, setNewInvoiceNumber] = useState(
     getNextInvoiceNumber(invoices),
@@ -270,8 +274,52 @@ export default function SalesInvoicePage() {
   const [newSaleAccountTitle, setNewSaleAccountTitle] = useState("");
   const [newNtnNumber, setNewNtnNumber] = useState("");
   const [newStrnNumber, setNewStrnNumber] = useState("");
+
+  // Helper: When account number or title changes, auto-populate NTN/STRN
+  useEffect(() => {
+    // Try to find the selected account by account number or title
+    let selected: AccountNode | undefined = undefined;
+    if (newAccountNumber) {
+      selected = accounts.find(
+        (acc) =>
+          String(acc.accountCode) === String(newAccountNumber) ||
+          String(acc.selectedCode) === String(newAccountNumber),
+      );
+    } else if (newAccountTitle) {
+      selected = accounts.find((acc) => acc.accountName === newAccountTitle);
+    }
+    if (selected) {
+      setNewNtnNumber(selected.ntn || "");
+      setNewStrnNumber(selected.strn || "");
+    } else {
+      setNewNtnNumber("");
+      setNewStrnNumber("");
+    }
+  }, [newAccountNumber, newAccountTitle, accounts]);
   const [includeGST, setIncludeGST] = useState(true);
   const [province, setProvince] = useState<"Punjab" | "Sindh">("Punjab");
+
+  // Handle debounced search
+  useEffect(() => {
+    if (debouncedSearchTerm.trim()) {
+      search(debouncedSearchTerm);
+    } else {
+      // Reset to show all invoices when search is cleared
+      // Fetch all invoices
+      const fetchAllInvoices = async () => {
+        try {
+          setInvoicesLoading(true);
+          const response = await api.get("/sale-invoice");
+          setInvoices(response.data);
+        } catch (error) {
+          console.error("Failed to fetch invoices:", error);
+        } finally {
+          setInvoicesLoading(false);
+        }
+      };
+      fetchAllInvoices();
+    }
+  }, [debouncedSearchTerm]);
 
   const [items, setItems] = useState<InvoiceItem[]>([
     {
@@ -707,16 +755,8 @@ export default function SalesInvoicePage() {
     setNotes("");
   };
 
-  // Filter invoices by search and date range
+  // Filter invoices by date range only (search is done server-side)
   const filteredInvoices = (invoices as Invoice[]).filter((inv) => {
-    const q = search.trim().toLowerCase();
-    const invNumber = (inv.invoiceNumber || inv.id || "")
-      .toString()
-      .toLowerCase();
-    const matchesSearch =
-      !q ||
-      invNumber.includes(q) ||
-      (inv.accountTitle || "").toLowerCase().includes(q);
     const invoiceDate = inv.invoiceDate
       ? new Date(inv.invoiceDate + "T00:00:00").getTime()
       : 0;
@@ -726,14 +766,14 @@ export default function SalesInvoicePage() {
     const toOk = toDate
       ? invoiceDate <= new Date(toDate + "T00:00:00").getTime()
       : true;
-    return matchesSearch && fromOk && toOk;
+    return fromOk && toOk;
   });
 
   const start = (page - 1) * pageSize;
   const paginatedInvoices = filteredInvoices.slice(start, start + pageSize);
 
   const clearFilters = () => {
-    setSearch("");
+    setSearchInput("");
     setFromDate("");
     setToDate("");
     setPage(1);
@@ -1099,6 +1139,9 @@ export default function SalesInvoicePage() {
 
       const rowsHtml = itemsRows + paddingRows;
 
+      const headerImageUrl = getHeaderImage(brand);
+      const footerImageUrl = getFooterImage(brand);
+
       const html = `<!doctype html>
         <html>
         <head>
@@ -1135,7 +1178,7 @@ export default function SalesInvoicePage() {
         <body>
           <div class="page">
           <div class="header" style="padding:0;">
-            <img src="/Header.jpg" alt="Header" style="display:block; width:calc(100% + 48px);  height:auto;  object-fit: cover;" />
+            <img src="${headerImageUrl}" alt="Header" style="display:block; width:calc(100% + 48px);  height:auto;  object-fit: cover;" />
           </div>
           <div class="meta">
             <div class="box" style="flex:1; margin-right:8px;">
@@ -1203,7 +1246,7 @@ export default function SalesInvoicePage() {
           </div>
 
           <div style="margin-top:18px;" class="footer">
-            <img src="/Footer.jpg" alt="Footer" style="width:100%; height:auto; max-height:120px; object-fit:contain;" />
+            <img src="${footerImageUrl}" alt="Footer" style="width:100%; height:auto; max-height:120px; object-fit:contain;" />
           </div>
           </div>
 
@@ -1428,9 +1471,31 @@ export default function SalesInvoicePage() {
               label="Search"
               placeholder="Search invoices..."
               leftSection={<IconSearch size={16} />}
-              value={search}
+              value={searchInput}
+              rightSection={
+                isLoading ? (
+                  <Text size="xs" c="dimmed">
+                    Searching...
+                  </Text>
+                ) : (
+                  <ActionIcon
+                    size="sm"
+                    variant="subtle"
+                    onClick={() => {
+                      setSearchInput("");
+                      setPage(1);
+                    }}
+                    style={{
+                      opacity: searchInput ? 1 : 0,
+                      pointerEvents: searchInput ? "auto" : "none",
+                    }}
+                  >
+                    <IconX size={16} />
+                  </ActionIcon>
+                )
+              }
               onChange={(e) => {
-                setSearch(e.currentTarget.value);
+                setSearchInput(e.currentTarget.value);
                 setPage(1);
               }}
               w={250}
@@ -1501,67 +1566,72 @@ export default function SalesInvoicePage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {paginatedInvoices.map((i) => (
-                <Table.Tr key={i.id}>
-                  <Table.Td>{i.invoiceNumber}</Table.Td>
-                  <Table.Td>{i.invoiceDate}</Table.Td>
-                  <Table.Td>{i.deliveryNumber || ""}</Table.Td>
-                  <Table.Td>{i.deliveryDate || ""}</Table.Td>
-                  <Table.Td>{i.poNumber || ""}</Table.Td>
-                  <Table.Td>{i.poDate || ""}</Table.Td>
-                  <Table.Td>{i.accountNumber || ""}</Table.Td>
-                  <Table.Td>{i.accountTitle || ""}</Table.Td>
-                  <Table.Td>{i.saleAccount || ""}</Table.Td>
-                  <Table.Td>{i.saleAccountTitle || ""}</Table.Td>
-                  <Table.Td>{i.ntnNumber || ""}</Table.Td>
-                  <Table.Td>PKR {(i.amount || 0).toFixed(2)}</Table.Td>
-                  <Table.Td>
-                    PKR{" "}
-                    {i.netAmount !== undefined
-                      ? (i.netAmount || 0).toFixed(2)
-                      : (i.amount || 0).toFixed(2)}
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <ActionIcon
-                        color="#0A6802"
-                        variant="light"
-                        onClick={() =>
-                          setEditInvoice(
-                            mapRawToInvoice(
-                              i as unknown as Record<string, unknown>,
-                            ),
-                          )
-                        }
-                      >
-                        <IconPencil size={16} />
-                      </ActionIcon>
-                      <ActionIcon
-                        color="red"
-                        variant="light"
-                        onClick={() => setDeleteInvoice(i)}
-                      >
-                        <IconTrash size={16} />
-                      </ActionIcon>
-                      <ActionIcon
-                        color="#819E00"
-                        variant="light"
-                        onClick={() => exportSingleInvoicePDF(i)}
-                        title="Download PDF"
-                      >
-                        <IconDownload size={16} />
-                      </ActionIcon>
-                      {/* Removed: Convert to Delivery Challan button */}
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-              {paginatedInvoices.length === 0 && (
+              {paginatedInvoices.length === 0 ? (
                 <Table.Tr>
-                  <Table.Td colSpan={14} style={{ textAlign: "center" }}>
-                    No invoices found.
+                  <Table.Td colSpan={14}>
+                    <Text c="dimmed" ta="center" py="xl">
+                      {searchInput && invoices.length === 0
+                        ? "No invoices found matching your search. Try a different term."
+                        : "No invoices available. Click 'Create New' to add one."}
+                    </Text>
                   </Table.Td>
                 </Table.Tr>
+              ) : (
+                paginatedInvoices.map((i) => (
+                  <Table.Tr key={i.id}>
+                    <Table.Td>{i.invoiceNumber}</Table.Td>
+                    <Table.Td>{i.invoiceDate}</Table.Td>
+                    <Table.Td>{i.deliveryNumber || ""}</Table.Td>
+                    <Table.Td>{i.deliveryDate || ""}</Table.Td>
+                    <Table.Td>{i.poNumber || ""}</Table.Td>
+                    <Table.Td>{i.poDate || ""}</Table.Td>
+                    <Table.Td>{i.accountNumber || ""}</Table.Td>
+                    <Table.Td>{i.accountTitle || ""}</Table.Td>
+                    <Table.Td>{i.saleAccount || ""}</Table.Td>
+                    <Table.Td>{i.saleAccountTitle || ""}</Table.Td>
+                    <Table.Td>{i.ntnNumber || ""}</Table.Td>
+                    <Table.Td>PKR {(i.amount || 0).toFixed(2)}</Table.Td>
+                    <Table.Td>
+                      PKR{" "}
+                      {i.netAmount !== undefined
+                        ? (i.netAmount || 0).toFixed(2)
+                        : (i.amount || 0).toFixed(2)}
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs">
+                        <ActionIcon
+                          color="#0A6802"
+                          variant="light"
+                          onClick={() =>
+                            setEditInvoice(
+                              mapRawToInvoice(
+                                i as unknown as Record<string, unknown>,
+                              ),
+                            )
+                          }
+                        >
+                          <IconPencil size={16} />
+                        </ActionIcon>
+                        <ActionIcon
+                          color="red"
+                          variant="light"
+                          onClick={() => setDeleteInvoice(i)}
+                        >
+                          <IconTrash size={16} />
+                        </ActionIcon>
+                        <ActionIcon
+                          color="#819E00"
+                          variant="light"
+                          onClick={() => exportSingleInvoicePDF(i)}
+                          title="Download PDF"
+                        >
+                          <IconDownload size={16} />
+                        </ActionIcon>
+                        {/* Removed: Convert to Delivery Challan button */}
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))
               )}
             </Table.Tbody>
           </Table>
@@ -2431,7 +2501,7 @@ function InvoicePrintTemplate({ invoice }: { invoice: Invoice }) {
       >
         <div style={{ textAlign: "center", marginBottom: 8, padding: 0 }}>
           <img
-            src="/Header.jpg"
+            src={getHeaderImage(brand)}
             alt="Header"
             style={{
               display: "block",
@@ -2635,7 +2705,7 @@ function InvoicePrintTemplate({ invoice }: { invoice: Invoice }) {
         </div>
         <div style={{ marginTop: 18, pageBreakInside: "avoid" }}>
           <img
-            src="/Footer.jpg"
+            src={getFooterImage(brand)}
             alt="Footer Banner"
             style={{
               width: "100%",

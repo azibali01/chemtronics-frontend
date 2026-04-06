@@ -1,6 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState } from "react";
 import type { ReactNode } from "react";
+import api from "../../../api_configuration/api";
+import { notifications } from "@mantine/notifications";
 
 type InvoiceItem = {
   id: string;
@@ -39,6 +41,9 @@ type SalesInvoiceContextType = {
   setInvoices: React.Dispatch<React.SetStateAction<Invoice[]>>;
   selectedInvoice: Invoice | null;
   setSelectedInvoice: React.Dispatch<React.SetStateAction<Invoice | null>>;
+  isLoading: boolean;
+  setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  search: (searchTerm: string) => Promise<void>;
 };
 
 const SalesInvoiceContext = createContext<SalesInvoiceContextType | undefined>(
@@ -48,6 +53,32 @@ const SalesInvoiceContext = createContext<SalesInvoiceContextType | undefined>(
 export const SalesInvoiceProvider = ({ children }: { children: ReactNode }) => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Search method using new API endpoint
+  const search = async (searchTerm: string): Promise<void> => {
+    try {
+      setIsLoading(true);
+      if (!searchTerm.trim()) {
+        return;
+      }
+      const response = await api.get("/sale-invoice/search", {
+        params: { q: searchTerm },
+      });
+      setInvoices(response.data);
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      const errorMsg =
+        err.response?.data?.message || "Failed to search invoices";
+      notifications.show({
+        title: "Search Error",
+        message: errorMsg,
+        color: "red",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <SalesInvoiceContext.Provider
@@ -56,6 +87,9 @@ export const SalesInvoiceProvider = ({ children }: { children: ReactNode }) => {
         setInvoices,
         selectedInvoice,
         setSelectedInvoice,
+        isLoading,
+        setIsLoading,
+        search,
       }}
     >
       {children}

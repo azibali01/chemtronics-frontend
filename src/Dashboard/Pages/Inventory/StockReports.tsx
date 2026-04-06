@@ -22,6 +22,8 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useEffect, useState, useMemo } from "react";
+import { useBrand } from "../../Context/BrandContext";
+import { getHeaderImage } from "../../../utils/assetPaths";
 import api from "../../../api_configuration/api";
 
 interface Product {
@@ -186,19 +188,20 @@ export default function StockReports() {
 
   const lowData = filteredLow.slice(
     (lowPage - 1) * pageSize,
-    lowPage * pageSize
+    lowPage * pageSize,
   );
   const catData = filteredCat.slice(
     (catPage - 1) * pageSize,
-    catPage * pageSize
+    catPage * pageSize,
   );
 
   const exportLowStockPDF = () => {
+    const { brand } = useBrand();
     const doc = new jsPDF();
 
     // Add header image
     const headerImg = new window.Image();
-    headerImg.src = "/Header.jpg";
+    headerImg.src = getHeaderImage(brand);
 
     headerImg.onload = () => {
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -225,7 +228,7 @@ export default function StockReports() {
           `Date: ${new Date().toLocaleDateString()}`,
           pageWidth / 2,
           59,
-          { align: "center" }
+          { align: "center" },
         );
 
         autoTable(doc, {
@@ -268,11 +271,12 @@ export default function StockReports() {
   };
 
   const exportCategoryPDF = () => {
+    const { brand } = useBrand();
     const doc = new jsPDF();
 
     // Add header image
     const headerImg = new window.Image();
-    headerImg.src = "/Header.jpg";
+    headerImg.src = getHeaderImage(brand);
 
     headerImg.onload = () => {
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -299,7 +303,7 @@ export default function StockReports() {
           `Date: ${new Date().toLocaleDateString()}`,
           pageWidth / 2,
           59,
-          { align: "center" }
+          { align: "center" },
         );
 
         autoTable(doc, {

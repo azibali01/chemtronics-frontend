@@ -17,6 +17,8 @@ import autoTable from "jspdf-autotable";
 import type { RowInput } from "jspdf-autotable";
 import { IconAlertCircle, IconArrowDown, IconClock } from "@tabler/icons-react";
 import api from "../../../api_configuration/api";
+import { useBrand } from "../../Context/BrandContext";
+import { getHeaderImage, getFooterImage } from "../../../utils/assetPaths";
 
 type APVendor = {
   accountNumber: string;
@@ -191,9 +193,10 @@ export default function AccountsPayable() {
 
   const exportPDF = () => {
     // Load images
+    const { brand } = useBrand();
     const logoUrl = "/Logo.png";
-    const headerUrl = "/Header.jpg";
-    const footerUrl = "/Footer.jpg";
+    const headerUrl = getHeaderImage(brand);
+    const footerUrl = getFooterImage(brand);
     const logoImg = new window.Image();
     const headerImg = new window.Image();
     const footerImg = new window.Image();
@@ -297,9 +300,10 @@ export default function AccountsPayable() {
   const exportInvoicesPDF = (vendorName: string) => {
     const invs = expandedInvoices;
 
+    const { brand } = useBrand();
     const logoUrl = "/Logo.png";
-    const headerUrl = "/Header.jpg";
-    const footerUrl = "/Footer.jpg";
+    const headerUrl = getHeaderImage(brand);
+    const footerUrl = getFooterImage(brand);
     const logoImg = new window.Image();
     const headerImg = new window.Image();
     const footerImg = new window.Image();

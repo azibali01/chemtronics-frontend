@@ -30,6 +30,9 @@ import { usePurchaseReturns } from "../../Context/Invoicing/PurchaseReturnsConte
 import { useProducts } from "../../Context/Inventory/ProductsContext";
 import api from "../../../api_configuration/api";
 import { notifications } from "@mantine/notifications";
+import usePrintService from "../../../hooks/usePrintService";
+import PrintPreview from "../../../components/shared/PrintPreview";
+import { PurchaseReturnContent } from "../../../components/shared/PurchaseReturnContent";
 
 declare module "jspdf" {
   interface jsPDF {
@@ -109,6 +112,15 @@ export default function PurchaseReturnModal() {
   // Use context for returns
   const { returns, setReturns } = usePurchaseReturns();
   const { products } = useProducts();
+
+  // Print service for centralized printing
+  const {
+    isPreviewOpen,
+    printData,
+    openPrintPreview,
+    closePrintPreview,
+    print,
+  } = usePrintService();
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ReturnEntry | null>(null);
@@ -954,114 +966,49 @@ export default function PurchaseReturnModal() {
     label: p.productName,
   }));
 
-  // Print logic using hidden div and window.print()
+  // NEW: Print return using centralized print service
   const handlePrintReturn = (entry: ReturnEntry) => {
-    const html = buildPrintableReturnHtml(entry);
-    const w = window.open("", "_blank");
-    if (!w) return;
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
+    openPrintPreview({
+      type: "purchase-return",
+      title: "Purchase Return",
+      content: (
+        <PurchaseReturnContent
+          data={{
+            id: entry.id,
+            invoice: entry.invoice,
+            date: entry.date,
+            referenceNumber: entry.referenceNumber,
+            referenceDate: entry.referenceDate,
+            supplierNumber: entry.supplierNumber,
+            supplierTitle: entry.supplierTitle,
+            purchaseAccount: entry.purchaseAccount,
+            purchaseTitle: entry.purchaseTitle,
+            items: entry.items.map((item) => ({
+              code: item.code,
+              product: item.product,
+              unit: item.unit,
+              quantity: item.quantity,
+              rate: item.rate,
+              amount: item.amount,
+              discount: item.discount || 0,
+              netAmount: item.netAmount || 0,
+            })),
+            notes: entry.notes,
+            amount: entry.amount,
+          }}
+        />
+      ),
+      showHeader: true,
+      showFooter: true,
+      onPrintComplete: () => {
+        closePrintPreview();
+      },
+    });
+
+    // Automatically trigger print dialog after DOM is ready
     setTimeout(() => {
-      try {
-        w.focus();
-        w.print();
-      } catch (err) {
-        console.error(err);
-      }
-    }, 250);
-  };
-
-  const buildPrintableReturnHtml = (entry: ReturnEntry) => {
-    const itemsList = entry.items || [];
-    const subtotal = itemsList.reduce((s, it) => s + (it.amount || 0), 0);
-    const netTotal = itemsList.reduce((s, it) => s + (it.netAmount || 0), 0);
-
-    const rowsHtml = itemsList
-      .map((item, idx) => {
-        return `<tr>
-          <td style="border:1px solid #000;padding:8px;text-align:center">${
-            idx + 1
-          }</td>
-          <td style="border:1px solid #000;padding:8px">${String(
-            item.code || "",
-          ).replace(/</g, "&lt;")}</td>
-          <td style="border:1px solid #000;padding:8px">${String(
-            item.product || "",
-          ).replace(/</g, "&lt;")}</td>
-          <td style="border:1px solid #000;padding:8px;text-align:center">${
-            item.unit || ""
-          }</td>
-          <td style="border:1px solid #000;padding:8px;text-align:center">${(
-            item.quantity || 0
-          ).toFixed(2)}</td>
-          <td style="border:1px solid #000;padding:8px;text-align:center">${(
-            item.rate || 0
-          ).toFixed(2)}</td>
-          <td style="border:1px solid #000;padding:8px;text-align:right">${(
-            item.amount || 0
-          ).toFixed(2)}</td>
-          <td style="border:1px solid #000;padding:8px;text-align:center">${
-            item.discount || 0
-          }%</td>
-          <td style="border:1px solid #000;padding:8px;text-align:right">${(
-            item.netAmount || 0
-          ).toFixed(2)}</td>
-        </tr>`;
-      })
-      .join("");
-
-    const desiredRows = 8;
-    const paddingCount = Math.max(0, desiredRows - itemsList.length);
-    const paddingRows = Array.from({ length: paddingCount })
-      .map(
-        () =>
-          `<tr><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td></tr>`,
-      )
-      .join("");
-
-    const html =
-      `<!doctype html><html><head><meta charset="utf-8"/><title>Purchase Return</title><style>body{font-family:Arial,sans-serif;color:#222;margin:24px}table{width:100%;border-collapse:collapse;border:2px solid #000}th,td{border:1px solid #000;padding:8px;font-size:12px;vertical-align:top}thead th:nth-child(3){width:30%}tbody tr{height:48px}.right{text-align:right}.muted{color:#666;font-size:12px}</style></head><body>` +
-      `<div style="padding:0;margin-bottom:12px"><img src="/Header.jpg" style="display:block;width:100%;height:auto;max-height:120px;object-fit:contain"/></div>` +
-      `<div style="text-align:center;margin-bottom:12px"><h2 style="color:#819E00;margin:8px 0">Purchase Return</h2></div>` +
-      `<div style="display:flex;justify-content:space-between;margin-bottom:12px"><div style="border:1px solid #222;padding:8px;flex:1;margin-right:8px"><div><strong>Supplier Title:</strong> ${
-        entry.supplierTitle || ""
-      }</div><div><strong>Supplier No:</strong> ${
-        entry.supplierNumber || ""
-      }</div><div><strong>Purchase Account:</strong> ${
-        entry.purchaseAccount || ""
-      }</div><div><strong>Purchase Title:</strong> ${
-        entry.purchaseTitle || ""
-      }</div></div><div style="width:320px;border:1px solid #222;padding:8px"><div><strong>Return No:</strong> ${
-        entry.invoice || entry.id || ""
-      }</div><div><strong>Date:</strong> ${
-        entry.date || ""
-      }</div><div><strong>Reference No:</strong> ${
-        entry.referenceNumber || ""
-      }</div><div><strong>Reference Date:</strong> ${
-        entry.referenceDate || ""
-      }</div></div></div>` +
-      `<table><thead><tr><th>SR No</th><th>Code</th><th>Product</th><th>Unit</th><th>Quantity</th><th>Rate</th><th>Amount</th><th>Discount %</th><th>Net Amount</th></tr></thead><tbody>` +
-      rowsHtml +
-      paddingRows +
-      `</tbody></table>` +
-      `<div style="margin-top:8px;font-size:12px;color:#666">*Computer generated invoice. No need for signature</div>` +
-      `<div style="margin-top:12px;display:flex;justify-content:flex-end"><div style="width:360px;border:1px solid #222;padding:12px"><div style="display:flex;justify-content:space-between"><div>Gross Total:</div><div>${subtotal.toFixed(
-        2,
-      )}</div></div><div style="display:flex;justify-content:space-between"><div>Discount:</div><div>${(
-        subtotal - netTotal
-      ).toFixed(
-        2,
-      )}</div></div><hr/><div style="display:flex;justify-content:space-between;font-weight:bold"><div>Net Total:</div><div>${netTotal.toFixed(
-        2,
-      )}</div></div></div></div>` +
-      `<div style="margin-top:12px;font-size:12px"><strong>Notes:</strong> ${
-        entry.notes || ""
-      }</div>` +
-      `<div style="margin-top:18px;page-break-inside:avoid"><img src="/Footer.jpg" style="width:100%;max-height:120px;object-fit:contain"/></div>` +
-      `</body></html>`;
-
-    return html;
+      print();
+    }, 300);
   };
 
   const netTotal = items.reduce((sum, item) => sum + (item.netAmount ?? 0), 0);
@@ -1494,6 +1441,13 @@ export default function PurchaseReturnModal() {
           </Button>
         </Group>
       </Modal>
+
+      {/* Centralized Print Preview Component */}
+      <PrintPreview
+        isOpen={isPreviewOpen}
+        data={printData}
+        onClose={closePrintPreview}
+      />
     </div>
   );
 }

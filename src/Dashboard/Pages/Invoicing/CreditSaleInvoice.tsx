@@ -21,8 +21,8 @@ import {
 import { useState, useRef, useEffect } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { getHeaderImage, getFooterImage } from "../../../utils/assetPaths";
 import {
-  CreditSalesProvider,
   useCreditSales,
   type CreditSale,
   type CreditSaleItem,
@@ -46,7 +46,7 @@ function CreditSaleInvoiceInner() {
     (d) =>
       d.id.toLowerCase().includes(search.toLowerCase()) &&
       (!fromDate || new Date(d.date) >= new Date(fromDate)) &&
-      (!toDate || new Date(d.date) <= new Date(toDate))
+      (!toDate || new Date(d.date) <= new Date(toDate)),
   );
 
   const start = (page - 1) * pageSize;
@@ -106,13 +106,16 @@ function CreditSaleInvoiceInner() {
                 `p-${Math.random().toString(36).slice(2, 8)}`,
               code: String(product.code || ""),
               productName: String(
-                product.name || product.productname || product.productName || ""
+                product.name ||
+                  product.productname ||
+                  product.productName ||
+                  "",
               ),
               unitPrice: product.unitPrice || product.unit_price || 0,
               productDescription: String(
-                product.description || product.productDescription || ""
+                product.description || product.productDescription || "",
               ),
-            })
+            }),
           );
           console.log("Transformed products:", transformedProducts);
           setProducts(transformedProducts);
@@ -199,7 +202,7 @@ function CreditSaleInvoiceInner() {
         doc.text(
           `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
           480,
-          doc.internal.pageSize.height - 30
+          doc.internal.pageSize.height - 30,
         );
       },
     });
@@ -318,7 +321,7 @@ function CreditSaleInvoiceInner() {
         doc.text(
           `Page ${doc.getCurrentPageInfo().pageNumber} of ${pageCount}`,
           480,
-          doc.internal.pageSize.height - 30
+          doc.internal.pageSize.height - 30,
         );
       },
     });
@@ -353,7 +356,7 @@ function CreditSaleInvoiceInner() {
     doc.text(
       `Grand Total Net Amount: ${grandNetAmount.toFixed(2)}`,
       500,
-      finalY
+      finalY,
     );
 
     doc.save("credit_sales_report.pdf");
@@ -426,7 +429,7 @@ function CreditSaleInvoiceInner() {
   const updateItem = (
     index: number,
     field: keyof CreditSaleItem,
-    value: string | number
+    value: string | number,
   ) => {
     const updated = items.map((item, i) => {
       if (i !== index) return item;
@@ -505,7 +508,7 @@ function CreditSaleInvoiceInner() {
     const subtotal = itemsList.reduce((s, it) => s + (it.amount || 0), 0);
     const totalDiscount = itemsList.reduce(
       (s, it) => s + (it.discount || 0),
-      0
+      0,
     );
     const netTotal = itemsList.reduce((s, it) => s + (it.netAmount || 0), 0);
 
@@ -516,13 +519,13 @@ function CreditSaleInvoiceInner() {
             idx + 1
           }</td>
           <td style="border:1px solid #000;padding:8px">${String(
-            item.code || ""
+            item.code || "",
           ).replace(/</g, "&lt;")}</td>
           <td style="border:1px solid #000;padding:8px">${String(
-            item.productName || ""
+            item.productName || "",
           ).replace(/</g, "&lt;")}</td>
           <td style="border:1px solid #000;padding:8px">${String(
-            item.description || ""
+            item.description || "",
           ).replace(/</g, "&lt;")}</td>
           <td style="border:1px solid #000;padding:8px;text-align:center">${(
             item.quantity || 0
@@ -548,13 +551,13 @@ function CreditSaleInvoiceInner() {
     const paddingRows = Array.from({ length: paddingCount })
       .map(
         () =>
-          `<tr><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td></tr>`
+          `<tr><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td><td style="border:1px solid #000;padding:8px">&nbsp;</td></tr>`,
       )
       .join("");
 
     const html =
       `<!doctype html><html><head><meta charset="utf-8"/><title>Credit Sale Invoice</title><style>body{font-family:Arial,sans-serif;color:#222;margin:24px}table{width:100%;border-collapse:collapse;border:2px solid #000}th,td{border:1px solid #000;padding:8px;font-size:12px;vertical-align:top}thead th:nth-child(3){width:20%}tbody tr{height:48px}.right{text-align:right}.muted{color:#666;font-size:12px}</style></head><body>` +
-      `<div style="padding:0;margin-bottom:12px"><img src="/Header.jpg" style="display:block;width:100%;height:auto;max-height:120px;object-fit:contain"/></div>` +
+      `<div style="padding:0;margin-bottom:12px"><img src="${getHeaderImage(brand)}" style="display:block;width:100%;height:auto;max-height:120px;object-fit:contain"/></div>` +
       `<div style="text-align:center;margin-bottom:12px"><h2 style="color:#819E00;margin:8px 0">Credit Sale Invoice</h2></div>` +
       `<div style="display:flex;justify-content:space-between;margin-bottom:12px"><div style="border:1px solid #222;padding:8px;flex:1;margin-right:8px"><div><strong>Customer:</strong> ${
         sale.customer || ""
@@ -575,13 +578,13 @@ function CreditSaleInvoiceInner() {
       `</tbody></table>` +
       `<div style="margin-top:8px;font-size:12px;color:#666">*Computer generated invoice. No need for signature</div>` +
       `<div style="margin-top:12px;display:flex;justify-content:flex-end"><div style="width:360px;border:1px solid #222;padding:12px"><div style="display:flex;justify-content:space-between"><div>Gross Total:</div><div>${subtotal.toFixed(
-        2
+        2,
       )}</div></div><div style="display:flex;justify-content:space-between"><div>Total Discount:</div><div>${totalDiscount.toFixed(
-        2
+        2,
       )}</div></div><hr/><div style="display:flex;justify-content:space-between;font-weight:bold"><div>Net Total:</div><div>${netTotal.toFixed(
-        2
+        2,
       )}</div></div></div></div>` +
-      `<div style="margin-top:18px;page-break-inside:avoid"><img src="/Footer.jpg" style="width:100%;max-height:120px;object-fit:contain"/></div>` +
+      `<div style="margin-top:18px;page-break-inside:avoid"><img src="${getFooterImage(brand)}" style="width:100%;max-height:120px;object-fit:contain"/></div>` +
       `</body></html>`;
 
     return html;
@@ -665,7 +668,7 @@ function CreditSaleInvoiceInner() {
     (acc: AccountNode) => ({
       value: acc.accountCode || acc.selectedCode,
       label: `${acc.accountCode || acc.selectedCode} - ${acc.accountName}`,
-    })
+    }),
   );
 
   const customerTitleOptions = receivablesAccounts.map((acc: AccountNode) => ({
@@ -680,8 +683,8 @@ function CreditSaleInvoiceInner() {
       new Map(
         customerAccountOptions
           .filter((a: { value: string; label: string }) => a.value && a.label)
-          .map((a: { value: string; label: string }) => [a.value, a])
-      ).values()
+          .map((a: { value: string; label: string }) => [a.value, a]),
+      ).values(),
     );
 
   const uniqueCustomerTitleOptions: { value: string; label: string }[] =
@@ -689,8 +692,8 @@ function CreditSaleInvoiceInner() {
       new Map(
         customerTitleOptions
           .filter((a: { value: string; label: string }) => a.value && a.label)
-          .map((a: { value: string; label: string }) => [a.value, a])
-      ).values()
+          .map((a: { value: string; label: string }) => [a.value, a]),
+      ).values(),
     );
 
   return (
@@ -949,7 +952,7 @@ function CreditSaleInvoiceInner() {
                   setCustomer(v || "");
                   // Find account by accountCode from receivablesAccounts
                   const acc = receivablesAccounts.find(
-                    (a: AccountNode) => (a.accountCode || a.selectedCode) === v
+                    (a: AccountNode) => (a.accountCode || a.selectedCode) === v,
                   );
                   if (acc) {
                     setCustomerTitle(acc.accountName || "");
@@ -969,15 +972,15 @@ function CreditSaleInvoiceInner() {
                   setCustomerTitle(v || "");
                   // Find account by name from receivablesAccounts
                   const acc = receivablesAccounts.find(
-                    (a: AccountNode) => a.accountName === v
+                    (a: AccountNode) => a.accountName === v,
                   );
                   if (acc) {
                     setCustomer(
                       acc.accountCode !== undefined
                         ? String(acc.accountCode)
                         : acc.selectedCode !== undefined
-                        ? String(acc.selectedCode)
-                        : ""
+                          ? String(acc.selectedCode)
+                          : "",
                     );
                   } else {
                     setCustomer("");
@@ -1064,7 +1067,7 @@ function CreditSaleInvoiceInner() {
                       <Select
                         value={
                           products.find(
-                            (p) => p.productName === item.productName
+                            (p) => p.productName === item.productName,
                           )?.id || null
                         }
                         onChange={(value) => handleProductSelect(idx, value)}
@@ -1097,7 +1100,7 @@ function CreditSaleInvoiceInner() {
                           updateItem(
                             idx,
                             "quantity",
-                            Number(e.currentTarget.value)
+                            Number(e.currentTarget.value),
                           )
                         }
                         placeholder="Quantity"
@@ -1130,7 +1133,7 @@ function CreditSaleInvoiceInner() {
                           updateItem(
                             idx,
                             "discount",
-                            Number(e.currentTarget.value)
+                            Number(e.currentTarget.value),
                           )
                         }
                         placeholder="Discount"
@@ -1213,10 +1216,4 @@ function CreditSaleInvoiceInner() {
   );
 }
 
-export default function CreditSaleInvoice() {
-  return (
-    <CreditSalesProvider>
-      <CreditSaleInvoiceInner />
-    </CreditSalesProvider>
-  );
-}
+export default CreditSaleInvoiceInner;

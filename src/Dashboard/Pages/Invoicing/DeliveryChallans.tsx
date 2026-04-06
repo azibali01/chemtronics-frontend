@@ -31,7 +31,6 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
-  DeliveryChallanProvider,
   useDeliveryChallan,
   type DeliveryItem,
   type DeliveryChallan,
@@ -42,6 +41,7 @@ import { useBrand } from "../../Context/BrandContext";
 import { PrintableChallan } from "./PrintableChallan";
 import { getReceivableAccounts } from "../../utils/receivableAccounts";
 import api from "../../../api_configuration/api";
+import { useDebounce } from "../../../hooks/useDebounce";
 
 type ProductLookup = {
   code: string;
@@ -65,9 +65,11 @@ function getNextChallanNumber(challans: DeliveryChallan[]): string {
 }
 
 function DeliveryChallansInner() {
-    // State for convert modal (moved from top level)
-    const [convertChallan, setConvertChallan] = useState<DeliveryChallan | null>(null);
-    const [convertLoading, setConvertLoading] = useState(false);
+  // State for convert modal (moved from top level)
+  const [convertChallan, setConvertChallan] = useState<DeliveryChallan | null>(
+    null,
+  );
+  const [convertLoading, setConvertLoading] = useState(false);
   const {
     challans,
     isLoading,
@@ -83,6 +85,7 @@ function DeliveryChallansInner() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const [search, setSearch] = useState("");
+  const debouncedSearchTerm = useDebounce(search, 500);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [opened, setOpened] = useState(false);
@@ -99,11 +102,9 @@ function DeliveryChallansInner() {
 
   // derive party options from chart of accounts
   const { accounts } = useChartOfAccounts();
+  // Show all receivable accounts (1410 and children) as party options
   const receivablePartyAccounts = useMemo(
-    () =>
-      getReceivableAccounts(accounts as AccountNode[]).filter(
-        (account) => account.isParty,
-      ),
+    () => getReceivableAccounts(accounts as AccountNode[]),
     [accounts],
   );
   const partyOptions = useMemo(() => {
@@ -128,20 +129,16 @@ function DeliveryChallansInner() {
   // Only one set of refs and handlers!
   const printRef = useRef<HTMLDivElement>(null);
 
-  // Debounced backend search (300ms delay)
+  // Debounced backend search (500ms delay via useDebounce hook)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (search.trim()) {
-        searchChallans(search);
-      } else {
-        // If search is empty, refetch all challans
-        searchChallans();
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
+    if (debouncedSearchTerm.trim()) {
+      searchChallans(debouncedSearchTerm);
+    } else {
+      // If search is empty, refetch all challans
+      searchChallans();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [debouncedSearchTerm]);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -588,6 +585,7 @@ function DeliveryChallansInner() {
             margin: 0 !important;
             padding: 0 !important;
             background: white !important;
+            height: auto !important;
           }
 
           body * {
@@ -597,17 +595,25 @@ function DeliveryChallansInner() {
           .printable-challan-container {
             display: block !important;
             visibility: visible !important;
-            position: fixed;
-            top: 0;
-            left: 0;
             width: 100%;
-            min-height: 100vh;
             background: white;
-            z-index: 99999;
+            page-break-after: avoid;
+            page-break-before: avoid;
+            page-break-inside: avoid;
+            margin: 0;
+            padding: 0;
+            height: auto;
           }
 
           .printable-challan-container * {
             visibility: visible !important;
+          }
+
+          /* Prevent page breaks within challan */
+          .printable-challan {
+            page-break-inside: avoid !important;
+            page-break-after: avoid !important;
+            break-inside: avoid !important;
           }
 
           /* Reset all margins and padding for print */
@@ -762,133 +768,165 @@ function DeliveryChallansInner() {
               </Group>
               {/* Printable Table */}
               <div ref={printRef}>
-                <Table highlightOnHover withTableBorder>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th>Challan #</Table.Th>
-                      <Table.Th>Delivery Date</Table.Th>
-                      <Table.Th>PO No</Table.Th>
-                      <Table.Th>PO Date</Table.Th>
-                      <Table.Th>Party Name</Table.Th>
-                      <Table.Th>Party Address</Table.Th>
-                      <Table.Th>Particulars</Table.Th>
-                      <Table.Th>Qty</Table.Th>
-                      {/* Status column removed from UI */}
-                      <Table.Th>Actions</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {paginatedData.map((row) => (
-                      <Table.Tr key={row.id}>
-                        <Table.Td>{row.id}</Table.Td>
-                        <Table.Td>{row.deliveryDate}</Table.Td>
-                        <Table.Td>{row.poNo}</Table.Td>
-                        <Table.Td>{row.poDate}</Table.Td>
-                        <Table.Td>{row.partyName}</Table.Td>
-                        <Table.Td>{row.partyAddress}</Table.Td>
-                        <Table.Td>
-                          {row.items && row.items.length > 0 ? (
-                            row.items.map((item) => item.particulars).join(", ")
-                          ) : (
-                            <Text c="dimmed" size="sm">
-                              -
-                            </Text>
-                          )}
-                        </Table.Td>
-                        <Table.Td>
-                          {row.items && row.items.length > 0 ? (
-                            row.items.map((item) => item.qty).join(", ")
-                          ) : (
-                            <Text c="dimmed" size="sm">
-                              -
-                            </Text>
-                          )}
-                        </Table.Td>
-                        {/* Status cell removed from UI */}
-                        <Table.Td>
-                          <Group gap="xs">
-                            <ActionIcon
-                              variant="light"
-                              color="#0A6802"
-                              onClick={() => openEdit(row)}
-                            >
-                              <IconPencil size={16} />
-                            </ActionIcon>
-                            <ActionIcon
-                              variant="light"
-                              color="red"
-                              onClick={() => openDeleteModal(row.id)}
-                            >
-                              <IconTrash size={16} />
-                            </ActionIcon>
-                            <ActionIcon
-                              variant="light"
-                              color="#819E00"
-                              onClick={() => exportPDF(row)}
-                            >
-                              <IconDownload size={16} />
-                            </ActionIcon>
-                            <ActionIcon
-                              variant="light"
-                              color="blue"
-                              title="Convert to Sales Invoice"
-                              onClick={() => setConvertChallan(row)}
-                            >
-                              <IconFileInvoice size={16} />
-                            </ActionIcon>
-                          </Group>
-                        </Table.Td>
-                            {/* Convert to Sales Invoice Modal */}
-                            <Modal
-                              opened={!!convertChallan}
-                              onClose={() => setConvertChallan(null)}
-                              title="Convert to Sales Invoice"
-                            >
-                              <Text mb="md">
-                                Are you sure you want to convert delivery challan <b>{convertChallan?.id}</b> to a Sales Invoice?
-                              </Text>
-                              <Group justify="flex-end">
-                                <Button variant="default" onClick={() => setConvertChallan(null)} disabled={convertLoading}>
-                                  Cancel
-                                </Button>
-                                <Button
-                                  color="#0A6802"
-                                  loading={convertLoading}
-                                  onClick={async () => {
-                                    if (!convertChallan) return;
-                                    setConvertLoading(true);
-                                    try {
-                                      // TODO: Implement backend API endpoint
-                                      await api.post(`/sale-invoice/convert/${convertChallan.id}`);
-                                      setConvertChallan(null);
-                                      // Optionally refresh data here
-                                      // await searchChallans();
-                                      // Show notification
-                                      // notifications.show({ title: "Success", message: "Converted to Sales Invoice", color: "green" });
-                                      window.location.reload(); // Temporary: reload to reflect changes
-                                    } catch (e) {
-                                      // notifications.show({ title: "Error", message: "Failed to convert", color: "red" });
-                                      alert("Failed to convert delivery challan to sales invoice.");
-                                    } finally {
-                                      setConvertLoading(false);
-                                    }
-                                  }}
-                                >
-                                  Convert
-                                </Button>
-                              </Group>
-                            </Modal>
-                      </Table.Tr>
-                    ))}
-                    {paginatedData.length === 0 && (
+                {isLoading ? (
+                  <Card withBorder p="xl" style={{ textAlign: "center" }}>
+                    <Title order={4} c="dimmed">
+                      Searching delivery challans...
+                    </Title>
+                    <Text size="sm" c="dimmed" mt="xs">
+                      Please wait
+                    </Text>
+                  </Card>
+                ) : (
+                  <Table highlightOnHover withTableBorder>
+                    <Table.Thead>
                       <Table.Tr>
-                        <Table.Td colSpan={10} style={{ textAlign: "center" }}>
-                          No results found
-                        </Table.Td>
+                        <Table.Th>Challan #</Table.Th>
+                        <Table.Th>Delivery Date</Table.Th>
+                        <Table.Th>PO No</Table.Th>
+                        <Table.Th>PO Date</Table.Th>
+                        <Table.Th>Party Name</Table.Th>
+                        <Table.Th>Party Address</Table.Th>
+                        <Table.Th>Particulars</Table.Th>
+                        <Table.Th>Qty</Table.Th>
+                        {/* Status column removed from UI */}
+                        <Table.Th>Actions</Table.Th>
                       </Table.Tr>
-                    )}
-                  </Table.Tbody>
-                </Table>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {paginatedData.length === 0 ? (
+                        <Table.Tr>
+                          <Table.Td colSpan={9}>
+                            <Text c="dimmed" ta="center" py="xl">
+                              {search && challans.length === 0
+                                ? "No delivery challans found matching your search."
+                                : isLoading
+                                  ? "Loading..."
+                                  : "No delivery challans available."}
+                            </Text>
+                          </Table.Td>
+                        </Table.Tr>
+                      ) : (
+                        paginatedData.map((row) => {
+                          return (
+                            <Table.Tr key={row.id}>
+                              <Table.Td>{row.id}</Table.Td>
+                              <Table.Td>{row.deliveryDate}</Table.Td>
+                              <Table.Td>{row.poNo}</Table.Td>
+                              <Table.Td>{row.poDate}</Table.Td>
+                              <Table.Td>{row.partyName}</Table.Td>
+                              <Table.Td>{row.partyAddress}</Table.Td>
+                              <Table.Td>
+                                {row.items && row.items.length > 0 ? (
+                                  row.items
+                                    .map((item) => item.particulars)
+                                    .join(", ")
+                                ) : (
+                                  <Text c="dimmed" size="sm">
+                                    -
+                                  </Text>
+                                )}
+                              </Table.Td>
+                              <Table.Td>
+                                {row.items && row.items.length > 0 ? (
+                                  row.items.map((item) => item.qty).join(", ")
+                                ) : (
+                                  <Text c="dimmed" size="sm">
+                                    -
+                                  </Text>
+                                )}
+                              </Table.Td>
+                              {/* Status cell removed from UI */}
+                              <Table.Td>
+                                <Group gap="xs">
+                                  <ActionIcon
+                                    variant="light"
+                                    color="#0A6802"
+                                    onClick={() => openEdit(row)}
+                                  >
+                                    <IconPencil size={16} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    variant="light"
+                                    color="red"
+                                    onClick={() => openDeleteModal(row.id)}
+                                  >
+                                    <IconTrash size={16} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    variant="light"
+                                    color="#819E00"
+                                    onClick={() => exportPDF(row)}
+                                  >
+                                    <IconDownload size={16} />
+                                  </ActionIcon>
+                                  <ActionIcon
+                                    variant="light"
+                                    color="blue"
+                                    title="Convert to Sales Invoice"
+                                    onClick={() => setConvertChallan(row)}
+                                  >
+                                    <IconFileInvoice size={16} />
+                                  </ActionIcon>
+                                </Group>
+                              </Table.Td>
+                              {/* Convert to Sales Invoice Modal */}
+                              <Modal
+                                opened={!!convertChallan}
+                                onClose={() => setConvertChallan(null)}
+                                title="Convert to Sales Invoice"
+                              >
+                                <Text mb="md">
+                                  Are you sure you want to convert delivery
+                                  challan <b>{convertChallan?.id}</b> to a Sales
+                                  Invoice?
+                                </Text>
+                                <Group justify="flex-end">
+                                  <Button
+                                    variant="default"
+                                    onClick={() => setConvertChallan(null)}
+                                    disabled={convertLoading}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    color="#0A6802"
+                                    loading={convertLoading}
+                                    onClick={async () => {
+                                      if (!convertChallan) return;
+                                      setConvertLoading(true);
+                                      try {
+                                        // TODO: Implement backend API endpoint
+                                        await api.post(
+                                          `/sale-invoice/convert/${convertChallan.id}`,
+                                        );
+                                        setConvertChallan(null);
+                                        // Optionally refresh data here
+                                        // await searchChallans();
+                                        // Show notification
+                                        // notifications.show({ title: "Success", message: "Converted to Sales Invoice", color: "green" });
+                                        window.location.reload(); // Temporary: reload to reflect changes
+                                      } catch (e) {
+                                        // notifications.show({ title: "Error", message: "Failed to convert", color: "red" });
+                                        alert(
+                                          "Failed to convert delivery challan to sales invoice.",
+                                        );
+                                      } finally {
+                                        setConvertLoading(false);
+                                      }
+                                    }}
+                                  >
+                                    Convert
+                                  </Button>
+                                </Group>
+                              </Modal>
+                            </Table.Tr>
+                          );
+                        })
+                      )}
+                    </Table.Tbody>
+                  </Table>
+                )}
               </div>
               <Group justify="center" mt="md">
                 <Pagination
@@ -1148,13 +1186,4 @@ function DeliveryChallansInner() {
   );
 }
 
-// At the end of the file, wrap your main component with DeliveryChallanProvider
-function DeliveryChallans() {
-  return (
-    <DeliveryChallanProvider>
-      <DeliveryChallansInner />
-    </DeliveryChallanProvider>
-  );
-}
-
-export default DeliveryChallans;
+export default DeliveryChallansInner;
