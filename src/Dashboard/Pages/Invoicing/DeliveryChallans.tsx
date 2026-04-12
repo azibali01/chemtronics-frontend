@@ -906,11 +906,18 @@ function DeliveryChallansInner() {
                                         // Show notification
                                         // notifications.show({ title: "Success", message: "Converted to Sales Invoice", color: "green" });
                                         window.location.reload(); // Temporary: reload to reflect changes
-                                      } catch (e) {
+                                      } catch (e: any) {
                                         // notifications.show({ title: "Error", message: "Failed to convert", color: "red" });
-                                        alert(
-                                          "Failed to convert delivery challan to sales invoice.",
-                                        );
+                                        const backendMessage =
+                                          e?.response?.data?.message;
+                                        const detailedMessage = Array.isArray(
+                                          backendMessage,
+                                        )
+                                          ? backendMessage.join(", ")
+                                          : backendMessage ||
+                                            "Failed to convert delivery challan to sales invoice.";
+
+                                        alert(detailedMessage);
                                       } finally {
                                         setConvertLoading(false);
                                       }

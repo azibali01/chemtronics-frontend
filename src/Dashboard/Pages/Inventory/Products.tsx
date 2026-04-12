@@ -292,7 +292,7 @@ function ProductsInner() {
     const statusValue: "active" | "inactive" =
       status === "active" ? "active" : "inactive";
 
-    const payload = {
+    const basePayload = {
       //change name to productname
       productName: productName,
       code,
@@ -302,6 +302,10 @@ function ProductsInner() {
       costPrice: Number(costPrice),
       quantity: Number(quantity),
       minimumStockLevel: Number(minimumStockLevel),
+    };
+
+    const updatePayload = {
+      ...basePayload,
       status: statusValue,
     };
 
@@ -309,11 +313,11 @@ function ProductsInner() {
       if (editing) {
         const response = await api.put(
           `/products/update-product-by-id/${editing.id}`,
-          payload,
+          updatePayload,
         );
         const updatedProduct: Product = {
           id: editing.id,
-          ...(response.data ?? payload),
+          ...(response.data ?? updatePayload),
         };
         setProducts((prev) =>
           prev.map((r) => (r.id === editing.id ? updatedProduct : r)),
@@ -324,7 +328,10 @@ function ProductsInner() {
           color: "green",
         });
       } else {
-        const response = await api.post("/products/create-product", payload);
+        const response = await api.post(
+          "/products/create-product",
+          basePayload,
+        );
         console.log("Create product response:", response);
         if (response.data) {
           const newProduct: Product = {
