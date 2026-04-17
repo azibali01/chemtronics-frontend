@@ -13,7 +13,6 @@ import {
   NumberInput,
   Textarea,
   Select,
-  Switch,
   Pagination,
 } from "@mantine/core";
 import {
@@ -296,7 +295,6 @@ export default function SalesInvoicePage() {
       setNewStrnNumber("");
     }
   }, [newAccountNumber, newAccountTitle, accounts]);
-  const [includeGST, setIncludeGST] = useState(true);
   const [province, setProvince] = useState<"Punjab" | "Sindh">("Punjab");
 
   // Handle debounced search
@@ -365,7 +363,7 @@ export default function SalesInvoicePage() {
     0,
   );
 
-  const gstAmount = includeGST ? exGstAmount : 0;
+  const gstAmount = exGstAmount;
 
   const netTotal = subtotal + gstAmount;
 
@@ -483,14 +481,14 @@ export default function SalesInvoicePage() {
           quantity: item.qty,
           rate: item.rate,
           gstPercent:
-            brand !== "hydroworx" && includeGST
+            brand !== "hydroworx"
               ? getTaxRate(item.hsCode, province)
               : 0,
           exGstRate: item.rate,
           exGstAmount: item.qty * item.rate,
           netAmount:
             item.qty * item.rate +
-            (brand !== "hydroworx" && includeGST
+            (brand !== "hydroworx"
               ? (item.qty * item.rate * getTaxRate(item.hsCode, province)) / 100
               : 0),
         })),
@@ -555,7 +553,7 @@ export default function SalesInvoicePage() {
       // Map frontend InvoiceItem fields → backend DTO product fields
       const products = (invoiceData.items || []).map((item) => {
         const gstPct =
-          brand !== "hydroworx" && includeGST
+          brand !== "hydroworx"
             ? getTaxRate(item.hsCode, province)
             : 0;
         const exGstAmount = item.qty * item.rate;
@@ -737,7 +735,6 @@ export default function SalesInvoicePage() {
     setNewSaleAccountTitle("");
     setNewNtnNumber("");
     setNewStrnNumber("");
-    setIncludeGST(true);
     setProvince("Punjab");
     setItems([
       {
@@ -1282,7 +1279,7 @@ export default function SalesInvoicePage() {
       (acc: number, i: InvoiceItem) => acc + i.qty * i.rate,
       0,
     ) || 0;
-  const editGstAmount = includeGST ? editSubtotal * 0.18 : 0;
+  const editGstAmount = editSubtotal * 0.18;
   const editTotal = editSubtotal + editGstAmount;
   const editNetAmount = editTotal;
 
@@ -1800,8 +1797,6 @@ export default function SalesInvoicePage() {
             />
           </Group>
 
-          {/* GST Switch removed as per request */}
-
           <Select
             label="Province"
             data={[
@@ -2210,13 +2205,6 @@ export default function SalesInvoicePage() {
                   }
                 />
               </Group>
-              <Switch
-                color="#0A6802"
-                label="Include GST (18%)"
-                checked={includeGST}
-                onChange={(e) => setIncludeGST(e.currentTarget.checked)}
-                mb="md"
-              />
               <Select
                 label="Province"
                 data={[

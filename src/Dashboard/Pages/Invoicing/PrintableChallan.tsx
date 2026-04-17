@@ -1,5 +1,7 @@
 // Separate PrintableChallan component for secure printing
+import type { CSSProperties } from "react";
 import { type DeliveryItem } from "../../Context/Invoicing/DeliveryChallanContext";
+import { getFooterImage } from "../../../utils/assetPaths";
 
 interface PrintableChallanProps {
   challan: {
@@ -29,6 +31,10 @@ export function PrintableChallan({
     brand === "chemtronics" ? "/CmLogo.png" : "/HydroworxLogo.png";
   const primaryColor = brand === "chemtronics" ? "#819E00" : "#0066CC";
   const secondaryColor = brand === "chemtronics" ? "#0A6802" : "#004499";
+  const cellBorder: CSSProperties = {
+    border: "1px solid #222",
+    padding: 4,
+  };
 
   return (
     <div
@@ -292,123 +298,150 @@ export function PrintableChallan({
         </tbody>
       </table>
 
-      {/* Items Table */}
+      {/* Items Table — one row per line item; full grid + outer border for print */}
       <table
+        className="challan-items-table"
         style={{
           width: "100%",
           borderCollapse: "collapse",
+          border: "1px solid #222",
           fontSize: 11,
-          marginBottom: 24,
+          marginBottom: 20,
           tableLayout: "fixed",
           pageBreakInside: "avoid",
         }}
       >
         <thead>
           <tr style={{ background: "#F8FFF6" }}>
-            <th style={{ border: "1px solid #222", padding: 4, width: "7%" }}>
+            <th
+              style={{
+                ...cellBorder,
+                width: "7%",
+                fontWeight: "bold",
+                color: secondaryColor,
+              }}
+            >
               SR.
             </th>
-            <th style={{ border: "1px solid #222", padding: 4, width: "18%" }}>
+            <th
+              style={{
+                ...cellBorder,
+                width: "18%",
+                fontWeight: "bold",
+                color: secondaryColor,
+              }}
+            >
               Item Code
             </th>
             <th
               style={{
-                border: "1px solid #222",
-                padding: 4,
+                ...cellBorder,
                 width: "33%",
                 overflowWrap: "anywhere",
+                fontWeight: "bold",
+                color: secondaryColor,
               }}
             >
               Particulars
             </th>
-            <th style={{ border: "1px solid #222", padding: 4, width: "10%" }}>
+            <th
+              style={{
+                ...cellBorder,
+                width: "10%",
+                fontWeight: "bold",
+                color: secondaryColor,
+              }}
+            >
               Unit
             </th>
-            <th style={{ border: "1px solid #222", padding: 4, width: "10%" }}>
+            <th
+              style={{
+                ...cellBorder,
+                width: "10%",
+                fontWeight: "bold",
+                color: secondaryColor,
+              }}
+            >
               Length
             </th>
-            <th style={{ border: "1px solid #222", padding: 4, width: "10%" }}>
+            <th
+              style={{
+                ...cellBorder,
+                width: "10%",
+                fontWeight: "bold",
+                color: secondaryColor,
+              }}
+            >
               Width
             </th>
-            <th style={{ border: "1px solid #222", padding: 4, width: "12%" }}>
+            <th
+              style={{
+                ...cellBorder,
+                width: "12%",
+                fontWeight: "bold",
+                color: secondaryColor,
+              }}
+            >
               Qty
             </th>
           </tr>
         </thead>
         <tbody>
-          {items.map((item, idx) => (
-            <tr key={idx} style={{ pageBreakInside: "avoid" }}>
+          {items.length === 0 ? (
+            <tr style={{ pageBreakInside: "avoid" }}>
               <td
+                colSpan={7}
                 style={{
-                  border: "1px solid #222",
-                  padding: 4,
+                  ...cellBorder,
                   textAlign: "center",
-                  overflowWrap: "anywhere",
+                  color: "#666",
+                  fontStyle: "italic",
                 }}
               >
-                {item.sr}
-              </td>
-              <td
-                style={{
-                  border: "1px solid #222",
-                  padding: 4,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {item.itemCode}
-              </td>
-              <td
-                style={{
-                  border: "1px solid #222",
-                  padding: 4,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {item.particulars}
-              </td>
-              <td
-                style={{
-                  border: "1px solid #222",
-                  padding: 4,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {item.unit}
-              </td>
-              <td
-                style={{
-                  border: "1px solid #222",
-                  padding: 4,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {item.length}
-              </td>
-              <td
-                style={{
-                  border: "1px solid #222",
-                  padding: 4,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {item.width}
-              </td>
-              <td
-                style={{
-                  border: "1px solid #222",
-                  padding: 4,
-                  overflowWrap: "anywhere",
-                }}
-              >
-                {item.qty}
+                No line items
               </td>
             </tr>
-          ))}
+          ) : (
+            items.map((item, idx) => (
+              <tr
+                key={`${item.sr}-${idx}-${item.itemCode}`}
+                style={{ pageBreakInside: "avoid" }}
+              >
+                <td
+                  style={{
+                    ...cellBorder,
+                    textAlign: "center",
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {item.sr}
+                </td>
+                <td style={{ ...cellBorder, overflowWrap: "anywhere" }}>
+                  {item.itemCode}
+                </td>
+                <td style={{ ...cellBorder, overflowWrap: "anywhere" }}>
+                  {item.particulars}
+                </td>
+                <td style={{ ...cellBorder, overflowWrap: "anywhere" }}>
+                  {item.unit}
+                </td>
+                <td style={{ ...cellBorder, overflowWrap: "anywhere" }}>
+                  {item.length}
+                </td>
+                <td style={{ ...cellBorder, overflowWrap: "anywhere" }}>
+                  {item.width}
+                </td>
+                <td style={{ ...cellBorder, overflowWrap: "anywhere" }}>
+                  {item.qty}
+                </td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
 
-      {/* Footer Signatures */}
-      <div style={{ marginTop: 24, pageBreakInside: "avoid" }}>
+      {/* Signatures — directly above invoice footer image */}
+      <div style={{ marginTop: 16, marginBottom: 8, pageBreakInside: "avoid" }}>
         <table
           style={{
             width: "100%",
@@ -496,50 +529,19 @@ export function PrintableChallan({
         </div>
       </div>
 
-      {/* Footer Banner */}
-      <div
-        style={{
-          width: "100%",
-          marginTop: 24,
-          background: "#eaf6ff",
-          borderTop: `2px solid ${primaryColor}`,
-          padding: "8px 0 8px 0",
-        }}
-      >
-        <div
+      {/* Same footer image as sales invoice print */}
+      <div style={{ marginTop: 12, pageBreakInside: "avoid", width: "100%" }}>
+        <img
+          src={getFooterImage(brand)}
+          alt="Footer"
           style={{
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "flex-start",
-            gap: 16,
-            fontSize: 10,
-            color: "#222",
-            padding: "8px 10px",
-            flexWrap: "wrap",
+            width: "100%",
+            height: "auto",
+            maxHeight: 120,
+            objectFit: "contain",
+            display: "block",
           }}
-        >
-          <div style={{ minWidth: 90, fontWeight: "bold" }}>Expertise</div>
-          <div>
-            <strong>HEAD OFFICE:</strong> 45-B, PECHS, 42-Faced Canal View
-            Phase-II, Multan &nbsp; Tel: 922-345129-271-3
-          </div>
-          <div>
-            <strong>MULTAN:</strong> S-6, Rawat Plaza, Main Model Town, Tel:
-            051-609-1611
-          </div>
-          <div>
-            <strong>RAWALPINDI:</strong> S-6, Rawat Plaza, Main Model Town, Tel:
-            051-609-1611
-          </div>
-          <div>
-            <strong>FAISALABAD:</strong> Filter Colony, Sargodha Road, Tel:
-            0345-862-2246
-          </div>
-          <div>
-            <strong>KARACHI:</strong> E-86, Ground Floor, Block 2, Tel:
-            021-3375-0175
-          </div>
-        </div>
+        />
       </div>
     </div>
   );

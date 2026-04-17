@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useChartOfAccounts } from "../../Context/ChartOfAccountsContext";
-import { useAccountsOpeningBalances } from "../../Context/AccountsOpeningbalancesContext";
 import {
   Card,
   Grid,
@@ -28,18 +27,51 @@ import {
 
 import api, { apiBaseURL } from "../../../api_configuration/api";
 
+function formatLedgerDate(d: Date): string {
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function endOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+function fmtMoney(n: number): string {
+  return (n || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/** JV line for the table (API + computed running balance) */
 interface LedgerEntry {
+  dateSort: number;
   date: string;
   account: string;
   type: string;
   reference: string;
   description: string;
-  debit: string;
-  credit: string;
-  balance: string;
-  // Raw numeric values used for stat-card totals (avoids lossy string→number round-trip)
   debitAmount: number;
   creditAmount: number;
+  runningBalanceRaw: number;
+}
+
+/** CoA row for account dropdown + code resolution only */
+interface AccountPickRow {
+  account: string;
+  type: string;
+  reference: string;
 }
 
 interface GLEntry {
@@ -56,29 +88,25 @@ interface GLEntry {
 
 export default function GeneralLedger() {
   const { accounts } = useChartOfAccounts();
-  const { balances } = useAccountsOpeningBalances();
   const [account, setAccount] = useState<string | null>(null);
   const [accountType, setAccountType] = useState<string | null>(null);
   const [fromDate, setFromDate] = useState<Date | null>(null);
   const [toDate, setToDate] = useState<Date | null>(null);
-  const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
+  const [accountOptions, setAccountOptions] = useState<AccountPickRow[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  // Backend-fetched JV rows; null = not yet fetched, [] = fetched but empty
+  /** null = initial; after first fetch, always an array (possibly empty) */
   const [backendRows, setBackendRows] = useState<LedgerEntry[] | null>(null);
 
-  // Convert Chart of Accounts to Ledger Entries
+  // Flatten Chart of Accounts for the account dropdown only (not shown as GL rows)
   useEffect(() => {
     if (!accounts || accounts.length === 0) {
-      setLoading(true);
       return;
     }
 
     interface AccountNode {
       accountCode?: string;
       selectedCode?: string;
-      openingBalance?: string | { debit: number; credit: number };
-      createdAt?: string;
       accountName?: string;
       children?: AccountNode[];
     }
@@ -86,11 +114,10 @@ export default function GeneralLedger() {
     const flattenAccounts = (
       accountsList: AccountNode[],
       parentType = "",
-    ): LedgerEntry[] => {
-      const entries: LedgerEntry[] = [];
+    ): AccountPickRow[] => {
+      const entries: AccountPickRow[] = [];
 
       accountsList.forEach((acc) => {
-        // Determine account type from code or parent
         let type = parentType;
         if (!type) {
           const code = acc.accountCode || acc.selectedCode || "";
@@ -102,42 +129,12 @@ export default function GeneralLedger() {
           else type = "other";
         }
 
-        // Get opening balance from AccountsOpeningBalances context
-        const accountCode = String(acc.accountCode || acc.selectedCode || "");
-        const openingBalanceData = balances[accountCode];
-
-        let debitAmount = 0;
-        let creditAmount = 0;
-
-        if (openingBalanceData) {
-          debitAmount = openingBalanceData.debit || 0;
-          creditAmount = openingBalanceData.credit || 0;
-        }
-
-        const balance = debitAmount - creditAmount;
-
-        const entry: LedgerEntry = {
-          date: acc.createdAt || new Date().toISOString().split("T")[0],
+        entries.push({
           account: acc.accountName || "Unknown Account",
-          type: type,
+          type,
           reference: acc.accountCode || acc.selectedCode || "N/A",
-          description: `Opening Balance - ${acc.accountName}`,
-          debit:
-            debitAmount > 0
-              ? `Rs. ${debitAmount.toLocaleString("en-US")}`
-              : "Rs. 0",
-          credit:
-            creditAmount > 0
-              ? `Rs. ${creditAmount.toLocaleString("en-US")}`
-              : "Rs. 0",
-          balance: `Rs. ${Math.abs(balance).toLocaleString("en-US")}`,
-          debitAmount,
-          creditAmount,
-        };
+        });
 
-        entries.push(entry);
-
-        // Recursively process child accounts
         if (acc.children && acc.children.length > 0) {
           entries.push(...flattenAccounts(acc.children, type));
         }
@@ -146,45 +143,54 @@ export default function GeneralLedger() {
       return entries;
     };
 
-    const entries = flattenAccounts(accounts);
-    setLedgerData(entries);
-    setLoading(false);
-  }, [accounts, balances]);
+    setAccountOptions(flattenAccounts(accounts));
+  }, [accounts]);
 
   const [activePage, setActivePage] = useState(1);
   const pageSize = 10;
 
-  // Show backend rows once fetched; before first fetch show local CoA opening-balance view..
-  // Apply all active filters to whichever source is displayed.
-  const baseData = backendRows !== null ? backendRows : ledgerData;
-  const displayData = baseData.filter((entry) => {
-    const entryDate = new Date(entry.date);
+  /** Table only shows journal data from API (never synthetic CoA rows). */
+  const baseData = backendRows !== null ? backendRows : [];
 
-    const matchesSearch =
-      search === "" ||
-      entry.account.toLowerCase().includes(search.toLowerCase()) ||
-      entry.description.toLowerCase().includes(search.toLowerCase());
+  const displayData = useMemo(() => {
+    const filtered = baseData.filter((entry) => {
+      const entryDate = new Date(entry.dateSort);
 
-    const matchesAccount = !account || entry.account === account;
-    const matchesType =
-      !accountType || entry.type.toLowerCase() === accountType.toLowerCase();
+      const matchesSearch =
+        search === "" ||
+        entry.account.toLowerCase().includes(search.toLowerCase()) ||
+        entry.description.toLowerCase().includes(search.toLowerCase()) ||
+        entry.reference.toLowerCase().includes(search.toLowerCase());
 
-    const matchesFromDate = !fromDate || entryDate >= fromDate;
-    const matchesToDate = !toDate || entryDate <= toDate;
+      const matchesAccount = !account || entry.account === account;
+      const matchesType =
+        !accountType || entry.type.toLowerCase() === accountType.toLowerCase();
 
-    return (
-      matchesSearch &&
-      matchesAccount &&
-      matchesType &&
-      matchesFromDate &&
-      matchesToDate
-    );
-  });
+      const matchesFromDate =
+        !fromDate || entryDate >= startOfDay(fromDate);
+      const matchesToDate = !toDate || entryDate <= endOfDay(toDate);
+
+      return (
+        matchesSearch &&
+        matchesAccount &&
+        matchesType &&
+        matchesFromDate &&
+        matchesToDate
+      );
+    });
+
+    const sorted = [...filtered].sort((a, b) => a.dateSort - b.dateSort);
+    let running = 0;
+    return sorted.map((row) => {
+      running += row.debitAmount - row.creditAmount;
+      return { ...row, runningBalanceRaw: running };
+    });
+  }, [baseData, search, account, accountType, fromDate, toDate]);
 
   const fetchLedger = useCallback(async () => {
-    // Resolve account code; null account = global "all accounts" search
     const raw = account
-      ? (ledgerData.find((e) => e.account === account)?.reference ?? account)
+      ? (accountOptions.find((e) => e.account === account)?.reference ??
+          account)
       : null;
     const accountCode = raw ? raw.split("-")[0].trim() : "";
 
@@ -199,39 +205,34 @@ export default function GeneralLedger() {
     setLoading(true);
     setActivePage(1);
     try {
-      console.log(
-        "Fetching for account:",
-        accountCode || "ALL",
-        "| params:",
-        params.toString(),
-      );
       const { data } = await api.get<GLEntry[]>(endpoint);
-      console.log("API Response:", data);
 
       const accountEntryType = account
-        ? (ledgerData.find((e) => e.account === account)?.type ?? "other")
+        ? (accountOptions.find((e) => e.account === account)?.type ?? "other")
         : "other";
 
-      const mapped: LedgerEntry[] = data.map((e) => ({
-        date: new Date(e.date).toLocaleDateString("en-PK"),
-        account: account
-          ? `${account}`
-          : e.accountNumber
-            ? `${e.accountNumber}${e.accountName ? ` - ${e.accountName}` : " - Not Found"}`
-            : "",
-        type: e.accountType ? e.accountType.toLowerCase() : accountEntryType,
-        reference: e.voucherNumber,
-        description: e.description ?? "",
-        debit: e.debit > 0 ? `Rs. ${e.debit.toLocaleString("en-US")}` : "Rs. 0",
-        credit:
-          e.credit > 0 ? `Rs. ${e.credit.toLocaleString("en-US")}` : "Rs. 0",
-        balance: `Rs. ${Math.abs(e.runningBalance).toLocaleString("en-US")}`,
-        debitAmount: Number(e.debit) || 0,
-        creditAmount: Number(e.credit) || 0,
-      }));
+      const mapped: LedgerEntry[] = data.map((e) => {
+        const d = new Date(e.date);
+        return {
+          dateSort: d.getTime(),
+          date: formatLedgerDate(d),
+          account: account
+            ? `${account}`
+            : e.accountNumber
+              ? `${e.accountNumber}${e.accountName ? ` - ${e.accountName}` : " - Not Found"}`
+              : "",
+          type: e.accountType ? e.accountType.toLowerCase() : accountEntryType,
+          reference: e.voucherNumber ?? "",
+          description: e.description ?? "",
+          debitAmount: Number(e.debit) || 0,
+          creditAmount: Number(e.credit) || 0,
+          runningBalanceRaw: 0,
+        };
+      });
 
       setBackendRows(mapped);
     } catch {
+      setBackendRows([]);
       notifications.show({
         title: "Error",
         message: "Failed to fetch ledger entries from the server.",
@@ -240,25 +241,32 @@ export default function GeneralLedger() {
     } finally {
       setLoading(false);
     }
-  }, [account, fromDate, toDate, ledgerData]);
+  }, [account, fromDate, toDate, accountOptions]);
 
   // Auto-fetch on mount and whenever account or date filters change
   useEffect(() => {
     fetchLedger();
   }, [fetchLedger]);
 
+  const totalPages = Math.max(1, Math.ceil(displayData.length / pageSize));
+  useEffect(() => {
+    if (activePage > totalPages) setActivePage(totalPages);
+  }, [activePage, totalPages]);
+
   const startIndex = (activePage - 1) * pageSize;
   const paginatedData = displayData.slice(startIndex, startIndex + pageSize);
 
-  // Use raw numeric fields — no string parsing needed
   const totalDebits = displayData.reduce((sum, e) => sum + e.debitAmount, 0);
   const totalCredits = displayData.reduce((sum, e) => sum + e.creditAmount, 0);
   const netBalance = totalDebits - totalCredits;
+  const endingRunning =
+    displayData.length > 0
+      ? displayData[displayData.length - 1]!.runningBalanceRaw
+      : 0;
 
   const printLedgerPdf = () => {
-    // Derive the account code (stored as `reference` in ledgerData)
     const selectedCode = account
-      ? ledgerData.find((e) => e.account === account)?.reference
+      ? accountOptions.find((e) => e.account === account)?.reference
       : undefined;
 
     if (!selectedCode) {
@@ -361,9 +369,15 @@ export default function GeneralLedger() {
                     maximumFractionDigits: 2,
                   })}
                 </Text>
+                {account && displayData.length > 0 && (
+                  <Text size="xs" c="dimmed" mt={4}>
+                    Closing (running): {fmtMoney(Math.abs(endingRunning))}{" "}
+                    {endingRunning >= 0 ? "Dr" : "Cr"}
+                  </Text>
+                )}
                 {!account && (
                   <Text size="xs" c="dimmed" mt={4}>
-                    Select a specific account to see its current balance.
+                    Select a specific account for a single-account ledger view.
                   </Text>
                 )}
               </div>
@@ -395,7 +409,7 @@ export default function GeneralLedger() {
           />
           <Select
             placeholder="All Accounts"
-            data={[...new Set(ledgerData.map((d) => d.account))]}
+            data={[...new Set(accountOptions.map((d) => d.account))]}
             value={account}
             onChange={setAccount}
             clearable
@@ -449,64 +463,114 @@ export default function GeneralLedger() {
         ) : (
           <Table highlightOnHover withTableBorder withColumnBorders>
             <Table.Thead>
-              <Table.Tr>
+              <Table.Tr style={{ background: "#E8EEF9" }}>
                 <Table.Th>Date</Table.Th>
-                <Table.Th>Account</Table.Th>
-                <Table.Th>Type</Table.Th>
-                <Table.Th>Reference</Table.Th>
-                <Table.Th>Description</Table.Th>
-                <Table.Th>Debit</Table.Th>
-                <Table.Th>Credit</Table.Th>
-                <Table.Th>Running Balance</Table.Th>
+                {!account && <Table.Th>Account</Table.Th>}
+                {!account && <Table.Th>Type</Table.Th>}
+                <Table.Th>Vch No</Table.Th>
+                <Table.Th>Narration</Table.Th>
+                <Table.Th style={{ textAlign: "right" }}>Debit</Table.Th>
+                <Table.Th style={{ textAlign: "right" }}>Credit</Table.Th>
+                <Table.Th style={{ textAlign: "right" }}>Balance</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {paginatedData.map((entry, index) => (
-                <Table.Tr key={index}>
-                  <Table.Td>{entry.date}</Table.Td>
-                  <Table.Td>{entry.account}</Table.Td>
-                  <Table.Td>
-                    {(() => {
-                      const t = (entry.type || "").toLowerCase();
-                      const colorMap: Record<string, string> = {
-                        asset: "blue",
-                        revenue: "green",
-                        expense: "orange",
-                        liability: "red",
-                        equity: "violet",
-                      };
-                      return (
+              {paginatedData.map((entry, index) => {
+                const t = (entry.type || "").toLowerCase();
+                const colorMap: Record<string, string> = {
+                  asset: "blue",
+                  revenue: "green",
+                  expense: "orange",
+                  liability: "red",
+                  equity: "violet",
+                };
+                const rb = entry.runningBalanceRaw;
+                const balLabel = `${fmtMoney(Math.abs(rb))} ${rb >= 0 ? "Dr" : "Cr"}`;
+                return (
+                  <Table.Tr key={`${entry.dateSort}-${entry.reference}-${index}`}>
+                    <Table.Td>{entry.date}</Table.Td>
+                    {!account && <Table.Td>{entry.account}</Table.Td>}
+                    {!account && (
+                      <Table.Td>
                         <Badge color={colorMap[t] ?? "gray"}>
-                          {entry.type || "OTHER"}
+                          {(entry.type || "OTHER").toUpperCase()}
                         </Badge>
-                      );
-                    })()}
-                  </Table.Td>
-                  <Table.Td>{entry.reference}</Table.Td>
-                  <Table.Td>{entry.description}</Table.Td>
-                  <Table.Td c="#0A6802">{entry.debit}</Table.Td>
-                  <Table.Td c="red">{entry.credit}</Table.Td>
-                  <Table.Td fw={600}>{entry.balance}</Table.Td>
-                </Table.Tr>
-              ))}
+                      </Table.Td>
+                    )}
+                    <Table.Td>{entry.reference}</Table.Td>
+                    <Table.Td maw={360}>
+                      <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
+                        {entry.description}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td c="#0A6802" style={{ textAlign: "right" }}>
+                      {entry.debitAmount > 0
+                        ? `Rs. ${fmtMoney(entry.debitAmount)}`
+                        : ""}
+                    </Table.Td>
+                    <Table.Td c="red" style={{ textAlign: "right" }}>
+                      {entry.creditAmount > 0
+                        ? `Rs. ${fmtMoney(entry.creditAmount)}`
+                        : ""}
+                    </Table.Td>
+                    <Table.Td fw={600} style={{ textAlign: "right" }}>
+                      {balLabel}
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
               {paginatedData.length === 0 && (
                 <Table.Tr>
-                  <Table.Td colSpan={8} style={{ textAlign: "center" }}>
-                    No matching records found
+                  <Table.Td
+                    colSpan={account ? 5 : 7}
+                    style={{ textAlign: "center" }}
+                  >
+                    No journal entries match the current filters.
                   </Table.Td>
                 </Table.Tr>
               )}
             </Table.Tbody>
           </Table>
         )}
-        <Group justify="center" mt="md">
-          <Pagination
-            color="#0A6802"
-            total={Math.ceil(displayData.length / pageSize)}
-            value={activePage}
-            onChange={setActivePage}
-          />
-        </Group>
+        {displayData.length > 0 && !loading && (
+          <Group
+            justify="space-between"
+            mt="md"
+            p="sm"
+            style={{
+              background: "#000080",
+              borderRadius: 8,
+              color: "#fff",
+            }}
+            wrap="nowrap"
+          >
+            <Text fw={700} c="#fff" size="sm">
+              Grand total (all filtered rows)
+            </Text>
+            <Group gap="xl" wrap="nowrap">
+              <Text fw={700} c="#fff" size="sm">
+                Debit: Rs. {fmtMoney(totalDebits)}
+              </Text>
+              <Text fw={700} c="#fff" size="sm">
+                Credit: Rs. {fmtMoney(totalCredits)}
+              </Text>
+              <Text fw={700} c="#fff" size="sm">
+                Balance: {fmtMoney(Math.abs(endingRunning))}{" "}
+                {endingRunning >= 0 ? "Dr" : "Cr"}
+              </Text>
+            </Group>
+          </Group>
+        )}
+        {displayData.length > 0 ? (
+          <Group justify="center" mt="md">
+            <Pagination
+              color="#0A6802"
+              total={totalPages}
+              value={activePage}
+              onChange={setActivePage}
+            />
+          </Group>
+        ) : null}
       </Card>
     </div>
   );

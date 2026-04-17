@@ -616,6 +616,15 @@ function DeliveryChallansInner() {
             break-inside: avoid !important;
           }
 
+          /* Full grid borders on line items table (some engines drop hairlines without this) */
+          .printable-challan .challan-items-table,
+          .printable-challan .challan-items-table th,
+          .printable-challan .challan-items-table td {
+            border: 1px solid #222 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
           /* Reset all margins and padding for print */
           @page {
             margin: 0.5cm;
